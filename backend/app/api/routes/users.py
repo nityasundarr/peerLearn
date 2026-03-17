@@ -5,6 +5,8 @@ Hard Rule 2: user_id is always obtained from get_current_user — never from
              the request body or URL path for self-service operations.
 """
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends
 
 from app.core.deps import get_current_user
@@ -29,7 +31,7 @@ router = APIRouter(prefix="/users", tags=["users"])
     summary="Return the authenticated user's public profile",
 )
 async def get_me(
-    user_id: str = Depends(get_current_user),
+    user_id: Annotated[str, Depends(get_current_user)],
 ) -> UserProfileResponse:
     return user_service.get_profile(user_id)
 
@@ -45,7 +47,7 @@ async def get_me(
 )
 async def patch_me(
     body: UpdateProfileRequest,
-    user_id: str = Depends(get_current_user),
+    user_id: Annotated[str, Depends(get_current_user)],
 ) -> UserProfileResponse:
     return user_service.update_profile(user_id, body)
 
@@ -60,7 +62,7 @@ async def patch_me(
     summary="Return the authenticated user's privacy and notification preferences",
 )
 async def get_privacy(
-    user_id: str = Depends(get_current_user),
+    user_id: Annotated[str, Depends(get_current_user)],
 ) -> UserPrivacyResponse:
     return user_service.get_privacy(user_id)
 
@@ -76,6 +78,6 @@ async def get_privacy(
 )
 async def patch_privacy(
     body: UpdatePrivacyRequest,
-    user_id: str = Depends(get_current_user),
+    user_id: Annotated[str, Depends(get_current_user)],
 ) -> UserPrivacyResponse:
     return user_service.update_privacy(user_id, body)

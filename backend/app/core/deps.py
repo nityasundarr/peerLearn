@@ -1,6 +1,8 @@
+from typing import Annotated
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError
+from jwt.exceptions import InvalidTokenError
 
 from app.core.security import decode_token
 
@@ -14,18 +16,18 @@ _UNAUTHORIZED = HTTPException(
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(_bearer)],
 ) -> str:
     """Validate the Bearer JWT and return the user_id (sub claim).
 
     Usage in route handlers:
-        user_id: str = Depends(get_current_user)
+        user_id: Annotated[str, Depends(get_current_user)]
 
     Hard Rule 2: never accept user_id from the request body — always use this dep.
     """
     try:
         payload = decode_token(credentials.credentials)
-    except JWTError:
+    except InvalidTokenError:
         raise _UNAUTHORIZED
 
     user_id: str | None = payload.get("sub")
@@ -38,8 +40,8 @@ async def get_current_user(
 
 
 async def get_admin_user(
-    user_id: str = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+    user_id: Annotated[str, Depends(get_current_user)],
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(_bearer)],
 ) -> str:
     """Validate the Bearer JWT and assert the user holds the 'admin' role.
 
@@ -47,7 +49,7 @@ async def get_admin_user(
     """
     try:
         payload = decode_token(credentials.credentials)
-    except JWTError:
+    except InvalidTokenError:
         raise _UNAUTHORIZED
 
     roles: list[str] = payload.get("roles", [])

@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import auth as auth_router
+from app.api.routes import dashboard as dashboard_router
+from app.api.routes import notifications as notifications_router
 from app.api.routes import users as users_router
 from app.core.config import settings
 from app.core.errors import register_exception_handlers
@@ -28,6 +30,8 @@ register_exception_handlers(app)
 # ---------------------------------------------------------------------------
 app.include_router(auth_router.router)
 app.include_router(users_router.router)
+app.include_router(dashboard_router.router)
+app.include_router(notifications_router.router)
 
 
 @app.get("/health", tags=["health"])
