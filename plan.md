@@ -538,18 +538,18 @@ penalty_appeals (
 Build phases in strict order. Do NOT start Phase N+1 until all Phase N routes have passing Pytest tests.
 
 ### Phase 0 — Scaffolding & Infrastructure
-- `[ ]` Create Python FastAPI project: `backend/` with `requirements.txt`, `.env.example`, `main.py`
-- `[ ]` Set up folder structure (see Section 5)
-- `[ ]` `backend/app/core/config.py` — Pydantic Settings with all env vars
-- `[ ]` `backend/app/db/supabase_client.py` — singleton Supabase Python client
-- `[ ]` `backend/app/core/security.py` — JWT encode/decode (python-jose), access + refresh tokens
-- `[ ]` `backend/app/core/deps.py` — `get_current_user` FastAPI dependency
-- `[ ]` `backend/app/core/errors.py` — global exception handler (never leak DB errors)
-- `[ ]` `backend/app/utils/validators.py` — reusable `.edu.sg` email validator, name regex, password rules
-- `[ ]` `backend/app/utils/rate_limiter.py` — in-memory (or Redis) 3-req/hr rate limiter for email endpoints
-- `[ ]` `backend/app/utils/contact_filter.py` — regex to detect+block phone numbers and emails in message content
+- `[x]` Create Python FastAPI project: `backend/` with `requirements.txt`, `.env.example`, `main.py`
+- `[~]` Set up folder structure (see Section 5) — `app/`, `app/core/`, `app/db/` created; remaining subdirs added per phase
+- `[x]` `backend/app/core/config.py` — Pydantic Settings with all env vars
+- `[x]` `backend/app/db/supabase_client.py` — singleton Supabase Python client
+- `[x]` `backend/app/core/security.py` — JWT encode/decode (python-jose), access + refresh tokens
+- `[x]` `backend/app/core/deps.py` — `get_current_user` FastAPI dependency
+- `[x]` `backend/app/core/errors.py` — global exception handler (never leak DB errors)
+- `[x]` `backend/app/utils/validators.py` — reusable `.edu.sg` email validator, name regex, password rules
+- `[x]` `backend/app/utils/rate_limiter.py` — in-memory (or Redis) 3-req/hr rate limiter for email endpoints
+- `[x]` `backend/app/utils/contact_filter.py` — regex to detect+block phone numbers and emails in message content
 - `[ ]` Pytest config + first smoke test (`GET /health` returns 200)
-- `[ ]` Delete legacy Node.js backend skeleton (`backend/src/`, `backend/package.json`)
+- `[x]` Delete legacy Node.js backend skeleton (`backend/src/`, `backend/package.json`)
 
 ### Phase 1 — Auth (UC-1.1 → UC-1.6)
 - `[ ]` `POST /auth/register` — validate name/email/password, hash password, create user (inactive), generate email verification token, send email (UC-1.1)
