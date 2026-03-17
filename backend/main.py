@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes import admin as admin_router
 from app.api.routes import appeals as appeals_router
 from app.api.routes import auth as auth_router
 from app.api.routes import complaints as complaints_router
@@ -52,6 +53,7 @@ app.include_router(payments_router.router)
 app.include_router(ratings_router.router)
 app.include_router(complaints_router.router)
 app.include_router(appeals_router.router)
+app.include_router(admin_router.router)
 
 
 @app.get("/health", tags=["health"])

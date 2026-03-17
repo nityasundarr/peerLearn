@@ -621,12 +621,12 @@ Build phases in strict order. Do NOT start Phase N+1 until all Phase N routes ha
 - `[ ]` Pytest: complaint + appeal lifecycle
 
 ### Phase 8 — Admin Analytics & Export (UC-8.1 → UC-8.5, 2.10)
-- `[ ]` `GET /admin/overview` — KPI aggregates, alerts, top subjects (UC-8.1)
-- `[ ]` `GET /admin/analytics/demand` — requests by subject, trending topics, by planning area (UC-8.2)
-- `[ ]` `GET /admin/analytics/supply` — tutor counts, workload bands, tutors by subject (UC-8.3)
-- `[ ]` `GET /admin/analytics/gaps` — shortage %, supply vs demand, recommendations (UC-8.4)
-- `[ ]` `GET /admin/analytics/export` — CSV/Excel export with active filters (UC-8.5)
-- `[ ]` `GET /admin/matching/weights` / `PUT /admin/matching/weights` — configurable scoring weights (2.5.3)
+- `[x]` `GET /admin/overview` — KPI aggregates, alerts, top subjects (UC-8.1)
+- `[x]` `GET /admin/analytics/demand` — requests by subject, trending topics, by planning area (UC-8.2)
+- `[x]` `GET /admin/analytics/supply` — tutor counts, workload bands, tutors by subject (UC-8.3)
+- `[x]` `GET /admin/analytics/gaps` — shortage %, supply vs demand, recommendations (UC-8.4)
+- `[x]` `GET /admin/analytics/export` — CSV/Excel export with active filters (UC-8.5)
+- `[x]` `GET /admin/matching/weights` / `PUT /admin/matching/weights` — configurable scoring weights (2.5.3)
 - `[ ]` Pytest: analytics aggregation logic
 
 ---
