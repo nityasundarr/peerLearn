@@ -563,9 +563,9 @@ Build phases in strict order. Do NOT start Phase N+1 until all Phase N routes ha
 - `[ ]` Pytest: all auth routes (happy path + all failure codes)
 
 ### Phase 2 — User Profile & Dashboard Shell (UC-2.1 → UC-2.3)
-- `[ ]` `GET /users/me` — return user profile from JWT sub (UC-2.2)
-- `[ ]` `PATCH /users/me` — update full_name, preferred_language (UC-2.2)
-- `[ ]` `GET /users/me/privacy` / `PATCH /users/me/privacy` — notification + privacy prefs (UC-2.2)
+- `[x]` `GET /users/me` — return user profile from JWT sub (UC-2.2)
+- `[x]` `PATCH /users/me` — update full_name, preferred_language (UC-2.2)
+- `[x]` `GET /users/me/privacy` / `PATCH /users/me/privacy` — notification + privacy prefs (UC-2.2)
 - `[ ]` `GET /notifications` / `PATCH /notifications/{id}` / `POST /notifications/read-all` (UC-2.3)
 - `[ ]` `GET /dashboard/summary` — session counts, pending actions, upcoming sessions (UC-2.1)
 - `[ ]` `GET /dashboard/badges` — unread counts for notification/chat/tutoring badges (UC-2.1)
