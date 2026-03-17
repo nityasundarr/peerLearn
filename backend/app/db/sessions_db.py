@@ -219,6 +219,76 @@ def confirm_slot(session_id: str, scheduled_at: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Outcome recording (Phase 6 — UC-6.3, UC-6.4)
+# ---------------------------------------------------------------------------
+
+def set_outcome_field(session_id: str, field: str, value: str) -> dict:
+    """Set outcome_tutor or outcome_tutee to 'attended' or 'no_show'."""
+    if field not in {"outcome_tutor", "outcome_tutee"}:
+        raise AppError(422, "Invalid outcome field.")
+    try:
+        result = (
+            supabase.table("tutoring_sessions")
+            .update({field: value})
+            .eq("id", session_id)
+            .select(_SESSION_COLS)
+            .execute()
+        )
+        if not result.data:
+            raise NotFoundError("Session not found.")
+        return result.data[0]
+    except NotFoundError:
+        raise
+    except Exception as exc:
+        raise _db_error("set_outcome_field", exc) from exc
+
+
+def finalize_outcome(session_id: str, new_status: str) -> dict:
+    """Set status to a terminal outcome state (completed_attended | completed_no_show)."""
+    try:
+        result = (
+            supabase.table("tutoring_sessions")
+            .update({"status": new_status})
+            .eq("id", session_id)
+            .select(_SESSION_COLS)
+            .execute()
+        )
+        if not result.data:
+            raise NotFoundError("Session not found.")
+        return result.data[0]
+    except NotFoundError:
+        raise
+    except Exception as exc:
+        raise _db_error("finalize_outcome", exc) from exc
+
+
+# ---------------------------------------------------------------------------
+# Payment confirmation (Phase 6 — UC-6.1)
+# ---------------------------------------------------------------------------
+
+def lock_fee_and_confirm(session_id: str, fee: float) -> dict:
+    """Lock the computed fee and set status = confirmed.
+
+    Hard Rule 9: fee is ALWAYS computed server-side — never from client input.
+    """
+    try:
+        result = (
+            supabase.table("tutoring_sessions")
+            .update({"fee": fee, "status": "confirmed"})
+            .eq("id", session_id)
+            .select(_SESSION_COLS)
+            .execute()
+        )
+        if not result.data:
+            raise NotFoundError("Session not found.")
+        return result.data[0]
+    except NotFoundError:
+        raise
+    except Exception as exc:
+        raise _db_error("lock_fee_and_confirm", exc) from exc
+
+
+# ---------------------------------------------------------------------------
 # Venue
 # ---------------------------------------------------------------------------
 

@@ -603,12 +603,12 @@ Build phases in strict order. Do NOT start Phase N+1 until all Phase N routes ha
 - `[ ]` Pytest: session state machine transitions, messaging filter, venue recommendation
 
 ### Phase 6 — Payment & Session Completion (UC-6.1 → UC-6.6, 2.9.3, 2.9.4)
-- `[ ]` `GET /payments/fee` — compute fee = base_rate[academic_level] × duration_hours, NEVER accept fee from client (UC-6.2, 2.9.3)
-- `[ ]` `POST /payments/initiate` — check slot availability, check load cap, lock fee, create payment_transaction, status → confirmed on success (UC-6.1, 2.9.2, 2.9.3)
-- `[ ]` `PATCH /sessions/{id}/outcome` — record outcome_tutor / outcome_tutee, determine final status, handle no-show refund logic, update workload + reliability (UC-6.3, UC-6.4, 2.9.4)
-- `[ ]` `POST /sessions/{id}/rating` — validate stars/traits/review, update tutor_reliability_metrics, update topic demand analytics (UC-6.5, 2.9.4)
-- `[ ]` `GET /sessions/{id}/rating` — fetch rating for session (UC-6.5)
-- `[ ]` `GET /payments/{session_id}` — fetch payment status (UC-6.1)
+- `[x]` `GET /payments/fee` — compute fee = base_rate[academic_level] × duration_hours, NEVER accept fee from client (UC-6.2, 2.9.3)
+- `[x]` `POST /payments/initiate` — check slot availability, check load cap, lock fee, create payment_transaction, status → confirmed on success (UC-6.1, 2.9.2, 2.9.3)
+- `[x]` `PATCH /sessions/{id}/outcome` — record outcome_tutor / outcome_tutee, determine final status, handle no-show refund logic, update workload + reliability (UC-6.3, UC-6.4, 2.9.4)
+- `[x]` `POST /sessions/{id}/rating` — validate stars/traits/review, update tutor_reliability_metrics, update topic demand analytics (UC-6.5, 2.9.4)
+- `[x]` `GET /sessions/{id}/rating` — fetch rating for session (UC-6.5)
+- `[x]` `GET /payments/{session_id}` — fetch payment status (UC-6.1)
 - `[ ]` Pytest: fee computation, payment flow, outcome state transitions, no-show refund
 
 ### Phase 7 — Complaints & Appeals (UC-7.1 → UC-7.4, 2.10.5, 2.10.6)
