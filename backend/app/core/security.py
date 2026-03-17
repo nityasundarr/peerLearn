@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from jose import jwt
-from jose.exceptions import JWTError  # noqa: F401 — re-exported for callers
+import jwt
+from jwt.exceptions import InvalidTokenError  # noqa: F401 — re-exported for callers
 from passlib.context import CryptContext
 
 from app.core.config import settings
@@ -47,7 +47,7 @@ def create_refresh_token(subject: str | Any) -> str:
 
 
 def decode_token(token: str) -> dict:
-    """Decode and validate a JWT. Raises jose.JWTError on any failure."""
+    """Decode and validate a JWT. Raises jwt.exceptions.InvalidTokenError on any failure."""
     return jwt.decode(
         token,
         settings.JWT_SECRET_KEY,

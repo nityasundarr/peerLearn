@@ -10,6 +10,8 @@ Hard Rule 6: DB exceptions are already converted to AppError by auth_db;
              this layer does not need additional try/except.
 """
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Request, status
 
 from app.core.deps import get_current_user
@@ -173,7 +175,7 @@ async def reset_password(body: ResetPasswordRequest) -> MessageResponse:
 )
 async def change_password(
     body: ChangePasswordRequest,
-    user_id: str = Depends(get_current_user),
+    user_id: Annotated[str, Depends(get_current_user)],
 ) -> MessageResponse:
     # Hard Rule 2: user_id from JWT dep — never from body
     auth_service.change_password(

@@ -348,11 +348,11 @@ def refresh_access_token(refresh_token_str: str) -> str:
     Raises UnprocessableError if the token is invalid, expired, wrong type,
     or belongs to a locked / inactive account.
     """
-    from jose import JWTError  # local import avoids circular at module level
+    from jwt.exceptions import InvalidTokenError  # local import avoids circular at module level
 
     try:
         payload = decode_token(refresh_token_str)
-    except JWTError:
+    except InvalidTokenError:
         raise UnprocessableError("Invalid or expired refresh token.")
 
     if payload.get("type") != "refresh":
