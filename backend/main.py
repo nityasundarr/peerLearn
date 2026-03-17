@@ -6,6 +6,8 @@ from app.api.routes import dashboard as dashboard_router
 from app.api.routes import matching as matching_router
 from app.api.routes import messaging as messaging_router
 from app.api.routes import notifications as notifications_router
+from app.api.routes import payments as payments_router
+from app.api.routes import ratings as ratings_router
 from app.api.routes import requests as requests_router
 from app.api.routes import sessions as sessions_router
 from app.api.routes import tutor_profile as tutor_profile_router
@@ -44,6 +46,8 @@ app.include_router(matching_router.router)
 app.include_router(sessions_router.router)
 app.include_router(messaging_router.router)
 app.include_router(venues_router.router)
+app.include_router(payments_router.router)
+app.include_router(ratings_router.router)
 
 
 @app.get("/health", tags=["health"])
