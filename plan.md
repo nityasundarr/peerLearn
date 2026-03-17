@@ -612,12 +612,12 @@ Build phases in strict order. Do NOT start Phase N+1 until all Phase N routes ha
 - `[ ]` Pytest: fee computation, payment flow, outcome state transitions, no-show refund
 
 ### Phase 7 — Complaints & Appeals (UC-7.1 → UC-7.4, 2.10.5, 2.10.6)
-- `[ ]` `POST /complaints` — validate description, create complaint record, notify admin (UC-7.1)
-- `[ ]` `GET /complaints` / `GET /complaints/{id}` — admin filtered list + detail view (UC-7.3)
-- `[ ]` `POST /complaints/{id}/action` — admin records action, creates disciplinary_record (UC-7.3)
-- `[ ]` `POST /appeals` — validate text, check appeal_deadline, create penalty_appeal, notify admin (UC-7.2)
-- `[ ]` `GET /appeals` / `GET /appeals/{id}` — admin pending appeals list + detail (UC-7.4)
-- `[ ]` `PATCH /appeals/{id}` — admin decides outcome, records decision, notifies user (UC-7.4)
+- `[x]` `POST /complaints` — validate description, create complaint record, notify admin (UC-7.1)
+- `[x]` `GET /complaints` / `GET /complaints/{id}` — admin filtered list + detail view (UC-7.3)
+- `[x]` `POST /complaints/{id}/action` — admin records action, creates disciplinary_record (UC-7.3)
+- `[x]` `POST /appeals` — validate text, check appeal_deadline, create penalty_appeal, notify admin (UC-7.2)
+- `[x]` `GET /appeals` / `GET /appeals/{id}` — admin pending appeals list + detail (UC-7.4)
+- `[x]` `PATCH /appeals/{id}` — admin decides outcome, records decision, notifies user (UC-7.4)
 - `[ ]` Pytest: complaint + appeal lifecycle
 
 ### Phase 8 — Admin Analytics & Export (UC-8.1 → UC-8.5, 2.10)

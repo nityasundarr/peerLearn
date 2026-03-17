@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes import appeals as appeals_router
 from app.api.routes import auth as auth_router
+from app.api.routes import complaints as complaints_router
 from app.api.routes import dashboard as dashboard_router
 from app.api.routes import matching as matching_router
 from app.api.routes import messaging as messaging_router
@@ -48,6 +50,8 @@ app.include_router(messaging_router.router)
 app.include_router(venues_router.router)
 app.include_router(payments_router.router)
 app.include_router(ratings_router.router)
+app.include_router(complaints_router.router)
+app.include_router(appeals_router.router)
 
 
 @app.get("/health", tags=["health"])
