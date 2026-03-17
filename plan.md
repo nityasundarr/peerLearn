@@ -874,16 +874,16 @@ Pending Tutor Selection  ──(tutor accepts)───────────�
 
 ## 9 — Frontend Fixes Required (SRS Mismatches)
 
-These are bugs in existing frontend files that must be fixed before or during backend wiring:
+These are bugs in existing frontend files that must be fixed before or during backend wiring.
 
-| File | Issue | Fix Required |
-|------|-------|-------------|
-| `TuteeRequest.jsx` | Duration options: 30min/1hr/1.5hr/2hr | Replace with exactly 1h / 2h / 4h (SRS 2.2.3.6) |
-| `OfferToTutor.jsx` | Max weekly load options include 15h/20h | Replace with exactly 2h/3h/5h/8h/10h (SRS 2.2.2.8) |
-| `OfferToTutor.jsx` | Academic levels field completely missing | Add multi-select: Primary/Secondary/Junior College/Polytechnic/ITE/University (SRS 2.2.2.2) |
-| `FeedbackForm.jsx` | `maxLength={100}` on review textarea | Change to `maxLength={500}` (SRS 2.9.4.5.3.3) |
-| `AuthContext.jsx` | No `.edu.sg` validation before `signUp` | Add client-side domain check; migrate to FastAPI `POST /auth/register` |
-| `DashboardLayout.jsx` | Badge counts hardcoded | Wire to `GET /dashboard/badges` |
+| File | Issue | Fix Required | Status |
+|------|-------|-------------|--------|
+| `TuteeRequest.jsx` | Duration options: 30min/1hr/1.5hr/2hr | Replace with exactly 1h / 2h / 4h (SRS 2.2.3.6) | ✅ Fixed |
+| `OfferToTutor.jsx` | Max weekly load options include 15h/20h | Replace with exactly 2h/3h/5h/8h/10h (SRS 2.2.2.8) | ✅ Fixed |
+| `OfferToTutor.jsx` | Academic levels field completely missing | Add multi-select: Primary/Secondary/Junior College/Polytechnic/ITE/University (SRS 2.2.2.2) | ✅ Fixed |
+| `FeedbackForm.jsx` | `maxLength={100}` on review textarea | Change to `maxLength={500}` (SRS 2.9.4.5.3.3) | ✅ Fixed |
+| `AuthContext.jsx` | No `.edu.sg` validation before `signUp` | Client-side domain check added; FastAPI migration deferred to Phase 1 | ✅ Fixed |
+| `DashboardLayout.jsx` | Badge counts hardcoded | Wire to `GET /dashboard/badges` | ⏳ Deferred to Phase 2 |
 
 ---
 
