@@ -572,11 +572,11 @@ Build phases in strict order. Do NOT start Phase N+1 until all Phase N routes ha
 - `[ ]` Pytest: user + dashboard routes
 
 ### Phase 3 — Tutor Profile & Availability (UC-4.1 → UC-4.3)
-- `[ ]` `POST /tutor-profile` — create profile, assign Tutor role, validate all mandatory fields (UC-4.1, 2.2.2)
-- `[ ]` `GET /tutor-profile` — return tutor profile for authenticated tutor (UC-4.1)
-- `[ ]` `PUT /tutor-profile` — update profile (UC-4.1)
-- `[ ]` `PATCH /tutor-profile/mode` — toggle `is_active_mode` (UC-4.3)
-- `[ ]` `GET /tutor-profile/availability` / `PUT /tutor-profile/availability` — weekly grid (UC-4.2)
+- `[x]` `POST /tutor-profile` — create profile, assign Tutor role, validate all mandatory fields (UC-4.1, 2.2.2)
+- `[x]` `GET /tutor-profile` — return tutor profile for authenticated tutor (UC-4.1)
+- `[x]` `PUT /tutor-profile` — update profile (UC-4.1)
+- `[x]` `PATCH /tutor-profile/mode` — toggle `is_active_mode` (UC-4.3)
+- `[x]` `GET /tutor-profile/availability` / `PUT /tutor-profile/availability` — weekly grid (UC-4.2)
 - `[ ]` Pytest: tutor profile routes
 
 ### Phase 4 — Tutee Request & Matching Engine (UC-3.1 → UC-3.6, UC-4.4 → UC-4.7, 2.5)
