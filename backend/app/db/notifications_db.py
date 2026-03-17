@@ -108,6 +108,31 @@ def mark_notification_read(notification_id: str, user_id: str) -> dict:
         raise _db_error("mark_notification_read", exc) from exc
 
 
+def create_notification(
+    user_id: str,
+    notification_type: str,
+    title: str,
+    content: str,
+    is_mandatory: bool = False,
+) -> None:
+    """Insert a notification row.  Failures are logged but not re-raised —
+    a notification write failure must never interrupt the triggering action.
+    """
+    try:
+        supabase.table("notifications").insert(
+            {
+                "user_id": user_id,
+                "type": notification_type,
+                "title": title,
+                "content": content,
+                "is_read": False,
+                "is_mandatory": is_mandatory,
+            }
+        ).execute()
+    except Exception as exc:
+        logger.error("create_notification failed for user %s: %s", user_id, exc)
+
+
 def mark_all_read(user_id: str) -> int:
     """Mark all unread notifications for a user as read.
 

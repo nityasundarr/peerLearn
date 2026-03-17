@@ -4,10 +4,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import auth as auth_router
 from app.api.routes import dashboard as dashboard_router
 from app.api.routes import matching as matching_router
+from app.api.routes import messaging as messaging_router
 from app.api.routes import notifications as notifications_router
 from app.api.routes import requests as requests_router
+from app.api.routes import sessions as sessions_router
 from app.api.routes import tutor_profile as tutor_profile_router
 from app.api.routes import users as users_router
+from app.api.routes import venues as venues_router
 from app.core.config import settings
 from app.core.errors import register_exception_handlers
 
@@ -38,6 +41,9 @@ app.include_router(notifications_router.router)
 app.include_router(tutor_profile_router.router)
 app.include_router(requests_router.router)
 app.include_router(matching_router.router)
+app.include_router(sessions_router.router)
+app.include_router(messaging_router.router)
+app.include_router(venues_router.router)
 
 
 @app.get("/health", tags=["health"])
