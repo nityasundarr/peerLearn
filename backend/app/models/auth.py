@@ -63,6 +63,67 @@ class ResendVerificationRequest(BaseModel):
 # Response models
 # ---------------------------------------------------------------------------
 
+class LoginRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    email: str
+    password: str
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, v: str) -> str:
+        # Hard Rule 1: validate domain on every email-accepting endpoint
+        return validate_edu_sg_email(v)
+
+    # NOTE: password rules are NOT validated on login — only on register/reset.
+    # An incorrect password produces a 401, not a 422.
+
+
+class ForgotPasswordRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    email: str
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, v: str) -> str:
+        return validate_edu_sg_email(v)
+
+
+class ResetPasswordRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    token: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def _new_password(cls, v: str) -> str:
+        return validate_password(v)
+
+
+class ChangePasswordRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    current_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def _new_password(cls, v: str) -> str:
+        return validate_password(v)
+
+
+class RefreshRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    refresh_token: str
+
+
+# ---------------------------------------------------------------------------
+# Response models
+# ---------------------------------------------------------------------------
+
 class MessageResponse(BaseModel):
     """Generic single-message response body."""
     message: str
@@ -71,3 +132,21 @@ class MessageResponse(BaseModel):
 class RegisterResponse(BaseModel):
     """Response returned after successful registration."""
     message: str
+
+
+class TokenResponse(BaseModel):
+    """Returned on successful login — tokens + minimal user context."""
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    user_id: str
+    email: str
+    full_name: str
+    preferred_language: str
+    roles: list[str]
+
+
+class AccessTokenResponse(BaseModel):
+    """Returned on token refresh — new access token only."""
+    access_token: str
+    token_type: str = "bearer"

@@ -555,11 +555,11 @@ Build phases in strict order. Do NOT start Phase N+1 until all Phase N routes ha
 - `[x]` `POST /auth/register` — validate name/email/password, hash password, create user (inactive), generate email verification token, send email (UC-1.1)
 - `[x]` `POST /auth/verify-email` — validate token expiry, activate user (UC-1.2)
 - `[x]` `POST /auth/resend-verification` — rate-limited 3/hr, regenerate token (UC-1.3, UC-1.6)
-- `[ ]` `POST /auth/login` — validate domain, check verified, check locked, compare hash, increment/reset `failed_attempts`, write `audit_logs`, issue JWT (UC-1.4)
-- `[ ]` `POST /auth/forgot-password` — rate-limited, generate 1hr reset token, send email (UC-1.5)
-- `[ ]` `POST /auth/reset-password` — validate token, enforce password rules, unlock account (UC-1.5)
-- `[ ]` `POST /auth/change-password` — auth required, validate current password server-side
-- `[ ]` `POST /auth/refresh` — validate refresh token, issue new access token
+- `[x]` `POST /auth/login` — validate domain, check verified, check locked, compare hash, increment/reset `failed_attempts`, write `audit_logs`, issue JWT (UC-1.4)
+- `[x]` `POST /auth/forgot-password` — rate-limited, generate 1hr reset token, send email (UC-1.5)
+- `[x]` `POST /auth/reset-password` — validate token, enforce password rules, unlock account (UC-1.5)
+- `[x]` `POST /auth/change-password` — auth required, validate current password server-side
+- `[x]` `POST /auth/refresh` — validate refresh token, issue new access token
 - `[ ]` Pytest: all auth routes (happy path + all failure codes)
 
 ### Phase 2 — User Profile & Dashboard Shell (UC-2.1 → UC-2.3)

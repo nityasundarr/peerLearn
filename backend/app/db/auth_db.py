@@ -4,7 +4,8 @@ Hard Rule 3: all DB access via supabase.table(...).  No raw SQL.
 Hard Rule 6: exceptions are caught here, logged, and re-raised as AppError(500)
              so internal DB details never reach the client.
 
-Tables touched: users, user_credentials, email_verifications
+Tables touched: users, user_credentials, email_verifications,
+                password_resets, audit_logs
 """
 
 import logging
@@ -182,3 +183,138 @@ def invalidate_user_verification_tokens(user_id: str) -> None:
         )
     except Exception as exc:
         raise _db_error("invalidate_user_verification_tokens", exc) from exc
+
+
+# ---------------------------------------------------------------------------
+# users table — login state helpers
+# ---------------------------------------------------------------------------
+
+def set_failed_attempts(user_id: str, count: int) -> None:
+    """Set the failed_attempts counter to an explicit value."""
+    try:
+        supabase.table("users").update({"failed_attempts": count}).eq("id", user_id).execute()
+    except Exception as exc:
+        raise _db_error("set_failed_attempts", exc) from exc
+
+
+def lock_user(user_id: str) -> None:
+    """Lock the account after exceeding the max failed-login threshold."""
+    try:
+        now_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+        supabase.table("users").update(
+            {"is_locked": True, "locked_at": now_iso}
+        ).eq("id", user_id).execute()
+    except Exception as exc:
+        raise _db_error("lock_user", exc) from exc
+
+
+def unlock_user(user_id: str) -> None:
+    """Unlock the account and clear the failure counter (on password reset)."""
+    try:
+        supabase.table("users").update(
+            {"is_locked": False, "locked_at": None, "failed_attempts": 0}
+        ).eq("id", user_id).execute()
+    except Exception as exc:
+        raise _db_error("unlock_user", exc) from exc
+
+
+# ---------------------------------------------------------------------------
+# user_credentials table — password updates
+# ---------------------------------------------------------------------------
+
+def update_password_hash(user_id: str, password_hash: str) -> None:
+    try:
+        supabase.table("user_credentials").update(
+            {"password_hash": password_hash}
+        ).eq("user_id", user_id).execute()
+    except Exception as exc:
+        raise _db_error("update_password_hash", exc) from exc
+
+
+# ---------------------------------------------------------------------------
+# password_resets table
+# ---------------------------------------------------------------------------
+
+def create_password_reset(user_id: str, token: str, expires_at: datetime) -> None:
+    try:
+        supabase.table("password_resets").insert(
+            {
+                "user_id": user_id,
+                "token": token,
+                "expires_at": expires_at.isoformat(),
+            }
+        ).execute()
+    except Exception as exc:
+        raise _db_error("create_password_reset", exc) from exc
+
+
+def get_valid_password_reset_token(token: str) -> dict | None:
+    """Return the record only if unused and not yet expired."""
+    try:
+        now_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+        result = (
+            supabase.table("password_resets")
+            .select("*")
+            .eq("token", token)
+            .is_("used_at", "null")
+            .gt("expires_at", now_iso)
+            .maybe_single()
+            .execute()
+        )
+        return result.data
+    except Exception as exc:
+        raise _db_error("get_valid_password_reset_token", exc) from exc
+
+
+def mark_password_reset_used(token_id: str) -> None:
+    try:
+        now_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+        supabase.table("password_resets").update(
+            {"used_at": now_iso}
+        ).eq("id", token_id).execute()
+    except Exception as exc:
+        raise _db_error("mark_password_reset_used", exc) from exc
+
+
+def invalidate_user_password_resets(user_id: str) -> None:
+    """Mark all unused password reset tokens for a user as used."""
+    try:
+        now_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+        (
+            supabase.table("password_resets")
+            .update({"used_at": now_iso})
+            .eq("user_id", user_id)
+            .is_("used_at", "null")
+            .execute()
+        )
+    except Exception as exc:
+        raise _db_error("invalidate_user_password_resets", exc) from exc
+
+
+# ---------------------------------------------------------------------------
+# audit_logs table
+# ---------------------------------------------------------------------------
+
+def create_audit_log(
+    email: str,
+    event_type: str,
+    outcome: str,
+    ip_address: str | None = None,
+    user_id: str | None = None,
+    failure_reason: str | None = None,
+) -> None:
+    """Write one sign-in audit record.  user_id is NULL for unknown emails."""
+    try:
+        supabase.table("audit_logs").insert(
+            {
+                "user_id": user_id,
+                "email": email,
+                "ip_address": ip_address,
+                "event_type": event_type,
+                "outcome": outcome,
+                "failure_reason": failure_reason,
+            }
+        ).execute()
+    except Exception as exc:
+        # Audit log failure must not interrupt the auth flow — log only
+        logger.error("Audit log write failed: %s", exc)
