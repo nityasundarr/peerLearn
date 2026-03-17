@@ -580,14 +580,14 @@ Build phases in strict order. Do NOT start Phase N+1 until all Phase N routes ha
 - `[ ]` Pytest: tutor profile routes
 
 ### Phase 4 — Tutee Request & Matching Engine (UC-3.1 → UC-3.6, UC-4.4 → UC-4.7, 2.5)
-- `[ ]` `POST /requests` — create tutoring request, assign Tutee role, compute urgency level, write `learning_needs` (UC-3.1, UC-3.2, 2.2.3, 2.3)
-- `[ ]` `GET /requests` — list requests for current user (tutee view) (UC-3.1)
-- `[ ]` `PATCH /requests/{id}` — broaden criteria, re-run matching (UC-3.6)
-- `[ ]` `DELETE /requests/{id}` — cancel request, set status=cancelled (UC-3.7)
-- `[ ]` `GET /tutor/requests/incoming` — list pending requests for current tutor (UC-4.4)
-- `[ ]` `backend/app/services/matching_service.py` — candidate pool filter + scoring (0–100) + fairness cap (2.5.1–2.5.3)
-- `[ ]` `GET /matching/recommendations` — run matching engine, persist `matching_scores`, return ranked list with distance buckets (UC-3.3, 2.5.4)
-- `[ ]` `backend/app/services/location_service.py` — planning area centroid lookup, distance bucket computation (2.4)
+- `[x]` `POST /requests` — create tutoring request, assign Tutee role, compute urgency level, write `learning_needs` (UC-3.1, UC-3.2, 2.2.3, 2.3)
+- `[x]` `GET /requests` — list requests for current user (tutee view) (UC-3.1)
+- `[x]` `PATCH /requests/{id}` — broaden criteria, re-run matching (UC-3.6)
+- `[x]` `DELETE /requests/{id}` — cancel request, set status=cancelled (UC-3.7)
+- `[x]` `GET /tutor/requests/incoming` — list pending requests for current tutor (UC-4.4)
+- `[x]` `backend/app/services/matching_service.py` — candidate pool filter + scoring (0–100) + fairness cap (2.5.1–2.5.3)
+- `[x]` `GET /matching/recommendations` — run matching engine, persist `matching_scores`, return ranked list with distance buckets (UC-3.3, 2.5.4)
+- `[x]` `backend/app/services/location_service.py` — planning area centroid lookup, distance bucket computation (2.4)
 - `[ ]` Pytest: request CRUD + matching algorithm unit tests (scoring, fairness, empty-pool edge case)
 
 ### Phase 5 — Session Coordination (UC-4.5 → UC-5.5, 2.7, 2.8)
