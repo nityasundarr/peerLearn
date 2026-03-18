@@ -15,8 +15,7 @@ const DashboardLayout = ({ activeTab, onTabChange, badges = {}, children }) => {
   const navigate = useNavigate();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
-  // Get user display info from Supabase user_metadata
-  const fullName = user?.user_metadata?.full_name || 'User';
+  const fullName = user?.full_name || 'User';
   const initials = fullName
     .split(' ')
     .map((n) => n[0])
