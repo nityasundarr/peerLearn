@@ -53,12 +53,15 @@ def get_user_profile(user_id: str) -> dict | None:
             .maybe_single()
             .execute()
         )
+        if result is None:
+            return None
         return result.data
     except Exception as exc:
-        raise _db_error("get_user_profile", exc) from exc
+        logger.error("DB error: %s", exc)
+        return None
 
 
-def update_user_profile(user_id: str, updates: dict) -> dict:
+def update_user_profile(user_id: str, updates: dict) -> dict | None:
     """Apply a partial update to full_name and/or preferred_language.
 
     Returns the updated profile row.
@@ -72,9 +75,12 @@ def update_user_profile(user_id: str, updates: dict) -> dict:
             .select(_PROFILE_COLUMNS)
             .execute()
         )
+        if result is None:
+            return None
         return result.data[0]
     except Exception as exc:
-        raise _db_error("update_user_profile", exc) from exc
+        logger.error("DB error: %s", exc)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -91,12 +97,15 @@ def get_user_privacy(user_id: str) -> dict | None:
             .maybe_single()
             .execute()
         )
+        if result is None:
+            return None
         return result.data
     except Exception as exc:
-        raise _db_error("get_user_privacy", exc) from exc
+        logger.error("DB error: %s", exc)
+        return None
 
 
-def update_user_privacy(user_id: str, updates: dict) -> dict:
+def update_user_privacy(user_id: str, updates: dict) -> dict | None:
     """Apply a partial update to privacy/notification preference flags.
 
     Returns the updated preference row.
@@ -109,6 +118,9 @@ def update_user_privacy(user_id: str, updates: dict) -> dict:
             .select(_PRIVACY_COLUMNS)
             .execute()
         )
+        if result is None:
+            return None
         return result.data[0]
     except Exception as exc:
-        raise _db_error("update_user_privacy", exc) from exc
+        logger.error("DB error: %s", exc)
+        return None

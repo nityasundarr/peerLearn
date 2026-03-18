@@ -39,9 +39,12 @@ def get_user_by_email(email: str) -> dict | None:
             .maybe_single()
             .execute()
         )
+        if result is None:
+            return None
         return result.data
     except Exception as exc:
-        raise _db_error("get_user_by_email", exc) from exc
+        logger.error("DB error: %s", exc)
+        return None
 
 
 def get_user_by_id(user_id: str) -> dict | None:
@@ -53,16 +56,19 @@ def get_user_by_id(user_id: str) -> dict | None:
             .maybe_single()
             .execute()
         )
+        if result is None:
+            return None
         return result.data
     except Exception as exc:
-        raise _db_error("get_user_by_id", exc) from exc
+        logger.error("DB error: %s", exc)
+        return None
 
 
 def create_user(
     full_name: str,
     email: str,
     preferred_language: str,
-) -> dict:
+) -> dict | None:
     try:
         result = (
             supabase.table("users")
@@ -79,9 +85,12 @@ def create_user(
             )
             .execute()
         )
+        if result is None:
+            return None
         return result.data[0]
     except Exception as exc:
-        raise _db_error("create_user", exc) from exc
+        logger.error("DB error: %s", exc)
+        return None
 
 
 def activate_user(user_id: str) -> None:
@@ -113,9 +122,12 @@ def get_credentials_by_user_id(user_id: str) -> dict | None:
             .maybe_single()
             .execute()
         )
+        if result is None:
+            return None
         return result.data
     except Exception as exc:
-        raise _db_error("get_credentials_by_user_id", exc) from exc
+        logger.error("DB error: %s", exc)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -152,9 +164,12 @@ def get_valid_verification_token(token: str) -> dict | None:
             .maybe_single()
             .execute()
         )
+        if result is None:
+            return None
         return result.data
     except Exception as exc:
-        raise _db_error("get_valid_verification_token", exc) from exc
+        logger.error("DB error: %s", exc)
+        return None
 
 
 def mark_verification_token_used(token_id: str) -> None:
@@ -261,9 +276,12 @@ def get_valid_password_reset_token(token: str) -> dict | None:
             .maybe_single()
             .execute()
         )
+        if result is None:
+            return None
         return result.data
     except Exception as exc:
-        raise _db_error("get_valid_password_reset_token", exc) from exc
+        logger.error("DB error: %s", exc)
+        return None
 
 
 def mark_password_reset_used(token_id: str) -> None:
