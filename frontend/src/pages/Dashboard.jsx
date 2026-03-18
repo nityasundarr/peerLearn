@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
+import api from '../services/api';
+import { useAuth } from '../services/AuthContext';
 
 // ============================================================
 // SECTION 2: USER DASHBOARD (UPDATED)
@@ -11,10 +14,88 @@ import DashboardLayout from '../components/DashboardLayout';
 // - Accept/decline/message for requests (2.12.6.3)
 // ============================================================
 
+const getInitials = (name) => (name || '')
+  .split(' ')
+  .map((n) => n[0])
+  .join('')
+  .toUpperCase()
+  .slice(0, 2) || '??';
+
+const formatDate = (d) => {
+  if (!d) return '';
+  const dt = typeof d === 'string' ? new Date(d) : d;
+  return dt.toLocaleDateString('en-SG', { weekday: 'short', day: 'numeric', month: 'short' });
+};
+
+const formatTime = (d) => {
+  if (!d) return '';
+  const dt = typeof d === 'string' ? new Date(d) : d;
+  return dt.toLocaleTimeString('en-SG', { hour: 'numeric', minute: '2-digit', hour12: true });
+};
+
+const formatRelativeTime = (d) => {
+  if (!d) return '';
+  const dt = typeof d === 'string' ? new Date(d) : d;
+  const diff = (Date.now() - dt) / 60000;
+  if (diff < 60) return 'Just now';
+  if (diff < 1440) return `${Math.floor(diff / 60)} hours ago`;
+  if (diff < 43200) return `${Math.floor(diff / 1440)} days ago`;
+  return formatDate(dt);
+};
+
+const mapSessionToUi = (s) => ({
+  id: s.id,
+  subject: s.subject || s.academic_level || '—',
+  topic: s.topic || s.subjects?.[0] || '—',
+  tutor: s.tutor_name || s.tutor?.full_name || 'Tutor',
+  tutee: s.tutee_name || s.tutee?.full_name || 'Student',
+  initials: getInitials(s.tutor_name || s.tutee_name || s.tutor?.full_name || s.tutee?.full_name),
+  date: formatDate(s.scheduled_at || s.date),
+  time: formatTime(s.scheduled_at || s.date),
+  venue: s.venue_name || s.venue_manual || s.venue || '—',
+  state: (s.status || s.state || '').toUpperCase().replace(/\s/g, '_'),
+  fee: s.fee ? `$${typeof s.fee === 'number' ? s.fee.toFixed(2) : s.fee}` : '—',
+  ...s,
+});
+
+const mapRequestToUi = (r) => ({
+  id: r.id,
+  subject: r.subject || r.subjects?.[0] || '—',
+  topic: r.topic || r.topics?.[0] || '—',
+  student: r.tutee_name || r.tutee?.full_name || 'Student',
+  initials: getInitials(r.tutee_name || r.tutee?.full_name),
+  date: formatDate(r.proposed_at || r.created_at || r.date),
+  time: formatTime(r.proposed_at || r.created_at || r.date),
+  urgency: r.urgency_category || r.urgency || '—',
+  level: r.academic_level || '—',
+  fee: r.fee ? `$${typeof r.fee === 'number' ? r.fee.toFixed(2) : r.fee}` : '—',
+  ...r,
+});
+
+const mapNotificationToUi = (n) => ({
+  id: n.id,
+  icon: n.icon || '📩',
+  title: n.title || n.type || 'Notification',
+  message: n.message || n.body || n.content || '',
+  time: formatRelativeTime(n.created_at || n.sent_at),
+  unread: !n.is_read && !n.read,
+  ...n,
+});
+
 const Dashboard = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
   const [showDetailPanel, setShowDetailPanel] = useState(false);
   const [showMessaging, setShowMessaging] = useState(false);
+  const [selectedSession, setSelectedSession] = useState(null);
+
+  const [summary, setSummary] = useState(null);
+  const [badges, setBadges] = useState({ tutoring: 0, notifications: 0, chats: 0 });
+  const [learningSessions, setLearningSessions] = useState([]);
+  const [tutoringSessions, setTutoringSessions] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const sessionStates = {
     PENDING_TUTOR: { label: 'Pending Tutor Selection', color: '#f59e0b', bg: '#fef3c7' },
@@ -25,21 +106,154 @@ const Dashboard = () => {
     COMPLETED: { label: 'Completed', color: '#6b7280', bg: '#f3f4f6' },
   };
 
-  const upcomingSessions = [
-    { id: 1, subject: 'Mathematics', topic: 'Calculus Integration', tutor: 'Sarah Tan', initials: 'ST', date: 'Tue, 14 Jan', time: '3:00 PM', venue: 'Clementi Library', state: 'CONFIRMED', fee: '$27.50' },
-    { id: 2, subject: 'Physics', topic: 'Mechanics', tutor: 'James Lim', initials: 'JL', date: 'Thu, 16 Jan', time: '4:00 PM', venue: 'West Coast CC', state: 'PENDING_CONFIRM', fee: '$27.50' },
-  ];
+  const upcomingSessions = (summary?.upcoming_sessions || []).map(mapSessionToUi);
+  const incomingRequests = (summary?.incoming_requests || []).map(mapRequestToUi);
+  const pendingActions = summary?.pending_actions || [];
 
-  const incomingRequests = [
-    { id: 3, subject: 'Computer Science', topic: 'Data Structures', student: 'Alice Wong', initials: 'AW', date: 'Wed, 15 Jan', time: '2:00 PM', urgency: 'Exam Soon', level: 'University', fee: '$25.00' },
-    { id: 4, subject: 'Mathematics', topic: 'Linear Algebra', student: 'Bob Chen', initials: 'BC', date: 'Fri, 17 Jan', time: '5:00 PM', urgency: 'Assignment Due', level: 'Polytechnic', fee: '$22.00' },
-  ];
+  const fetchSummary = async () => {
+    try {
+      const { data } = await api.get('/dashboard/summary');
+      setSummary(data);
+    } catch {
+      setSummary({ upcoming_sessions: [], incoming_requests: [], pending_actions: [] });
+    }
+  };
 
-  const pendingActions = [
-    { id: 1, type: 'payment', text: 'Complete payment for Physics session', action: 'Pay Now', urgent: true },
-    { id: 2, type: 'request', text: '2 new tutoring requests waiting', action: 'View', urgent: false },
-    { id: 3, type: 'feedback', text: 'Rate your session with Emily Wong', action: 'Feedback', urgent: false },
-  ];
+  const fetchBadges = async () => {
+    try {
+      const { data } = await api.get('/dashboard/badges');
+      setBadges({
+        tutoring: data.tutoring ?? data.tutoring_count ?? 0,
+        notifications: data.notifications ?? data.unread_notifications ?? 0,
+        chats: data.chats ?? data.unread_chats ?? 0,
+      });
+    } catch {
+      setBadges({ tutoring: 0, notifications: 0, chats: 0 });
+    }
+  };
+
+  const fetchLearningSessions = async () => {
+    try {
+      const { data } = await api.get('/sessions', { params: { role: 'tutee' } });
+      const list = Array.isArray(data) ? data : (data.sessions || data.items || []);
+      setLearningSessions(list.map(mapSessionToUi));
+    } catch {
+      setLearningSessions([]);
+    }
+  };
+
+  const fetchTutoringSessions = async () => {
+    try {
+      const { data } = await api.get('/sessions', { params: { role: 'tutor' } });
+      const list = Array.isArray(data) ? data : (data.sessions || data.items || []);
+      setTutoringSessions(list.map(mapSessionToUi));
+    } catch {
+      setTutoringSessions([]);
+    }
+  };
+
+  const fetchNotifications = async () => {
+    try {
+      const { data } = await api.get('/notifications');
+      const list = Array.isArray(data) ? data : (data.notifications || data.items || []);
+      setNotifications(list.map(mapNotificationToUi));
+    } catch {
+      setNotifications([]);
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      await Promise.all([fetchSummary(), fetchBadges()]);
+      if (!cancelled) setLoading(false);
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'learning') fetchLearningSessions();
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'tutoring') fetchTutoringSessions();
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'notifications') {
+      fetchNotifications();
+      fetchBadges();
+    }
+  }, [activeTab]);
+
+  const handleAccept = async (id) => {
+    try {
+      await api.post(`/sessions/${id}/accept`);
+      await fetchSummary();
+      await fetchBadges();
+      if (activeTab === 'tutoring') fetchTutoringSessions();
+    } catch {
+      // error handled by api interceptor or UI
+    }
+  };
+
+  const handleDecline = async (id) => {
+    try {
+      await api.post(`/sessions/${id}/decline`);
+      await fetchSummary();
+      await fetchBadges();
+      if (activeTab === 'tutoring') fetchTutoringSessions();
+    } catch {
+      // error handled by api interceptor or UI
+    }
+  };
+
+  const handlePay = async (sessionId) => {
+    try {
+      await api.post('/payments/initiate', { session_id: sessionId });
+      await fetchSummary();
+      await fetchBadges();
+      if (activeTab === 'learning') fetchLearningSessions();
+      setShowDetailPanel(false);
+    } catch {
+      // error handled by api interceptor or UI
+    }
+  };
+
+  const handleMarkOutcome = async (sessionId, outcome) => {
+    try {
+      await api.patch(`/sessions/${sessionId}/outcome`, { outcome });
+      await fetchSummary();
+      await fetchBadges();
+      if (activeTab === 'learning') fetchLearningSessions();
+      if (activeTab === 'tutoring') fetchTutoringSessions();
+      setShowDetailPanel(false);
+    } catch {
+      // error handled by api interceptor or UI
+    }
+  };
+
+  const handleMarkNotificationRead = async (id) => {
+    try {
+      await api.patch(`/notifications/${id}`);
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, unread: false } : n)));
+      fetchBadges();
+    } catch {
+      // error handled by api interceptor or UI
+    }
+  };
+
+  const handleMarkAllNotificationsRead = async () => {
+    try {
+      await api.post('/notifications/read-all');
+      setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+      fetchBadges();
+    } catch {
+      // error handled by api interceptor or UI
+    }
+  };
 
   const StatusBadge = ({ state }) => {
     const s = sessionStates[state];
@@ -47,16 +261,29 @@ const Dashboard = () => {
   };
 
   // HOME TAB
-  const HomeTab = () => (
+  const HomeTab = () => {
+    const stats = summary?.stats || {};
+    const statItems = [
+      { label: 'Upcoming', value: String(stats.upcoming ?? upcomingSessions.length ?? 0), icon: '📅' },
+      { label: 'Pending', value: String(stats.pending ?? incomingRequests.length ?? 0), icon: '⏳' },
+      { label: 'Hours Learned', value: String(stats.hours_learned ?? 0), icon: '📚' },
+      { label: 'Hours Taught', value: String(stats.hours_taught ?? 0), icon: '🎓' },
+    ];
+    const handlePendingAction = (a) => {
+      if (a.type === 'payment' && a.session_id) handlePay(a.session_id);
+      else if (a.type === 'request') setActiveTab('tutoring');
+      else if (a.type === 'feedback' && a.session_id) navigate(`/feedback/${a.session_id}`);
+    };
+    return (
     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
       <div>
         {/* Welcome */}
         <div style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #2d8a6e 100%)', borderRadius: '20px', padding: '32px', color: '#fff', marginBottom: '24px' }}>
-          <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px' }}>Welcome back, John! 👋</h1>
+          <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px' }}>Welcome back, {user?.full_name || 'User'}! 👋</h1>
           <p style={{ opacity: 0.9, marginBottom: '20px' }}>Ready to learn or teach today?</p>
           <div style={{ display: 'flex', gap: '12px' }}>
-            <button style={{ background: '#f59e0b', border: 'none', padding: '12px 24px', borderRadius: '10px', color: '#fff', fontWeight: '600', cursor: 'pointer' }}>🎓 Request Help</button>
-            <button style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)', padding: '12px 24px', borderRadius: '10px', color: '#fff', fontWeight: '600', cursor: 'pointer' }}>💡 Offer to Tutor</button>
+            <button onClick={() => navigate('/request-help')} style={{ background: '#f59e0b', border: 'none', padding: '12px 24px', borderRadius: '10px', color: '#fff', fontWeight: '600', cursor: 'pointer' }}>🎓 Request Help</button>
+            <button onClick={() => navigate('/offer-tutor')} style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)', padding: '12px 24px', borderRadius: '10px', color: '#fff', fontWeight: '600', cursor: 'pointer' }}>💡 Offer to Tutor</button>
           </div>
         </div>
 
@@ -67,7 +294,7 @@ const Dashboard = () => {
             {pendingActions.map(a => (
               <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '12px 16px', borderRadius: '10px' }}>
                 <span style={{ fontSize: '14px', color: '#1c1917' }}>{a.text}</span>
-                <button style={{ padding: '8px 16px', background: a.urgent ? '#ef4444' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '13px' }}>{a.action}</button>
+                <button onClick={() => handlePendingAction(a)} style={{ padding: '8px 16px', background: a.urgent ? '#ef4444' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '13px' }}>{a.action}</button>
               </div>
             ))}
           </div>
@@ -75,7 +302,7 @@ const Dashboard = () => {
 
         {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
-          {[{ label: 'Upcoming', value: '2', icon: '📅' }, { label: 'Pending', value: '2', icon: '⏳' }, { label: 'Hours Learned', value: '12', icon: '📚' }, { label: 'Hours Taught', value: '8', icon: '🎓' }].map((s, i) => (
+          {statItems.map((s, i) => (
             <div key={i} style={{ background: '#fff', borderRadius: '12px', padding: '20px', border: '1px solid #e7e5e4', textAlign: 'center' }}>
               <div style={{ fontSize: '24px', marginBottom: '8px' }}>{s.icon}</div>
               <div style={{ fontSize: '28px', fontWeight: '700', color: '#1c1917' }}>{s.value}</div>
@@ -88,7 +315,7 @@ const Dashboard = () => {
         <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', padding: '24px' }}>
           <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px', color: '#1c1917' }}>📅 Upcoming Sessions</h3>
           {upcomingSessions.map(session => (
-            <div key={session.id} onClick={() => setShowDetailPanel(true)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: '#f5f5f4', borderRadius: '12px', marginBottom: '12px', cursor: 'pointer' }}>
+            <div key={session.id} onClick={() => { setSelectedSession(session); setShowDetailPanel(true); }} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: '#f5f5f4', borderRadius: '12px', marginBottom: '12px', cursor: 'pointer' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                 <div style={{ width: '48px', height: '48px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold' }}>{session.initials}</div>
                 <div>
@@ -110,7 +337,9 @@ const Dashboard = () => {
         <div style={{ background: '#fff', borderRadius: '16px', border: '2px solid #f59e0b', padding: '24px' }}>
           <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px', color: '#1c1917', display: 'flex', alignItems: 'center', gap: '8px' }}>
             📩 Incoming Requests
-            <span style={{ background: '#ef4444', color: '#fff', padding: '2px 10px', borderRadius: '10px', fontSize: '13px' }}>2</span>
+            {incomingRequests.length > 0 && (
+              <span style={{ background: '#ef4444', color: '#fff', padding: '2px 10px', borderRadius: '10px', fontSize: '13px' }}>{incomingRequests.length}</span>
+            )}
           </h3>
           {incomingRequests.map(req => (
             <div key={req.id} style={{ padding: '16px', background: '#fef3c7', borderRadius: '12px', marginBottom: '12px' }}>
@@ -127,16 +356,17 @@ const Dashboard = () => {
               <div style={{ fontSize: '14px', color: '#1a5f4a', fontWeight: '600', marginBottom: '12px' }}>Fee: {req.fee}</div>
               {/* Accept/Decline/Message (SRS 2.12.6.3) */}
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button style={{ flex: 1, padding: '10px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}>✓ Accept</button>
-                <button style={{ flex: 1, padding: '10px', background: '#fff', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '13px' }}>✕ Decline</button>
-                <button style={{ padding: '10px 14px', background: '#fff', color: '#3b82f6', border: '1px solid #93c5fd', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '13px' }}>💬</button>
+                <button onClick={() => handleAccept(req.id)} style={{ flex: 1, padding: '10px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}>✓ Accept</button>
+                <button onClick={() => handleDecline(req.id)} style={{ flex: 1, padding: '10px', background: '#fff', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '13px' }}>✕ Decline</button>
+                <button onClick={() => navigate(`/session/${req.session_id || req.id}/chat`)} style={{ padding: '10px 14px', background: '#fff', color: '#3b82f6', border: '1px solid #93c5fd', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '13px' }}>💬</button>
               </div>
             </div>
           ))}
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   // MY LEARNING TAB
   const LearningTab = () => (
@@ -147,7 +377,7 @@ const Dashboard = () => {
         ))}
       </div>
       
-      {upcomingSessions.map(session => (
+      {learningSessions.map(session => (
         <div key={session.id} style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', padding: '24px', marginBottom: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div style={{ display: 'flex', gap: '16px' }}>
@@ -168,9 +398,9 @@ const Dashboard = () => {
             </div>
           </div>
           <div style={{ display: 'flex', gap: '12px', marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #e7e5e4' }}>
-            <button onClick={() => setShowDetailPanel(true)} style={{ padding: '10px 20px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>View Details</button>
-            <button style={{ padding: '10px 20px', background: '#fff', color: '#3b82f6', border: '1px solid #93c5fd', borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>💬 Message Tutor</button>
-            {session.state === 'PENDING_CONFIRM' && <button style={{ padding: '10px 20px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>💳 Pay Now</button>}
+            <button onClick={() => { setSelectedSession(session); setShowDetailPanel(true); }} style={{ padding: '10px 20px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>View Details</button>
+            <button onClick={() => navigate(`/session/${session.id}/chat`)} style={{ padding: '10px 20px', background: '#fff', color: '#3b82f6', border: '1px solid #93c5fd', borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>💬 Message Tutor</button>
+            {session.state === 'PENDING_CONFIRM' && <button onClick={() => handlePay(session.id)} style={{ padding: '10px 20px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>💳 Pay Now</button>}
             <button style={{ padding: '10px 20px', background: '#fff', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', marginLeft: 'auto' }}>Cancel</button>
           </div>
         </div>
@@ -192,10 +422,10 @@ const Dashboard = () => {
       </div>
 
       <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
-        {[{ label: 'Incoming Requests', badge: 2 }, { label: 'Upcoming' }, { label: 'Past' }, { label: 'Cancelled' }].map((tab, i) => (
+        {[{ label: 'Incoming Requests', badge: incomingRequests.length }, { label: 'Upcoming' }, { label: 'Past' }, { label: 'Cancelled' }].map((tab, i) => (
           <button key={tab.label} style={{ padding: '10px 20px', background: i === 0 ? '#1a5f4a' : '#fff', color: i === 0 ? '#fff' : '#57534e', border: `1px solid ${i === 0 ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
             {tab.label}
-            {tab.badge && <span style={{ background: '#ef4444', color: '#fff', padding: '2px 8px', borderRadius: '10px', fontSize: '12px' }}>{tab.badge}</span>}
+            {tab.badge > 0 && <span style={{ background: '#ef4444', color: '#fff', padding: '2px 8px', borderRadius: '10px', fontSize: '12px' }}>{tab.badge}</span>}
           </button>
         ))}
       </div>
@@ -221,9 +451,9 @@ const Dashboard = () => {
             </div>
           </div>
           <div style={{ display: 'flex', gap: '12px' }}>
-            <button style={{ flex: 1, padding: '14px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px' }}>✓ Accept Request</button>
-            <button style={{ flex: 1, padding: '14px', background: '#fff', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '10px', fontWeight: '500', cursor: 'pointer', fontSize: '15px' }}>✕ Decline</button>
-            <button style={{ padding: '14px 24px', background: '#fff', color: '#3b82f6', border: '1px solid #93c5fd', borderRadius: '10px', fontWeight: '500', cursor: 'pointer', fontSize: '15px' }}>💬 Message</button>
+            <button onClick={() => handleAccept(req.id)} style={{ flex: 1, padding: '14px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px' }}>✓ Accept Request</button>
+            <button onClick={() => handleDecline(req.id)} style={{ flex: 1, padding: '14px', background: '#fff', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '10px', fontWeight: '500', cursor: 'pointer', fontSize: '15px' }}>✕ Decline</button>
+            <button onClick={() => navigate(`/session/${req.session_id || req.id}/chat`)} style={{ padding: '14px 24px', background: '#fff', color: '#3b82f6', border: '1px solid #93c5fd', borderRadius: '10px', fontWeight: '500', cursor: 'pointer', fontSize: '15px' }}>💬 Message</button>
           </div>
         </div>
       ))}
@@ -331,19 +561,19 @@ const Dashboard = () => {
   // NOTIFICATIONS TAB
   const NotificationsTab = () => (
     <div>
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
-        {['All', 'Reminders', 'Requests', 'Feedback', 'System'].map((filter, i) => (
-          <button key={filter} style={{ padding: '10px 20px', background: i === 0 ? '#1a5f4a' : '#fff', color: i === 0 ? '#fff' : '#57534e', border: `1px solid ${i === 0 ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>{filter}</button>
-        ))}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          {['All', 'Reminders', 'Requests', 'Feedback', 'System'].map((filter, i) => (
+            <button key={filter} style={{ padding: '10px 20px', background: i === 0 ? '#1a5f4a' : '#fff', color: i === 0 ? '#fff' : '#57534e', border: `1px solid ${i === 0 ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>{filter}</button>
+          ))}
+        </div>
+        {notifications.some((n) => n.unread) && (
+          <button onClick={handleMarkAllNotificationsRead} style={{ padding: '10px 20px', background: '#fff', color: '#1a5f4a', border: '1px solid #1a5f4a', borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>Mark all read</button>
+        )}
       </div>
 
-      {[
-        { icon: '⏰', title: 'Session Tomorrow', message: 'Calculus session with Sarah Tan at 3 PM', time: '2 hours ago', unread: true },
-        { icon: '📩', title: 'New Tutoring Request', message: 'Alice Wong requested help with Data Structures', time: '5 hours ago', unread: true },
-        { icon: '⭐', title: 'Feedback Received', message: 'You received a 5-star rating from John Doe', time: '1 day ago', unread: false },
-        { icon: '💳', title: 'Payment Confirmed', message: 'Payment of $27.50 for Physics session confirmed', time: '2 days ago', unread: false },
-      ].map((notif, i) => (
-        <div key={i} style={{ background: '#fff', borderRadius: '12px', border: `1px solid ${notif.unread ? '#bbf7d0' : '#e7e5e4'}`, padding: '20px', marginBottom: '12px', display: 'flex', gap: '16px', alignItems: 'flex-start', borderLeft: notif.unread ? '4px solid #22c55e' : 'none' }}>
+      {notifications.map((notif) => (
+        <div key={notif.id} onClick={() => notif.unread && handleMarkNotificationRead(notif.id)} style={{ background: '#fff', borderRadius: '12px', border: `1px solid ${notif.unread ? '#bbf7d0' : '#e7e5e4'}`, padding: '20px', marginBottom: '12px', display: 'flex', gap: '16px', alignItems: 'flex-start', borderLeft: notif.unread ? '4px solid #22c55e' : 'none', cursor: notif.unread ? 'pointer' : 'default' }}>
           <div style={{ width: '48px', height: '48px', background: notif.unread ? '#dcfce7' : '#f5f5f4', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' }}>{notif.icon}</div>
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
@@ -428,23 +658,25 @@ const Dashboard = () => {
   );
 
   // SESSION DETAIL PANEL (SRS 2.9: Messaging Channel)
-  const DetailPanel = () => (
+  const DetailPanel = () => {
+    const s = selectedSession || {};
+    return (
     <div style={{ position: 'fixed', top: 0, right: 0, width: '500px', height: '100vh', background: '#fff', boxShadow: '-10px 0 40px rgba(0,0,0,0.1)', zIndex: 1000, overflowY: 'auto' }}>
       <div style={{ padding: '24px', borderBottom: '1px solid #e7e5e4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#1c1917' }}>Session Details</h2>
-        <button onClick={() => setShowDetailPanel(false)} style={{ background: '#f5f5f4', border: 'none', width: '36px', height: '36px', borderRadius: '8px', cursor: 'pointer', fontSize: '16px' }}>✕</button>
+        <button onClick={() => { setShowDetailPanel(false); setSelectedSession(null); }} style={{ background: '#f5f5f4', border: 'none', width: '36px', height: '36px', borderRadius: '8px', cursor: 'pointer', fontSize: '16px' }}>✕</button>
       </div>
       <div style={{ padding: '24px' }}>
-        <StatusBadge state="CONFIRMED" />
-        <h3 style={{ fontSize: '22px', fontWeight: '700', color: '#1c1917', marginTop: '16px', marginBottom: '8px' }}>Mathematics: Calculus Integration</h3>
-        <p style={{ color: '#57534e', marginBottom: '24px' }}>University Level</p>
+        <StatusBadge state={s.state || 'CONFIRMED'} />
+        <h3 style={{ fontSize: '22px', fontWeight: '700', color: '#1c1917', marginTop: '16px', marginBottom: '8px' }}>{s.subject || '—'}: {s.topic || '—'}</h3>
+        <p style={{ color: '#57534e', marginBottom: '24px' }}>{s.academic_level || '—'}</p>
 
         <div style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px', marginBottom: '20px' }}>
           <div style={{ fontSize: '12px', color: '#a8a29e', textTransform: 'uppercase', fontWeight: '600', marginBottom: '8px' }}>Tutor</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ width: '48px', height: '48px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold' }}>ST</div>
+            <div style={{ width: '48px', height: '48px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold' }}>{s.initials || '??'}</div>
             <div>
-              <div style={{ fontWeight: '600', color: '#1c1917' }}>Sarah Tan</div>
+              <div style={{ fontWeight: '600', color: '#1c1917' }}>{s.tutor || '—'}</div>
               <div style={{ fontSize: '13px', color: '#57534e' }}>⭐ 4.9 • 98% reliable</div>
             </div>
           </div>
@@ -452,46 +684,41 @@ const Dashboard = () => {
 
         <div style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px', marginBottom: '20px' }}>
           <div style={{ fontSize: '12px', color: '#a8a29e', textTransform: 'uppercase', fontWeight: '600', marginBottom: '8px' }}>Date & Time</div>
-          <div style={{ fontWeight: '600', color: '#1c1917' }}>📅 Tuesday, 14 January 2025</div>
-          <div style={{ color: '#57534e' }}>🕐 3:00 PM - 4:00 PM (1 hour)</div>
+          <div style={{ fontWeight: '600', color: '#1c1917' }}>📅 {s.date || '—'}</div>
+          <div style={{ color: '#57534e' }}>🕐 {s.time || '—'}</div>
         </div>
 
         <div style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px', marginBottom: '20px' }}>
           <div style={{ fontSize: '12px', color: '#a8a29e', textTransform: 'uppercase', fontWeight: '600', marginBottom: '8px' }}>Venue</div>
-          <div style={{ fontWeight: '600', color: '#1c1917' }}>📍 Clementi Public Library</div>
-          <div style={{ color: '#57534e', marginBottom: '12px' }}>3155 Commonwealth Ave West</div>
-          <div style={{ background: '#e7e5e4', height: '120px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a8a29e' }}>🗺️ OneMap</div>
-          {/* <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
-            {['♿ Wheelchair', '🛗 Lift', '📶 WiFi'].map(tag => <span key={tag} style={{ background: '#fff', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', color: '#57534e' }}>{tag}</span>)}
-          </div> */}
+          <div style={{ fontWeight: '600', color: '#1c1917' }}>📍 {s.venue || '—'}</div>
+          <div style={{ background: '#e7e5e4', height: '120px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a8a29e', marginTop: '12px' }}>🗺️ OneMap</div>
         </div>
 
         <div style={{ background: '#f0fdf4', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
           <div style={{ fontSize: '12px', color: '#a8a29e', textTransform: 'uppercase', fontWeight: '600', marginBottom: '8px' }}>Session Fee</div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ color: '#57534e' }}>Paid</span>
-            <span style={{ fontSize: '20px', fontWeight: '700', color: '#1a5f4a' }}>$27.50</span>
+            <span style={{ fontSize: '20px', fontWeight: '700', color: '#1a5f4a' }}>{s.fee || '—'}</span>
           </div>
         </div>
 
         {/* Action Buttons with Messaging (SRS 2.9) */}
-       {/* Action Buttons with Messaging (SRS 2.9) */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <button onClick={() => setShowMessaging(true)} style={{ width: '100%', padding: '14px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px' }}>💬 Message Tutor</button>
-          {/* Mark as Completed - For Tutor view (SRS 2.10.1) */}
-          <button style={{ width: '100%', padding: '14px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px' }}>✓ Mark as Completed</button>
-          {/* Leave Feedback - For Tutee after completion */}
-          <button style={{ width: '100%', padding: '14px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px' }}>⭐ Leave Feedback</button>
+          {s.state === 'PENDING_CONFIRM' && <button onClick={() => handlePay(s.id)} style={{ width: '100%', padding: '14px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px' }}>💳 Pay Now</button>}
+          {(s.state === 'CONFIRMED' || s.state === 'COMPLETED') && <button onClick={() => handleMarkOutcome(s.id, 'attended')} style={{ width: '100%', padding: '14px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px' }}>✓ Mark as Completed</button>}
+          <button onClick={() => s.id && navigate(`/feedback/${s.id}`)} style={{ width: '100%', padding: '14px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px' }}>⭐ Leave Feedback</button>
           <button style={{ width: '100%', padding: '14px', background: '#fff', color: '#1c1917', border: '1px solid #e7e5e4', borderRadius: '10px', fontWeight: '500', cursor: 'pointer' }}>📅 Reschedule</button>
           <button style={{ width: '100%', padding: '14px', background: '#fff', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '10px', fontWeight: '500', cursor: 'pointer' }}>Cancel Session</button>
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
 return (
     <>
-      <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab} badges={{ tutoring: 2, notifications: 2, chats: 3 }}>
+      <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab} badges={badges}>
         {activeTab === 'home' && <HomeTab />}
         {activeTab === 'learning' && <LearningTab />}
         {activeTab === 'tutoring' && <TutoringTab />}
@@ -499,7 +726,7 @@ return (
         {activeTab === 'notifications' && <NotificationsTab />}
       </DashboardLayout>
       {showDetailPanel && <DetailPanel />}
-      {showDetailPanel && <div onClick={() => setShowDetailPanel(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 999 }}></div>}
+      {showDetailPanel && <div onClick={() => { setShowDetailPanel(false); setSelectedSession(null); }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 999 }}></div>}
       {showMessaging && <MessagingPanel />}
       {showMessaging && <div onClick={() => setShowMessaging(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 1000 }}></div>}
     </>

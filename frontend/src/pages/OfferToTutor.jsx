@@ -1,11 +1,17 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import api from '../services/api';
 
 // ============================================================
 // SECTION 4: OFFER TO TUTOR FLOW (UPDATED)
 // Changes per SRS 2.2.2
 // ============================================================
 
+const DAY_TO_DOW = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0 };
+const TIME_TO_HOUR = { '9 AM': 9, '10 AM': 10, '11 AM': 11, '12 PM': 12, '1 PM': 13, '2 PM': 14, '3 PM': 15, '4 PM': 16, '5 PM': 17, '6 PM': 18, '7 PM': 19, '8 PM': 20 };
+
 const OfferToTutorFlow = () => {
+  const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedSubjects, setSelectedSubjects] = useState(['Mathematics']);
   const [selectedTopics, setSelectedTopics] = useState(['Calculus', 'Integration']);
@@ -13,6 +19,13 @@ const OfferToTutorFlow = () => {
   const [showOtherArea, setShowOtherArea] = useState(false);
   const [tutorModeActive, setTutorModeActive] = useState(true);
   const [selectedSlots, setSelectedSlots] = useState(['Tue-3 PM', 'Tue-4 PM', 'Thu-3 PM', 'Thu-4 PM', 'Sat-10 AM']);
+
+  const [maxWeeklyHours, setMaxWeeklyHours] = useState(5);
+  const [planningAreas, setPlanningAreas] = useState(['Clementi', 'Jurong East']);
+  const [otherArea, setOtherArea] = useState('');
+  const [accessibilityNotes, setAccessibilityNotes] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   const allSubjects = [
     { name: 'Mathematics', topics: ['Calculus', 'Integration', 'Differentiation', 'Linear Algebra', 'Statistics'] },
@@ -24,13 +37,69 @@ const OfferToTutorFlow = () => {
     { name: 'English', topics: ['Essay Writing', 'Literature', 'Grammar'] },
   ];
 
+  const buildTutorTopics = () => {
+    const topics = [];
+    selectedSubjects.forEach((subj) => {
+      const subject = allSubjects.find((s) => s.name === subj);
+      if (subject) {
+        subject.topics.forEach((t) => {
+          if (selectedTopics.includes(t)) topics.push({ subject: subj, topic: t });
+        });
+      }
+    });
+    return topics;
+  };
+
+  const slotsToAvailability = () => {
+    return selectedSlots.map((slotId) => {
+      const [day, time] = slotId.split('-');
+      return { day_of_week: DAY_TO_DOW[day] ?? 0, hour_slot: TIME_TO_HOUR[time] ?? 9 };
+    });
+  };
+
+  const handleTutorModeToggle = async () => {
+    const next = !tutorModeActive;
+    setTutorModeActive(next);
+    setError(null);
+    try {
+      await api.patch('/tutor-profile/mode', { is_active_mode: next });
+    } catch (err) {
+      setError(err.response?.data?.detail ?? err.message ?? 'Failed to update mode');
+      setTutorModeActive(!next);
+    }
+  };
+
+  const handleFormSubmit = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const areas = showOtherArea && otherArea ? [otherArea] : planningAreas;
+      await api.post('/tutor-profile', {
+        academic_levels: ['Primary', 'Secondary', 'Junior College', 'Polytechnic', 'ITE', 'University'],
+        subjects: selectedSubjects,
+        tutor_topics: buildTutorTopics(),
+        planning_areas: areas,
+        max_weekly_hours: maxWeeklyHours,
+        accessibility_capabilities: [],
+        accessibility_notes: accessibilityNotes || null,
+        is_active_mode: tutorModeActive,
+      });
+      await api.put('/tutor-profile/availability', { slots: slotsToAvailability() });
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err.response?.data?.detail ?? err.message ?? 'Failed to activate profile');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const FlowHeader = () => (
     <header style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #0d3d2e 100%)', padding: '0 32px', height: '72px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
         <span style={{ color: '#fff', fontSize: '22px', fontWeight: '700' }}>PeerLearn</span>
       </div>
-      <button style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>✕ Cancel</button>
+      <button onClick={() => navigate('/dashboard')} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>✕ Cancel</button>
     </header>
   );
 
@@ -226,20 +295,20 @@ const OfferToTutorFlow = () => {
             <div style={{ fontSize: '13px', color: '#57534e' }}>{tutorModeActive ? "You're visible in recommendations" : "You won't appear in searches"}</div>
           </div>
         </div>
-        <div onClick={() => setTutorModeActive(!tutorModeActive)} style={{ width: '50px', height: '28px', background: tutorModeActive ? '#22c55e' : '#e7e5e4', borderRadius: '14px', position: 'relative', cursor: 'pointer' }}>
+        <div onClick={handleTutorModeToggle} style={{ width: '50px', height: '28px', background: tutorModeActive ? '#22c55e' : '#e7e5e4', borderRadius: '14px', position: 'relative', cursor: 'pointer' }}>
           <div style={{ width: '24px', height: '24px', background: '#fff', borderRadius: '50%', position: 'absolute', top: '2px', left: tutorModeActive ? 'auto' : '2px', right: tutorModeActive ? '2px' : 'auto', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}></div>
         </div>
       </div>
 
-      {/* Max Hours Per Week (SRS 2.2.2.8: exactly 2h, 3h, 5h, 8h, 10h) */}
+      {/* Max Hours Per Week (SRS 2.2.2.6: 2h, 3h, 5h, 8h, 10h) */}
       <div style={{ marginBottom: '28px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#1c1917' }}>
           Maximum hours per week <span style={{ color: '#ef4444' }}>*</span>
         </label>
-        <p style={{ fontSize: '13px', color: '#a8a29e', marginBottom: '12px' }}>Helps prevent burnout. Select your weekly tutoring limit.</p>
+        <p style={{ fontSize: '13px', color: '#a8a29e', marginBottom: '12px' }}>Helps prevent burnout.</p>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          {['2 hrs', '3 hrs', '5 hrs', '8 hrs', '10 hrs'].map((hrs, i) => (
-            <button key={hrs} style={{ padding: '12px 20px', background: i === 2 ? '#1a5f4a' : '#fff', color: i === 2 ? '#fff' : '#57534e', border: `2px solid ${i === 2 ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500' }}>{hrs}</button>
+          {[2, 3, 5, 8, 10].map((hrs) => (
+            <button key={hrs} onClick={() => setMaxWeeklyHours(hrs)} style={{ padding: '12px 20px', background: maxWeeklyHours === hrs ? '#1a5f4a' : '#fff', color: maxWeeklyHours === hrs ? '#fff' : '#57534e', border: `2px solid ${maxWeeklyHours === hrs ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500' }}>{hrs} hrs</button>
           ))}
         </div>
       </div>
@@ -248,14 +317,16 @@ const OfferToTutorFlow = () => {
       <div style={{ marginBottom: '28px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>Preferred tutoring areas</label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
-          {['Clementi', 'Jurong East', 'Jurong West', 'Bukit Batok', 'Queenstown'].map((area, i) => (
-            <button key={area} style={{ padding: '10px 16px', background: i < 2 ? '#1a5f4a' : '#fff', color: i < 2 ? '#fff' : '#57534e', border: `1px solid ${i < 2 ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>{i < 2 && '✓ '}{area}</button>
-          ))}
-          <button onClick={() => setShowOtherArea(!showOtherArea)} style={{ padding: '10px 16px', background: showOtherArea ? '#1a5f4a' : '#fff', color: showOtherArea ? '#fff' : '#57534e', border: `1px solid ${showOtherArea ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>{showOtherArea && '✓ '}Other</button>
+          {['Clementi', 'Jurong East', 'Jurong West', 'Bukit Batok', 'Queenstown'].map((area) => {
+            const isSelected = !showOtherArea && planningAreas.includes(area);
+            return (
+              <button key={area} onClick={() => { setShowOtherArea(false); setPlanningAreas(planningAreas.includes(area) ? planningAreas.filter((a) => a !== area) : [...planningAreas.filter((a) => !['Clementi', 'Jurong East', 'Jurong West', 'Bukit Batok', 'Queenstown'].includes(a)), area]); }} style={{ padding: '10px 16px', background: isSelected ? '#1a5f4a' : '#fff', color: isSelected ? '#fff' : '#57534e', border: `1px solid ${isSelected ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>{isSelected && '✓ '}{area}</button>
+            );
+          })}
+          <button onClick={() => { setShowOtherArea(true); setPlanningAreas([]); }} style={{ padding: '10px 16px', background: showOtherArea ? '#1a5f4a' : '#fff', color: showOtherArea ? '#fff' : '#57534e', border: `1px solid ${showOtherArea ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>{showOtherArea && '✓ '}Other</button>
         </div>
-        {/* Other Planning Area (SRS 2.2.2.5.3-5: 1-100 chars) */}
         {showOtherArea && (
-          <input type="text" placeholder="Enter planning area (1-100 characters)" maxLength={100} style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', boxSizing: 'border-box' }} />
+          <input type="text" placeholder="Enter planning area (1-100 characters)" maxLength={100} value={otherArea} onChange={(e) => setOtherArea(e.target.value)} style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', boxSizing: 'border-box' }} />
         )}
       </div>
 
@@ -281,8 +352,8 @@ const OfferToTutorFlow = () => {
             </label>
           ))}
         </div>
-        <textarea rows={2} maxLength={100} placeholder="Additional accessibility notes (optional, 1-100 characters)" style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }} />
-        <div style={{ textAlign: 'right', fontSize: '12px', color: '#a8a29e', marginTop: '4px' }}>0 / 100</div>
+        <textarea rows={2} maxLength={100} placeholder="Additional accessibility notes (optional, 1-100 characters)" value={accessibilityNotes} onChange={(e) => setAccessibilityNotes(e.target.value)} style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }} />
+        <div style={{ textAlign: 'right', fontSize: '12px', color: '#a8a29e', marginTop: '4px' }}>{accessibilityNotes.length} / 100</div>
       </div>
 
       {/* Preferences */}
@@ -310,13 +381,16 @@ const OfferToTutorFlow = () => {
           <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Subjects</div><div style={{ fontWeight: '600' }}>{selectedSubjects.join(', ')}</div></div>
           <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Topics</div><div style={{ fontWeight: '600' }}>{selectedTopics.length} topics</div></div>
           <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Availability</div><div style={{ fontWeight: '600' }}>{selectedSlots.length} time slots</div></div>
-          <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Max hours/week</div><div style={{ fontWeight: '600' }}>5 hours</div></div>
+          <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Max hours/week</div><div style={{ fontWeight: '600' }}>{maxWeeklyHours} hours</div></div>
         </div>
       </div>
 
+      {error && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '12px', marginBottom: '20px', fontSize: '14px', color: '#b91c1c' }}>{error}</div>
+      )}
       {/* Navigation */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        <button style={{ width: '100%', padding: '16px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', fontSize: '16px' }}>✓ Activate Tutor Profile</button>
+        <button onClick={handleFormSubmit} disabled={loading} style={{ width: '100%', padding: '16px', background: loading ? '#e7e5e4' : '#1a5f4a', color: loading ? '#a8a29e' : '#fff', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '16px' }}>{loading ? 'Activating...' : '✓ Activate Tutor Profile'}</button>
         <button onClick={() => setCurrentStep(2)} style={{ width: '100%', padding: '14px', background: '#fff', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '12px', fontWeight: '500', cursor: 'pointer' }}>← Back to Edit</button>
       </div>
     </div>

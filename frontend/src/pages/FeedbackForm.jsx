@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import api from '../services/api';
 
 // ============================================================
 // SECTION 5: SESSION FEEDBACK FORM (UPDATED)
@@ -8,10 +10,87 @@ import React, { useState } from 'react';
 // - Feedback optional, 1-100 chars (2.8.5.1-2)
 // ============================================================
 
+const TRAIT_OPTIONS = ['Patient', 'Clear explanations', 'Well prepared', 'Encouraging', 'Good examples', 'Thorough'];
+
+const formatDate = (d) => {
+  if (!d) return '';
+  const dt = typeof d === 'string' ? new Date(d) : d;
+  return dt.toLocaleDateString('en-SG', { weekday: 'short', day: 'numeric', month: 'short' });
+};
+
+const formatTime = (d) => {
+  if (!d) return '';
+  const dt = typeof d === 'string' ? new Date(d) : d;
+  return dt.toLocaleTimeString('en-SG', { hour: 'numeric', minute: '2-digit', hour12: true });
+};
+
 const FeedbackForm = () => {
+  const { sessionId } = useParams();
+  const navigate = useNavigate();
+  const [session, setSession] = useState(null);
+  const [alreadyRated, setAlreadyRated] = useState(false);
   const [rating, setRating] = useState(0);
   const [hoveredRating, setHoveredRating] = useState(0);
   const [reviewText, setReviewText] = useState('');
+  const [traits, setTraits] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    api.get(`/sessions/${sessionId}`)
+      .then(({ data }) => setSession(data))
+      .catch(() => setSession(null));
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    api.get(`/sessions/${sessionId}/rating`)
+      .then(({ data }) => { if (data) setAlreadyRated(true); })
+      .catch(() => {});
+  }, [sessionId]);
+
+  const handleSubmitRating = async () => {
+    if (!sessionId || rating === 0) return;
+    setError(null);
+    setLoading(true);
+    try {
+      await api.post(`/sessions/${sessionId}/rating`, {
+        score: rating,
+        standout_traits: traits,
+        review_text: reviewText || undefined,
+      });
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err.response?.data?.detail ?? err.message ?? 'Failed to submit');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMarkNoShow = async () => {
+    if (!sessionId) return;
+    setError(null);
+    setLoading(true);
+    try {
+      await api.patch(`/sessions/${sessionId}/outcome`, { outcome: 'no_show' });
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err.response?.data?.detail ?? err.message ?? 'Failed to update');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleTrait = (trait) => {
+    setTraits((prev) => prev.includes(trait) ? prev.filter((t) => t !== trait) : [...prev, trait]);
+  };
+
+  const tutorName = session?.tutor_name || session?.tutor?.full_name || 'Tutor';
+  const subject = session?.subjects?.[0] || session?.subject || '—';
+  const topic = session?.topics?.[0] || session?.topic || '—';
+  const scheduledAt = session?.scheduled_at || session?.date;
+  const level = session?.academic_level || '—';
 
   const NavHeader = () => (
     <header style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #0d3d2e 100%)', padding: '0 32px', height: '72px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -87,13 +166,16 @@ const FeedbackForm = () => {
             color: '#fff',
             fontWeight: 'bold',
             fontSize: '18px',
-          }}>ST</div>
+          }}>{tutorName.slice(0, 2).toUpperCase()}</div>
           <div>
-            <div style={{ fontWeight: '600', color: '#1c1917', marginBottom: '4px' }}>Session with Sarah Tan</div>
-            <div style={{ fontSize: '14px', color: '#57534e' }}>Calculus Integration • Mathematics</div>
-            <div style={{ fontSize: '13px', color: '#a8a29e' }}>Tue, 14 Jan • 3:00 PM • University Level</div>
+            <div style={{ fontWeight: '600', color: '#1c1917', marginBottom: '4px' }}>Session with {tutorName}</div>
+            <div style={{ fontSize: '14px', color: '#57534e' }}>{topic} • {subject}</div>
+            <div style={{ fontSize: '13px', color: '#a8a29e' }}>{formatDate(scheduledAt)} • {formatTime(scheduledAt)} • {level}</div>
           </div>
         </div>
+
+        {alreadyRated && <p style={{ color: '#22c55e', marginBottom: '16px', textAlign: 'center' }}>You&apos;ve already submitted feedback for this session.</p>}
+        {error && <p style={{ color: '#ef4444', marginBottom: '16px', textAlign: 'center' }}>{error}</p>}
 
         {/* Rating Stars (SRS 2.10.3.1: 1-5 stars) */}
         <div style={{ marginBottom: '28px' }}>
@@ -104,14 +186,15 @@ const FeedbackForm = () => {
             {[1, 2, 3, 4, 5].map(star => (
               <button
                 key={star}
-                onClick={() => setRating(star)}
-                onMouseEnter={() => setHoveredRating(star)}
+                onClick={() => !alreadyRated && setRating(star)}
+                onMouseEnter={() => !alreadyRated && setHoveredRating(star)}
                 onMouseLeave={() => setHoveredRating(0)}
+                disabled={alreadyRated}
                 style={{
                   background: 'transparent',
                   border: 'none',
                   fontSize: '40px',
-                  cursor: 'pointer',
+                  cursor: alreadyRated ? 'default' : 'pointer',
                   transition: 'transform 0.1s',
                   transform: (hoveredRating >= star || rating >= star) ? 'scale(1.1)' : 'scale(1)',
                 }}
@@ -168,25 +251,21 @@ const FeedbackForm = () => {
             What stood out? <span style={{ fontWeight: '400', color: '#a8a29e' }}>(select all that apply)</span>
           </label>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            {[
-              { label: 'Patient', selected: true },
-              { label: 'Clear explanations', selected: true },
-              { label: 'Well prepared', selected: false },
-              { label: 'Encouraging', selected: true },
-              { label: 'Good examples', selected: false },
-              { label: 'Thorough', selected: false },
-            ].map((tag, i) => (
-              <button key={i} style={{
-                padding: '8px 14px',
-                background: tag.selected ? '#1a5f4a' : '#fff',
-                color: tag.selected ? '#fff' : '#57534e',
-                border: `1px solid ${tag.selected ? '#1a5f4a' : '#e7e5e4'}`,
-                borderRadius: '20px',
-                fontSize: '13px',
-                cursor: 'pointer',
-                fontWeight: '500',
-              }}>{tag.selected && '✓ '}{tag.label}</button>
-            ))}
+            {TRAIT_OPTIONS.map((label) => {
+              const selected = traits.includes(label);
+              return (
+                <button key={label} onClick={() => !alreadyRated && toggleTrait(label)} style={{
+                  padding: '8px 14px',
+                  background: selected ? '#1a5f4a' : '#fff',
+                  color: selected ? '#fff' : '#57534e',
+                  border: `1px solid ${selected ? '#1a5f4a' : '#e7e5e4'}`,
+                  borderRadius: '20px',
+                  fontSize: '13px',
+                  cursor: alreadyRated ? 'default' : 'pointer',
+                  fontWeight: '500',
+                }}>{selected && '✓ '}{label}</button>
+              );
+            })}
           </div>
         </div>
 
@@ -200,7 +279,8 @@ const FeedbackForm = () => {
             rows={3}
             maxLength={500}
             value={reviewText}
-            onChange={(e) => setReviewText(e.target.value)}
+            onChange={(e) => !alreadyRated && setReviewText(e.target.value)}
+            disabled={alreadyRated}
             placeholder="Share your experience to help other students..."
             style={{
               width: '100%',
@@ -226,8 +306,8 @@ const FeedbackForm = () => {
             </span>
             <span style={{ 
               fontSize: '12px', 
-              color: reviewText.length > 490 ? '#f59e0b' : '#a8a29e',
-              fontWeight: reviewText.length > 490 ? '500' : '400'
+              color: reviewText.length > 450 ? '#f59e0b' : '#a8a29e',
+              fontWeight: reviewText.length > 450 ? '500' : '400
             }}>
               {reviewText.length} / 500
             </span>
@@ -268,35 +348,49 @@ const FeedbackForm = () => {
 
         {/* Submit Button */}
         <button
-          disabled={rating === 0}
+          onClick={handleSubmitRating}
+          disabled={rating === 0 || loading || alreadyRated}
           style={{
             width: '100%',
             padding: '16px',
-            background: rating > 0 ? '#1a5f4a' : '#e7e5e4',
-            color: rating > 0 ? '#fff' : '#a8a29e',
+            background: rating > 0 && !alreadyRated ? '#1a5f4a' : '#e7e5e4',
+            color: rating > 0 && !alreadyRated ? '#fff' : '#a8a29e',
             border: 'none',
             borderRadius: '12px',
             fontWeight: '600',
-            cursor: rating > 0 ? 'pointer' : 'not-allowed',
+            cursor: rating > 0 && !loading && !alreadyRated ? 'pointer' : 'not-allowed',
             fontSize: '16px',
             marginBottom: '12px',
+            opacity: loading ? 0.7 : 1,
           }}
         >
           Submit Feedback
         </button>
 
-        {/* Skip Link */}
-        <button style={{
-          width: '100%',
-          padding: '12px',
-          background: 'transparent',
-          color: '#57534e',
-          border: 'none',
-          fontSize: '14px',
-          cursor: 'pointer',
-        }}>
-          Skip for now
-        </button>
+        {/* Skip / Mark no-show */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
+          <button onClick={() => navigate('/dashboard')} style={{
+            width: '100%',
+            padding: '12px',
+            background: 'transparent',
+            color: '#57534e',
+            border: 'none',
+            fontSize: '14px',
+            cursor: 'pointer',
+          }}>
+            Skip for now
+          </button>
+          <button onClick={handleMarkNoShow} disabled={loading || alreadyRated} style={{
+            background: 'transparent',
+            color: '#ef4444',
+            border: 'none',
+            fontSize: '13px',
+            cursor: loading || alreadyRated ? 'not-allowed' : 'pointer',
+            textDecoration: 'underline',
+          }}>
+            Mark as no-show
+          </button>
+        </div>
         </div>
       </div>
     </div>

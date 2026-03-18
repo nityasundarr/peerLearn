@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import api from '../services/api';
 
 // ============================================================
 // SECTION 3: REQUEST HELP FLOW (UPDATED)
@@ -12,7 +14,14 @@ import React, { useState } from 'react';
 // - Session states displayed (2.7)
 // ============================================================
 
+const ACADEMIC_LEVEL_MAP = { primary: 'Primary', secondary: 'Secondary', jc: 'Junior College', poly: 'Polytechnic', ite: 'ITE', uni: 'University' };
+const URGENCY_MAP = { exam: 'exam_soon', assignment: 'assignment_due', general: 'general_study' };
+const DURATION_HOURS_MAP = { '1 hour': 1, '2 hours': 2, '4 hours': 4 };
+
+const getInitials = (name) => (name || '').split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '??';
+
 const RequestHelpFlow = () => {
+  const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedTutor, setSelectedTutor] = useState(null);
   const [selectedVenue, setSelectedVenue] = useState(null);
@@ -20,6 +29,24 @@ const RequestHelpFlow = () => {
   const [showOtherSubject, setShowOtherSubject] = useState(false);
   const [showOtherArea, setShowOtherArea] = useState(false);
   const [selectedTopics, setSelectedTopics] = useState(['Integration']);
+
+  const [academicLevel, setAcademicLevel] = useState('uni');
+  const [urgency, setUrgency] = useState('exam');
+  const [selectedDates, setSelectedDates] = useState([{ day: 'Tue', date: '14' }, { day: 'Thu', date: '16' }]);
+  const [selectedTimeSlots, setSelectedTimeSlots] = useState([6, 7]);
+  const [durationHours, setDurationHours] = useState(1);
+  const [planningAreas, setPlanningAreas] = useState(['Clementi']);
+  const [otherArea, setOtherArea] = useState('');
+  const [otherSubject, setOtherSubject] = useState('');
+  const [accessibilityNotes, setAccessibilityNotes] = useState('');
+
+  const [requestId, setRequestId] = useState(null);
+  const [sessionId, setSessionId] = useState(null);
+  const [recommendedTutors, setRecommendedTutors] = useState([]);
+  const [recommendedVenues, setRecommendedVenues] = useState([]);
+  const [sessionFee, setSessionFee] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   // Predefined subjects and topics (matching Tutor flow)
   const allSubjects = [
@@ -32,16 +59,131 @@ const RequestHelpFlow = () => {
     { name: 'English', topics: ['Essay Writing', 'Literature', 'Grammar', 'Creative Writing'] },
   ];
 
-  const recommendedTutors = [
-    { id: 1, name: 'Sarah Tan', initials: 'ST', rating: 4.9, sessions: 24, topics: ['Calculus', 'Integration', 'Differentiation'], availability: 'High', distance: 'Near', workload: 'Low', matchScore: 95, reliabilityScore: 98, explanation: 'Specializes in calculus integration, available at your preferred time, nearby location, balanced workload.' },
-    { id: 2, name: 'James Lim', initials: 'JL', rating: 4.7, sessions: 18, topics: ['Calculus', 'Linear Algebra'], availability: 'Medium', distance: 'Near', workload: 'Medium', matchScore: 88, reliabilityScore: 95, explanation: 'Strong in calculus, good availability match, very close to your area.' },
-    { id: 3, name: 'Emily Wong', initials: 'EW', rating: 4.8, sessions: 31, topics: ['Calculus', 'Statistics'], availability: 'Medium', distance: 'Medium', workload: 'High', matchScore: 75, reliabilityScore: 92, explanation: 'Excellent rating and experience, slightly further with moderate workload.' },
-  ];
+  const mapTutorToUi = (t) => ({
+    id: t.tutor_id ?? t.id,
+    name: t.full_name ?? t.name ?? 'Tutor',
+    initials: getInitials(t.full_name ?? t.name),
+    rating: t.avg_rating ?? t.rating ?? 0,
+    sessions: t.total_sessions ?? t.sessions ?? 0,
+    topics: t.topics ?? t.tutor_topics ?? [],
+    availability: t.availability ?? 'Medium',
+    distance: t.distance_bucket ?? t.distance ?? 'Medium',
+    workload: t.workload ?? 'Medium',
+    matchScore: t.score ?? t.match_score ?? 0,
+    reliabilityScore: t.reliability_score ?? t.score ?? 0,
+    explanation: t.explanation ?? t.reason ?? '',
+  });
 
-  const recommendedVenues = [
-    { id: 1, name: 'Clementi Public Library', type: 'Library', address: '3155 Commonwealth Ave West, #05-13/14/15', distanceStudent: '0.8 km', distanceTutor: '1.2 km', accessibility: ['Wheelchair', 'Lift'], amenities: ['WiFi', 'Power Outlets', 'Quiet Zone'], hours: '10:00 AM - 9:00 PM', matchScore: 92, explanation: 'Closest to both parties, fully accessible, has quiet study areas.' },
-    { id: 2, name: 'West Coast Community Centre', type: 'CC', address: '2 Clementi West Street 2', distanceStudent: '1.5 km', distanceTutor: '0.9 km', accessibility: ['Wheelchair', 'Lift'], amenities: ['WiFi', 'Cafe'], hours: '9:00 AM - 10:00 PM', matchScore: 85, explanation: 'Good facilities, longer operating hours.' },
-  ];
+  const mapVenueToUi = (v) => ({
+    id: v.id,
+    name: v.name ?? '—',
+    type: v.venue_type ?? 'Library',
+    address: v.address ?? v.planning_area ?? '—',
+    distanceStudent: v.distance_student ?? v.distance_bucket ?? '—',
+    distanceTutor: v.distance_tutor ?? v.distance_bucket ?? '—',
+    accessibility: v.accessibility_features ?? v.accessibility ?? [],
+    amenities: v.amenities ?? [],
+    hours: v.hours ?? '—',
+    matchScore: v.score ?? v.match_score ?? 0,
+    explanation: v.explanation ?? '',
+  });
+
+  const buildRequestPayload = () => {
+    const subject = showOtherSubject ? otherSubject : selectedSubject;
+    const areas = showOtherArea ? (otherArea ? [otherArea] : planningAreas) : planningAreas;
+    const timeSlots = selectedDates.flatMap((d) =>
+      selectedTimeSlots.map((h) => ({ day_of_week: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(d.day), hour_slot: h + 9 }))
+    );
+    return {
+      academic_level: ACADEMIC_LEVEL_MAP[academicLevel] || 'University',
+      subjects: subject ? [subject] : [],
+      topics: selectedTopics,
+      planning_areas: areas,
+      time_slots: timeSlots,
+      duration_hours: durationHours,
+      urgency_category: URGENCY_MAP[urgency] || 'general_study',
+      accessibility_needs: [],
+      accessibility_notes: accessibilityNotes || null,
+    };
+  };
+
+  const handleFindTutors = async () => {
+    setError(null);
+    setLoading(true);
+    setRecommendedTutors([]);
+    try {
+      const payload = buildRequestPayload();
+      const { data: reqData } = await api.post('/requests', payload);
+      const rid = reqData.id ?? reqData.request_id;
+      setRequestId(rid);
+
+      const { data: matchData } = await api.get('/matching/recommendations', { params: { request_id: rid } });
+      const list = Array.isArray(matchData) ? matchData : (matchData.recommendations ?? matchData.tutors ?? []);
+      setRecommendedTutors(list.map(mapTutorToUi));
+      setCurrentStep(3);
+    } catch (err) {
+      setError(err.response?.data?.detail ?? err.message ?? 'Request failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSelectTutorAndProceed = async () => {
+    if (!selectedTutor || !requestId) return;
+    setError(null);
+    setLoading(true);
+    setRecommendedVenues([]);
+    try {
+      const tutorId = typeof selectedTutor === 'object' ? selectedTutor.id : selectedTutor;
+      const { data } = await api.post('/sessions', { request_id: requestId, tutor_id: tutorId });
+      const sid = data.id ?? data.session_id;
+      setSessionId(sid);
+      setCurrentStep(4);
+    } catch (err) {
+      setError(err.response?.data?.detail ?? err.message ?? 'Failed to create session');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleProceedToPayment = () => {
+    setError(null);
+    setCurrentStep(5);
+  };
+
+  const handlePay = async () => {
+    if (!sessionId) return;
+    setError(null);
+    setLoading(true);
+    try {
+      await api.post('/payments/initiate', { session_id: sessionId });
+      setCurrentStep(6);
+    } catch (err) {
+      setError(err.response?.data?.detail ?? err.message ?? 'Payment failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentStep === 4 && sessionId && selectedTutor) {
+      const tutorId = typeof selectedTutor === 'object' ? selectedTutor.id : selectedTutor;
+      api.get('/venues/recommend', { params: { request_id: requestId, tutor_id: tutorId } })
+        .then(({ data }) => {
+          const list = Array.isArray(data) ? data : (data.venues ?? data.recommendations ?? []);
+          setRecommendedVenues(list.map(mapVenueToUi));
+        })
+        .catch(() => setRecommendedVenues([]));
+    }
+  }, [currentStep, sessionId, selectedTutor, requestId]);
+
+  useEffect(() => {
+    if (currentStep === 5 && sessionId) {
+      api.get('/payments/fee', { params: { session_id: sessionId } })
+        .then(({ data }) => setSessionFee(data.fee ?? data.amount ?? null))
+        .catch(() => setSessionFee(null));
+    }
+  }, [currentStep, sessionId]);
 
   // Header
   const FlowHeader = () => (
@@ -50,7 +192,7 @@ const RequestHelpFlow = () => {
         <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
         <span style={{ color: '#fff', fontSize: '22px', fontWeight: '700' }}>PeerLearn</span>
       </div>
-      <button style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>✕ Cancel Request</button>
+      <button onClick={() => navigate('/dashboard')} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>✕ Cancel Request</button>
     </header>
   );
 
@@ -96,7 +238,7 @@ const RequestHelpFlow = () => {
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#1c1917' }}>
           Academic Level <span style={{ color: '#ef4444' }}>*</span>
         </label>
-        <select style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', background: '#fff' }}>
+        <select value={academicLevel} onChange={(e) => setAcademicLevel(e.target.value)} style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', background: '#fff' }}>
           <option value="">Select your academic level</option>
           <option value="primary">Primary School</option>
           <option value="secondary">Secondary School</option>
@@ -126,7 +268,7 @@ const RequestHelpFlow = () => {
         {/* Other Subject Input */}
         {showOtherSubject && (
           <div style={{ marginTop: '12px' }}>
-            <input type="text" placeholder="Enter subject name (1-100 characters)" maxLength={100} style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', boxSizing: 'border-box' }} />
+            <input type="text" placeholder="Enter subject name (1-100 characters)" maxLength={100} value={otherSubject} onChange={(e) => setOtherSubject(e.target.value)} style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', boxSizing: 'border-box' }} />
             <p style={{ fontSize: '12px', color: '#a8a29e', marginTop: '4px' }}>1-100 characters</p>
           </div>
         )}
@@ -195,12 +337,12 @@ const RequestHelpFlow = () => {
         </label>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
           {[
-            { id: 'exam', icon: '🔥', label: 'Exam Soon', desc: 'Upcoming examination', selected: true },
-            { id: 'assignment', icon: '📝', label: 'Assignment Due', desc: 'Near-term deadline', selected: false },
-            { id: 'general', icon: '📚', label: 'General Study', desc: 'Ongoing learning', selected: false },
+            { id: 'exam', icon: '🔥', label: 'Exam Soon', desc: 'Upcoming examination' },
+            { id: 'assignment', icon: '📝', label: 'Assignment Due', desc: 'Near-term deadline' },
+            { id: 'general', icon: '📚', label: 'General Study', desc: 'Ongoing learning' },
           ].map(opt => (
-            <label key={opt.id} style={{ background: opt.selected ? '#fef2f2' : '#fff', border: `2px solid ${opt.selected ? '#fecaca' : '#e7e5e4'}`, borderRadius: '12px', padding: '20px 16px', cursor: 'pointer', textAlign: 'center' }}>
-              <input type="radio" name="urgency" style={{ display: 'none' }} />
+            <label key={opt.id} onClick={() => setUrgency(opt.id)} style={{ background: urgency === opt.id ? '#fef2f2' : '#fff', border: `2px solid ${urgency === opt.id ? '#fecaca' : '#e7e5e4'}`, borderRadius: '12px', padding: '20px 16px', cursor: 'pointer', textAlign: 'center' }}>
+              <input type="radio" name="urgency" checked={urgency === opt.id} readOnly style={{ display: 'none' }} />
               <div style={{ fontSize: '28px', marginBottom: '8px' }}>{opt.icon}</div>
               <div style={{ fontWeight: '600', color: '#1c1917', marginBottom: '4px', fontSize: '14px' }}>{opt.label}</div>
               <div style={{ fontSize: '12px', color: '#a8a29e' }}>{opt.desc}</div>
@@ -253,9 +395,13 @@ const RequestHelpFlow = () => {
       <div style={{ marginBottom: '28px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>Session Duration</label>
         <div style={{ display: 'flex', gap: '12px' }}>
-          {['1 hour', '2 hours', '4 hours'].map((dur, i) => (
-            <button key={dur} style={{ padding: '12px 24px', background: i === 0 ? '#1a5f4a' : '#fff', color: i === 0 ? '#fff' : '#57534e', border: `2px solid ${i === 0 ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500' }}>{dur}</button>
-          ))}
+          {['1 hour', '2 hours', '4 hours'].map((dur) => {
+            const hrs = DURATION_HOURS_MAP[dur] ?? 1;
+            const isSelected = durationHours === hrs;
+            return (
+              <button key={dur} onClick={() => setDurationHours(hrs)} style={{ padding: '12px 24px', background: isSelected ? '#1a5f4a' : '#fff', color: isSelected ? '#fff' : '#57534e', border: `2px solid ${isSelected ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500' }}>{dur}</button>
+            );
+          })}
         </div>
       </div>
 
@@ -265,13 +411,16 @@ const RequestHelpFlow = () => {
           Preferred Area <span style={{ color: '#ef4444' }}>*</span>
         </label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
-          {['Clementi', 'Jurong East', 'Jurong West', 'Bukit Batok', 'Queenstown', 'Woodlands', 'Tampines', 'Bedok'].map((area, i) => (
-            <button key={area} style={{ padding: '10px 16px', background: i === 0 ? '#1a5f4a' : '#fff', color: i === 0 ? '#fff' : '#57534e', border: `1px solid ${i === 0 ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>{i === 0 && '✓ '}{area}</button>
-          ))}
-          <button onClick={() => setShowOtherArea(!showOtherArea)} style={{ padding: '10px 16px', background: showOtherArea ? '#1a5f4a' : '#fff', color: showOtherArea ? '#fff' : '#57534e', border: `1px solid ${showOtherArea ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>{showOtherArea && '✓ '}Other</button>
+          {['Clementi', 'Jurong East', 'Jurong West', 'Bukit Batok', 'Queenstown', 'Woodlands', 'Tampines', 'Bedok'].map((area) => {
+            const isSelected = !showOtherArea && planningAreas.includes(area);
+            return (
+              <button key={area} onClick={() => { setShowOtherArea(false); setPlanningAreas([area]); }} style={{ padding: '10px 16px', background: isSelected ? '#1a5f4a' : '#fff', color: isSelected ? '#fff' : '#57534e', border: `1px solid ${isSelected ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>{isSelected && '✓ '}{area}</button>
+            );
+          })}
+          <button onClick={() => { setShowOtherArea(true); setPlanningAreas([]); }} style={{ padding: '10px 16px', background: showOtherArea ? '#1a5f4a' : '#fff', color: showOtherArea ? '#fff' : '#57534e', border: `1px solid ${showOtherArea ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>{showOtherArea && '✓ '}Other</button>
         </div>
         {showOtherArea && (
-          <input type="text" placeholder="Enter planning area (1-100 characters)" maxLength={100} style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', boxSizing: 'border-box' }} />
+          <input type="text" placeholder="Enter planning area (1-100 characters)" maxLength={100} value={otherArea} onChange={(e) => setOtherArea(e.target.value)} style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', boxSizing: 'border-box' }} />
         )}
       </div>
 
@@ -289,13 +438,16 @@ const RequestHelpFlow = () => {
             </label>
           ))}
         </div>
-        <textarea rows={2} maxLength={256} placeholder="Additional accessibility notes (optional, max 256 characters)" style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }} />
-        <div style={{ textAlign: 'right', fontSize: '12px', color: '#a8a29e', marginTop: '4px' }}>0 / 256</div>
+        <textarea rows={2} maxLength={256} placeholder="Additional accessibility notes (optional, max 256 characters)" value={accessibilityNotes} onChange={(e) => setAccessibilityNotes(e.target.value)} style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+        <div style={{ textAlign: 'right', fontSize: '12px', color: '#a8a29e', marginTop: '4px' }}>{accessibilityNotes.length} / 256</div>
       </div>
 
+      {error && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '12px', marginBottom: '20px', fontSize: '14px', color: '#b91c1c' }}>{error}</div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <button onClick={() => setCurrentStep(1)} style={{ padding: '14px 24px', background: '#fff', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '10px', fontWeight: '500', cursor: 'pointer' }}>← Back</button>
-        <button onClick={() => setCurrentStep(3)} style={{ padding: '14px 32px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer' }}>Find Tutors →</button>
+        <button onClick={handleFindTutors} disabled={loading} style={{ padding: '14px 32px', background: loading ? '#e7e5e4' : '#1a5f4a', color: loading ? '#a8a29e' : '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer' }}>{loading ? 'Finding...' : 'Find Tutors →'}</button>
       </div> 
 
       {/* Planning Area with "Other" (SRS 2.2.3.7)
@@ -398,9 +550,12 @@ const RequestHelpFlow = () => {
         ))}
       </div>
 
+      {error && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '12px', marginBottom: '20px', fontSize: '14px', color: '#b91c1c' }}>{error}</div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <button onClick={() => setCurrentStep(2)} style={{ padding: '14px 24px', background: '#fff', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '10px', fontWeight: '500', cursor: 'pointer' }}>← Back</button>
-        <button onClick={() => setCurrentStep(4)} disabled={!selectedTutor} style={{ padding: '14px 32px', background: selectedTutor ? '#1a5f4a' : '#e7e5e4', color: selectedTutor ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedTutor ? 'pointer' : 'not-allowed' }}>Choose Venue →</button>
+        <button onClick={handleSelectTutorAndProceed} disabled={!selectedTutor || loading} style={{ padding: '14px 32px', background: selectedTutor && !loading ? '#1a5f4a' : '#e7e5e4', color: selectedTutor && !loading ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedTutor && !loading ? 'pointer' : 'not-allowed' }}>{loading ? 'Creating...' : 'Choose Venue →'}</button>
       </div>
     </div>
   );
@@ -465,7 +620,7 @@ const RequestHelpFlow = () => {
 
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <button onClick={() => setCurrentStep(3)} style={{ padding: '14px 24px', background: '#fff', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '10px', fontWeight: '500', cursor: 'pointer' }}>← Back</button>
-        <button onClick={() => setCurrentStep(5)} disabled={!selectedVenue} style={{ padding: '14px 32px', background: selectedVenue ? '#1a5f4a' : '#e7e5e4', color: selectedVenue ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedVenue ? 'pointer' : 'not-allowed' }}>Proceed to Payment →</button>
+        <button onClick={handleProceedToPayment} disabled={!selectedVenue} style={{ padding: '14px 32px', background: selectedVenue ? '#1a5f4a' : '#e7e5e4', color: selectedVenue ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedVenue ? 'pointer' : 'not-allowed' }}>Proceed to Payment →</button>
       </div>
     </div>
   );
@@ -496,10 +651,13 @@ const RequestHelpFlow = () => {
         </div>
         <div style={{ borderTop: '2px solid #e7e5e4', paddingTop: '16px', display: 'flex', justifyContent: 'space-between', fontSize: '18px' }}>
           <span style={{ fontWeight: '600', color: '#1c1917' }}>Total</span>
-          <span style={{ fontWeight: '700', color: '#1a5f4a' }}>$27.50</span>
+          <span style={{ fontWeight: '700', color: '#1a5f4a' }}>${sessionFee != null ? Number(sessionFee).toFixed(2) : '27.50'}</span>
         </div>
       </div>
 
+      {error && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '12px', marginBottom: '20px', fontSize: '14px', color: '#b91c1c' }}>{error}</div>
+      )}
       {/* Pricing Tiers Info (SRS 2.8.4) */}
       <div style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px', marginBottom: '24px', fontSize: '13px', color: '#57534e' }}>
         <strong>Pricing by Level:</strong> Primary $15/hr • Secondary $18/hr • JC/Poly/ITE $22/hr • University $25/hr
@@ -538,7 +696,7 @@ const RequestHelpFlow = () => {
 
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <button onClick={() => setCurrentStep(4)} style={{ padding: '14px 24px', background: '#fff', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '10px', fontWeight: '500', cursor: 'pointer' }}>← Back</button>
-        <button onClick={() => setCurrentStep(6)} style={{ padding: '14px 32px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer' }}>Pay $27.50 →</button>
+        <button onClick={handlePay} disabled={loading} style={{ padding: '14px 32px', background: loading ? '#e7e5e4' : '#1a5f4a', color: loading ? '#a8a29e' : '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer' }}>{loading ? 'Processing...' : `Pay $${sessionFee != null ? Number(sessionFee).toFixed(2) : '27.50'} →`}</button>
       </div>
     </div>
   );
@@ -596,7 +754,7 @@ const RequestHelpFlow = () => {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <button style={{ width: '100%', padding: '16px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', fontSize: '16px' }}>📅 Add to Calendar</button>
         <button style={{ width: '100%', padding: '14px', background: '#fff', color: '#1a5f4a', border: '2px solid #1a5f4a', borderRadius: '12px', fontWeight: '600', cursor: 'pointer' }}>💬 Message Tutor</button>
-        <button style={{ width: '100%', padding: '14px', background: '#fff', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '12px', fontWeight: '500', cursor: 'pointer' }}>← Back to Dashboard</button>
+        <button onClick={() => navigate('/dashboard')} style={{ width: '100%', padding: '14px', background: '#fff', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '12px', fontWeight: '500', cursor: 'pointer' }}>← Back to Dashboard</button>
       </div>
     </div>
   );
