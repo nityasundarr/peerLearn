@@ -45,7 +45,7 @@ const OfferToTutorFlow = () => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedSubjects, setSelectedSubjects] = useState(['Mathematics']);
-  const [selectedTopics, setSelectedTopics] = useState(['Calculus', 'Integration']);
+  const [topicsBySubject, setTopicsBySubject] = useState({ Mathematics: ['Calculus', 'Integration'] });
   const [showOtherSubject, setShowOtherSubject] = useState(false);
   const [showOtherArea, setShowOtherArea] = useState(false);
   const [tutorModeActive, setTutorModeActive] = useState(true);
@@ -69,27 +69,61 @@ const OfferToTutorFlow = () => {
     { name: 'English', topics: ['Essay Writing', 'Literature', 'Grammar'] },
   ];
 
-  const buildTutorTopics = () => {
-    const topics = [];
-    const predefinedTopics = new Set();
-    selectedSubjects.forEach((subj) => {
-      const subject = allSubjects.find((s) => s.name === subj);
-      if (subject) {
-        subject.topics.forEach((t) => {
-          predefinedTopics.add(t);
-          if (selectedTopics.includes(t)) topics.push({ subject: subj, topic: t });
-        });
+  const getAllTopics = () => Object.values(topicsBySubject).flat();
+  const hasAnyTopics = () => getAllTopics().length > 0;
+
+  const toggleTopic = (subjectKey, topic) => {
+    setTopicsBySubject((prev) => {
+      const current = prev[subjectKey] || [];
+      const has = current.includes(topic);
+      const next = { ...prev };
+      if (has) {
+        const filtered = current.filter((t) => t !== topic);
+        if (filtered.length === 0) delete next[subjectKey];
+        else next[subjectKey] = filtered;
+      } else {
+        next[subjectKey] = [...current, topic];
       }
+      return next;
     });
-    // Include custom topics (in selectedTopics but not predefined) — assign to first selected subject
-    const firstSubject = selectedSubjects[0] || 'Other';
-    selectedTopics.forEach((t) => {
-      if (!predefinedTopics.has(t)) {
-        topics.push({ subject: firstSubject, topic: t });
-      }
-    });
-    return topics;
   };
+
+  const addCustomTopic = (topic) => {
+    const targetKey = showOtherSubject ? 'Other' : (selectedSubjects[0] || 'Other');
+    setTopicsBySubject((prev) => ({
+      ...prev,
+      [targetKey]: [...(prev[targetKey] || []), topic],
+    }));
+  };
+
+  const handleSubjectToggle = (subjectName) => {
+    if (selectedSubjects.includes(subjectName)) {
+      setSelectedSubjects(selectedSubjects.filter((s) => s !== subjectName));
+      setTopicsBySubject((prev) => {
+        const next = { ...prev };
+        delete next[subjectName];
+        return next;
+      });
+    } else {
+      setSelectedSubjects([...selectedSubjects, subjectName]);
+    }
+  };
+
+  const handleOtherSubjectToggle = () => {
+    setShowOtherSubject(!showOtherSubject);
+    if (showOtherSubject) {
+      setTopicsBySubject((prev) => {
+        const next = { ...prev };
+        delete next['Other'];
+        return next;
+      });
+    }
+  };
+
+  const buildTutorTopics = () =>
+    Object.entries(topicsBySubject).flatMap(([subject, topics]) =>
+      topics.map((topic) => ({ subject, topic }))
+    );
 
   const slotsToAvailability = () => {
     return selectedSlots.map((slotId) => {
@@ -115,9 +149,10 @@ const OfferToTutorFlow = () => {
     setLoading(true);
     try {
       const areas = showOtherArea && otherArea ? [otherArea] : planningAreas;
+      const subjects = [...selectedSubjects, ...(showOtherSubject && (topicsBySubject['Other']?.length ?? 0) > 0 ? ['Other'] : [])];
       await api.post('/tutor-profile', {
         academic_levels: ['Primary', 'Secondary', 'Junior College', 'Polytechnic', 'ITE', 'University'],
-        subjects: selectedSubjects,
+        subjects,
         tutor_topics: buildTutorTopics(),
         planning_areas: areas,
         max_weekly_hours: maxWeeklyHours,
@@ -161,11 +196,11 @@ const OfferToTutorFlow = () => {
         </label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
           {allSubjects.map(subject => (
-            <button key={subject.name} onClick={() => selectedSubjects.includes(subject.name) ? setSelectedSubjects(selectedSubjects.filter(s => s !== subject.name)) : setSelectedSubjects([...selectedSubjects, subject.name])} style={{ padding: '12px 20px', background: selectedSubjects.includes(subject.name) ? '#1a5f4a' : '#fff', color: selectedSubjects.includes(subject.name) ? '#fff' : '#57534e', border: `2px solid ${selectedSubjects.includes(subject.name) ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}>
+            <button key={subject.name} onClick={() => handleSubjectToggle(subject.name)} style={{ padding: '12px 20px', background: selectedSubjects.includes(subject.name) ? '#1a5f4a' : '#fff', color: selectedSubjects.includes(subject.name) ? '#fff' : '#57534e', border: `2px solid ${selectedSubjects.includes(subject.name) ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}>
               {selectedSubjects.includes(subject.name) && '✓ '}{subject.name}
             </button>
           ))}
-          <button onClick={() => setShowOtherSubject(!showOtherSubject)} style={{ padding: '12px 20px', background: showOtherSubject ? '#1a5f4a' : '#fff', color: showOtherSubject ? '#fff' : '#57534e', border: `2px solid ${showOtherSubject ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}>
+          <button onClick={handleOtherSubjectToggle} style={{ padding: '12px 20px', background: showOtherSubject ? '#1a5f4a' : '#fff', color: showOtherSubject ? '#fff' : '#57534e', border: `2px solid ${showOtherSubject ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}>
             {showOtherSubject && '✓ '}Other
           </button>
         </div>
@@ -180,7 +215,7 @@ const OfferToTutorFlow = () => {
       </div>
 
       {/* Topic Selection (SRS 2.2.2.3: 1-100 chars each) */}
-      {selectedSubjects.length > 0 && (
+      {(selectedSubjects.length > 0 || showOtherSubject) && (
         <div style={{ marginBottom: '32px' }}>
           <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>
             Select Topics <span style={{ color: '#ef4444' }}>*</span>
@@ -189,19 +224,29 @@ const OfferToTutorFlow = () => {
           {selectedSubjects.map(subjectName => {
             const subject = allSubjects.find(s => s.name === subjectName);
             if (!subject) return null;
+            const subjectTopics = topicsBySubject[subjectName] || [];
             return (
               <div key={subjectName} style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px', marginBottom: '12px' }}>
                 <div style={{ fontWeight: '600', color: '#1c1917', marginBottom: '12px' }}>📚 {subjectName}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {subject.topics.map(topic => (
-                    <button key={topic} onClick={() => selectedTopics.includes(topic) ? setSelectedTopics(selectedTopics.filter(t => t !== topic)) : setSelectedTopics([...selectedTopics, topic])} style={{ padding: '8px 14px', background: selectedTopics.includes(topic) ? '#1a5f4a' : '#fff', color: selectedTopics.includes(topic) ? '#fff' : '#57534e', border: `1px solid ${selectedTopics.includes(topic) ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px' }}>
-                      {selectedTopics.includes(topic) && '✓ '}{topic}
-                    </button>
-                  ))}
+                  {subject.topics.map(topic => {
+                    const isSelected = subjectTopics.includes(topic);
+                    return (
+                      <button key={topic} onClick={() => toggleTopic(subjectName, topic)} style={{ padding: '8px 14px', background: isSelected ? '#1a5f4a' : '#fff', color: isSelected ? '#fff' : '#57534e', border: `1px solid ${isSelected ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px' }}>
+                        {isSelected && '✓ '}{topic}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             );
           })}
+          {showOtherSubject && (
+            <div style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px', marginBottom: '12px' }}>
+              <div style={{ fontWeight: '600', color: '#1c1917', marginBottom: '12px' }}>📚 Other Topics</div>
+              <p style={{ fontSize: '13px', color: '#57534e', marginBottom: '8px' }}>Add custom topics below.</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -211,32 +256,27 @@ const OfferToTutorFlow = () => {
           Add Custom Topic <span style={{ fontWeight: '400', color: '#a8a29e' }}>(optional, 1-100 chars)</span>
         </label>
         <div style={{ display: 'flex', gap: '12px' }}>
-          <input type="text" placeholder="Type a topic..." maxLength={100} value={customTopicInput} onChange={(e) => setCustomTopicInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); const t = customTopicInput.trim(); if (t) { setSelectedTopics((prev) => [...prev, t]); setCustomTopicInput(''); } } }} style={{ flex: 1, padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', boxSizing: 'border-box' }} />
-          <button type="button" onClick={() => { const t = customTopicInput.trim(); if (t) { setSelectedTopics((prev) => [...prev, t]); setCustomTopicInput(''); } }} style={{ padding: '14px 24px', background: '#f5f5f4', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '10px', cursor: 'pointer', fontWeight: '500' }}>+ Add</button>
+          <input type="text" placeholder="Type a topic..." maxLength={100} value={customTopicInput} onChange={(e) => setCustomTopicInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); const t = customTopicInput.trim(); if (t) { addCustomTopic(t); setCustomTopicInput(''); } } }} style={{ flex: 1, padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', boxSizing: 'border-box' }} />
+          <button type="button" onClick={() => { const t = customTopicInput.trim(); if (t) { addCustomTopic(t); setCustomTopicInput(''); } }} style={{ padding: '14px 24px', background: '#f5f5f4', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '10px', cursor: 'pointer', fontWeight: '500' }}>+ Add</button>
         </div>
       </div>
 
       {/* Selected Summary — grouped by subject */}
-      {selectedTopics.length > 0 && (() => {
-        const grouped = buildTutorTopics().reduce((acc, { subject, topic }) => {
-          if (!acc[subject]) acc[subject] = [];
-          acc[subject].push(topic);
-          return acc;
-        }, {});
-        return (
-          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '16px', marginBottom: '32px' }}>
-            <div style={{ fontSize: '14px', fontWeight: '600', color: '#166534', marginBottom: '12px' }}>For confirmation, you&apos;ll teach:</div>
-            {Object.entries(grouped).map(([subject, topics]) => (
+      {hasAnyTopics() && (
+        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '16px', marginBottom: '32px' }}>
+          <div style={{ fontSize: '14px', fontWeight: '600', color: '#166534', marginBottom: '12px' }}>For confirmation, you&apos;ll teach:</div>
+          {Object.entries(topicsBySubject).map(([subject, topics]) => (
+            topics.length > 0 && (
               <div key={subject} style={{ fontSize: '14px', color: '#166534', marginBottom: '4px' }}>
                 <strong>{subject}</strong>: {topics.join(', ')}
               </div>
-            ))}
-          </div>
-        );
-      })()}
+            )
+          ))}
+        </div>
+      )}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button onClick={() => setCurrentStep(2)} disabled={selectedTopics.length === 0} style={{ padding: '14px 32px', background: selectedTopics.length > 0 ? '#1a5f4a' : '#e7e5e4', color: selectedTopics.length > 0 ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedTopics.length > 0 ? 'pointer' : 'not-allowed' }}>Continue →</button>
+        <button onClick={() => setCurrentStep(2)} disabled={!hasAnyTopics()} style={{ padding: '14px 32px', background: hasAnyTopics() ? '#1a5f4a' : '#e7e5e4', color: hasAnyTopics() ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: hasAnyTopics() ? 'pointer' : 'not-allowed' }}>Continue →</button>
       </div>
     </div>
   );
@@ -399,7 +439,7 @@ const OfferToTutorFlow = () => {
         <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>📋 Your Tutor Profile Summary</h3>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontSize: '14px' }}>
           <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Subjects</div><div style={{ fontWeight: '600' }}>{selectedSubjects.join(', ')}</div></div>
-          <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Topics</div><div style={{ fontWeight: '600' }}>{selectedTopics.length} topics</div></div>
+          <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Topics</div><div style={{ fontWeight: '600' }}>{getAllTopics().length} topics</div></div>
           <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Availability</div><div style={{ fontWeight: '600' }}>{selectedSlots.length} time slots</div></div>
           <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Max hours/week</div><div style={{ fontWeight: '600' }}>{maxWeeklyHours} hours</div></div>
         </div>

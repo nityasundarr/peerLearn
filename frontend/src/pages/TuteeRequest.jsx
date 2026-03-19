@@ -66,7 +66,7 @@ const RequestHelpFlow = () => {
   const [selectedSubjects, setSelectedSubjects] = useState(['Mathematics']);
   const [showOtherSubject, setShowOtherSubject] = useState(false);
   const [showOtherArea, setShowOtherArea] = useState(false);
-  const [selectedTopics, setSelectedTopics] = useState(['Integration']);
+  const [topicsBySubject, setTopicsBySubject] = useState({ Mathematics: ['Integration'] });
 
   const [academicLevel, setAcademicLevel] = useState('uni');
   const [urgency, setUrgency] = useState('exam');
@@ -139,29 +139,60 @@ const RequestHelpFlow = () => {
     return next.toISOString().slice(0, 10);
   };
 
-  const buildTuteeTopicsNeeds = () => {
-    const topics = [];
-    const predefinedTopics = new Set();
-    selectedSubjects.forEach((subj) => {
-      const subject = allSubjects.find((s) => s.name === subj);
-      if (subject) {
-        subject.topics.forEach((t) => {
-          predefinedTopics.add(t);
-          if (selectedTopics.includes(t)) topics.push({ subject: subj, topic: t });
-        });
+  const getAllTopics = () => Object.values(topicsBySubject).flat();
+  const hasAnyTopics = () => getAllTopics().length > 0;
+
+  const toggleTopic = (subjectKey, topic) => {
+    setTopicsBySubject((prev) => {
+      const current = prev[subjectKey] || [];
+      const has = current.includes(topic);
+      const next = { ...prev };
+      if (has) {
+        const filtered = current.filter((t) => t !== topic);
+        if (filtered.length === 0) delete next[subjectKey];
+        else next[subjectKey] = filtered;
+      } else {
+        next[subjectKey] = [...current, topic];
       }
+      return next;
     });
-    const firstSubject = (showOtherSubject && otherSubject) ? otherSubject : (selectedSubjects[0] || 'Other');
-    selectedTopics.forEach((t) => {
-      if (!predefinedTopics.has(t)) {
-        topics.push({ subject: firstSubject, topic: t });
-      }
-    });
-    return topics;
+  };
+
+  const addCustomTopic = (topic) => {
+    const targetKey = showOtherSubject ? (otherSubject || 'Other') : (selectedSubjects[0] || 'Other');
+    setTopicsBySubject((prev) => ({
+      ...prev,
+      [targetKey]: [...(prev[targetKey] || []), topic],
+    }));
+  };
+
+  const handleSubjectToggle = (subjectName) => {
+    if (selectedSubjects.includes(subjectName)) {
+      setSelectedSubjects(selectedSubjects.filter((s) => s !== subjectName));
+      setTopicsBySubject((prev) => {
+        const next = { ...prev };
+        delete next[subjectName];
+        return next;
+      });
+    } else {
+      setSelectedSubjects([...selectedSubjects, subjectName]);
+    }
+  };
+
+  const handleOtherSubjectToggle = () => {
+    setShowOtherSubject(!showOtherSubject);
+    if (showOtherSubject) {
+      setTopicsBySubject((prev) => {
+        const next = { ...prev };
+        delete next['Other'];
+        if (otherSubject) delete next[otherSubject];
+        return next;
+      });
+    }
   };
 
   const buildRequestPayload = () => {
-    const subjects = [...selectedSubjects, ...(showOtherSubject && otherSubject ? [otherSubject] : [])];
+    const subjects = [...selectedSubjects, ...(showOtherSubject && otherSubject ? [otherSubject] : [])].filter(Boolean);
     const areas = showOtherArea ? (otherArea ? [otherArea] : planningAreas) : planningAreas;
     const timeSlots = selectedDates.flatMap((d) => {
       const isoDate = getNextDateForWeekday(d.day);
@@ -169,8 +200,8 @@ const RequestHelpFlow = () => {
     });
     const payload = {
       academic_level: ACADEMIC_LEVEL_MAP[academicLevel] || 'University',
-      subjects: subjects.filter(Boolean),
-      topics: selectedTopics,
+      subjects,
+      topics: getAllTopics(),
       planning_areas: areas,
       time_slots: timeSlots,
       duration_hours: Number(durationHours),
@@ -298,11 +329,11 @@ const RequestHelpFlow = () => {
         </label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
           {allSubjects.map(subject => (
-            <button key={subject.name} onClick={() => selectedSubjects.includes(subject.name) ? setSelectedSubjects(selectedSubjects.filter(s => s !== subject.name)) : setSelectedSubjects([...selectedSubjects, subject.name])} style={{ padding: '12px 20px', background: selectedSubjects.includes(subject.name) ? '#1a5f4a' : '#fff', color: selectedSubjects.includes(subject.name) ? '#fff' : '#57534e', border: `2px solid ${selectedSubjects.includes(subject.name) ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}>
+            <button key={subject.name} onClick={() => handleSubjectToggle(subject.name)} style={{ padding: '12px 20px', background: selectedSubjects.includes(subject.name) ? '#1a5f4a' : '#fff', color: selectedSubjects.includes(subject.name) ? '#fff' : '#57534e', border: `2px solid ${selectedSubjects.includes(subject.name) ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}>
               {selectedSubjects.includes(subject.name) && '✓ '}{subject.name}
             </button>
           ))}
-          <button onClick={() => setShowOtherSubject(!showOtherSubject)} style={{ padding: '12px 20px', background: showOtherSubject ? '#1a5f4a' : '#fff', color: showOtherSubject ? '#fff' : '#57534e', border: `2px solid ${showOtherSubject ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}>
+          <button onClick={handleOtherSubjectToggle} style={{ padding: '12px 20px', background: showOtherSubject ? '#1a5f4a' : '#fff', color: showOtherSubject ? '#fff' : '#57534e', border: `2px solid ${showOtherSubject ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}>
             {showOtherSubject && '✓ '}Other
           </button>
         </div>
@@ -327,15 +358,19 @@ const RequestHelpFlow = () => {
           {selectedSubjects.map(subjectName => {
             const subject = allSubjects.find(s => s.name === subjectName);
             if (!subject) return null;
+            const subjectTopics = topicsBySubject[subjectName] || [];
             return (
               <div key={subjectName} style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px', marginBottom: '12px' }}>
                 <div style={{ fontWeight: '600', color: '#1c1917', marginBottom: '12px' }}>📚 {subjectName} Topics</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {subject.topics.map(topic => (
-                    <button key={topic} onClick={() => selectedTopics.includes(topic) ? setSelectedTopics(selectedTopics.filter(t => t !== topic)) : setSelectedTopics([...selectedTopics, topic])} style={{ padding: '10px 16px', background: selectedTopics.includes(topic) ? '#1a5f4a' : '#fff', color: selectedTopics.includes(topic) ? '#fff' : '#57534e', border: `1px solid ${selectedTopics.includes(topic) ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px' }}>
-                      {selectedTopics.includes(topic) && '✓ '}{topic}
-                    </button>
-                  ))}
+                  {subject.topics.map(topic => {
+                    const isSelected = subjectTopics.includes(topic);
+                    return (
+                      <button key={topic} onClick={() => toggleTopic(subjectName, topic)} style={{ padding: '10px 16px', background: isSelected ? '#1a5f4a' : '#fff', color: isSelected ? '#fff' : '#57534e', border: `1px solid ${isSelected ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px' }}>
+                        {isSelected && '✓ '}{topic}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -352,8 +387,8 @@ const RequestHelpFlow = () => {
           <div>
             <div style={{ fontSize: '13px', color: '#57534e', marginBottom: '8px' }}>Add custom topic:</div>
             <div style={{ display: 'flex', gap: '10px' }}>
-              <input type="text" placeholder="Type a topic (1-100 characters)" maxLength={100} value={customTopicInput} onChange={(e) => setCustomTopicInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); const t = customTopicInput.trim(); if (t) { setSelectedTopics((prev) => [...prev, t]); setCustomTopicInput(''); } } }} style={{ flex: 1, padding: '12px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '14px', boxSizing: 'border-box' }} />
-              <button type="button" onClick={() => { const t = customTopicInput.trim(); if (t) { setSelectedTopics((prev) => [...prev, t]); setCustomTopicInput(''); } }} style={{ padding: '12px 20px', background: '#f5f5f4', border: '1px solid #e7e5e4', borderRadius: '10px', cursor: 'pointer', fontWeight: '500', color: '#1a5f4a', fontSize: '14px' }}>+ Add</button>
+              <input type="text" placeholder="Type a topic (1-100 characters)" maxLength={100} value={customTopicInput} onChange={(e) => setCustomTopicInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); const t = customTopicInput.trim(); if (t) { addCustomTopic(t); setCustomTopicInput(''); } } }} style={{ flex: 1, padding: '12px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '14px', boxSizing: 'border-box' }} />
+              <button type="button" onClick={() => { const t = customTopicInput.trim(); if (t) { addCustomTopic(t); setCustomTopicInput(''); } }} style={{ padding: '12px 20px', background: '#f5f5f4', border: '1px solid #e7e5e4', borderRadius: '10px', cursor: 'pointer', fontWeight: '500', color: '#1a5f4a', fontSize: '14px' }}>+ Add</button>
             </div>
           </div>
         </div>
@@ -389,26 +424,21 @@ const RequestHelpFlow = () => {
       </div>
 
       {/* Confirmation Summary — grouped by subject (matching OfferToTutor style) */}
-      {selectedTopics.length > 0 && (() => {
-        const grouped = buildTuteeTopicsNeeds().reduce((acc, { subject, topic }) => {
-          if (!acc[subject]) acc[subject] = [];
-          acc[subject].push(topic);
-          return acc;
-        }, {});
-        return (
-          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '16px', marginBottom: '32px' }}>
-            <div style={{ fontSize: '14px', fontWeight: '600', color: '#166534', marginBottom: '12px' }}>For confirmation, you need help with:</div>
-            {Object.entries(grouped).map(([subject, topics]) => (
+      {hasAnyTopics() && (
+        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '16px', marginBottom: '32px' }}>
+          <div style={{ fontSize: '14px', fontWeight: '600', color: '#166534', marginBottom: '12px' }}>For confirmation, you need help with:</div>
+          {Object.entries(topicsBySubject).map(([subject, topics]) => (
+            topics.length > 0 && (
               <div key={subject} style={{ fontSize: '14px', color: '#166534', marginBottom: '4px' }}>
                 <strong>{subject}</strong>: {topics.join(', ')}
               </div>
-            ))}
-          </div>
-        );
-      })()}
+            )
+          ))}
+        </div>
+      )}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button onClick={() => setCurrentStep(2)} disabled={selectedTopics.length === 0} style={{ padding: '14px 32px', background: selectedTopics.length > 0 ? '#1a5f4a' : '#e7e5e4', color: selectedTopics.length > 0 ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedTopics.length > 0 ? 'pointer' : 'not-allowed', fontSize: '15px' }}>Continue →</button>
+        <button onClick={() => setCurrentStep(2)} disabled={!hasAnyTopics()} style={{ padding: '14px 32px', background: hasAnyTopics() ? '#1a5f4a' : '#e7e5e4', color: hasAnyTopics() ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: hasAnyTopics() ? 'pointer' : 'not-allowed', fontSize: '15px' }}>Continue →</button>
       </div>
     </div>
   );
@@ -555,7 +585,7 @@ const RequestHelpFlow = () => {
       <div style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px 20px', marginBottom: '24px', display: 'flex', gap: '24px', fontSize: '14px', flexWrap: 'wrap' }}>
         <span><strong>Level:</strong> University</span>
         <span><strong>Subject:</strong> Mathematics</span>
-        <span><strong>Topics:</strong> {selectedTopics.join(', ')}</span>
+        <span><strong>Topics:</strong> {getAllTopics().join(', ')}</span>
         <span><strong>Time:</strong> Tue/Thu, 3-4 PM</span>
       </div>
 
@@ -774,7 +804,7 @@ const RequestHelpFlow = () => {
       <div style={{ background: '#fff', borderRadius: '20px', border: '1px solid #e7e5e4', overflow: 'hidden', marginBottom: '24px' }}>
         <div style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #2d8a6e 100%)', padding: '24px', color: '#fff' }}>
           <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '4px' }}>University • Mathematics</div>
-          <h2 style={{ fontSize: '24px', fontWeight: '700' }}>{selectedTopics.join(', ')}</h2>
+          <h2 style={{ fontSize: '24px', fontWeight: '700' }}>{getAllTopics().join(', ')}</h2>
         </div>
         <div style={{ padding: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #e7e5e4' }}>
