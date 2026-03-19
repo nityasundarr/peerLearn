@@ -79,7 +79,8 @@ class ConfirmVenueBody(BaseModel):
 # ---------------------------------------------------------------------------
 
 class SessionResponse(BaseModel):
-    """Full session detail — returned by GET /sessions/{id} and all mutations."""
+    """Full session detail — returned by GET /sessions/{id}, GET /sessions, and all mutations."""
+    id: str  # Session UUID (alias for session_id — critical for frontend Accept button)
     session_id: str
     request_id: str | None
     tutee_id: str
@@ -94,11 +95,21 @@ class SessionResponse(BaseModel):
     cancel_reason: str | None
     created_at: str
     updated_at: str
+    # Optional fields from joined tutoring_requests and users (list_sessions)
+    tutee_name: str | None = None
+    subjects: list[str] | None = None
+    topics: list[str] | None = None
+    time_slots: list[dict] | None = None
+    urgency_category: str | None = None
+    planning_areas: list[str] | None = None
+    accessibility_notes: str | None = None
 
     @classmethod
     def from_db(cls, row: dict) -> "SessionResponse":
+        sid = row.get("id") or row.get("session_id", "")
         return cls(
-            session_id=row["id"],
+            id=sid,
+            session_id=sid,
             request_id=row.get("request_id"),
             tutee_id=row.get("tutee_id", ""),
             tutor_id=row.get("tutor_id", ""),
@@ -112,4 +123,11 @@ class SessionResponse(BaseModel):
             cancel_reason=row.get("cancel_reason"),
             created_at=str(row.get("created_at", "")),
             updated_at=str(row.get("updated_at", "")),
+            tutee_name=row.get("tutee_name"),
+            subjects=row.get("subjects"),
+            topics=row.get("topics"),
+            time_slots=row.get("time_slots"),
+            urgency_category=row.get("urgency_category"),
+            planning_areas=row.get("planning_areas"),
+            accessibility_notes=row.get("accessibility_notes"),
         )

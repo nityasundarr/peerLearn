@@ -103,6 +103,9 @@ def get_session(session_id: str) -> dict | None:
         )
         return result.data if result is not None and result.data is not None else None
     except Exception as exc:
+        error_str = str(exc)
+        if "204" in error_str or "Missing response" in error_str:
+            return None
         raise _db_error("get_session", exc) from exc
 
 
@@ -116,6 +119,66 @@ def get_session_for_participant(session_id: str, user_id: str) -> dict | None:
     return None
 
 
+_LIST_SESSIONS_SELECT = """
+    id,
+    status,
+    duration_hours,
+    academic_level,
+    scheduled_at,
+    created_at,
+    tutee_id,
+    tutor_id,
+    request_id,
+    venue_id,
+    venue_manual,
+    proposed_slots,
+    cancel_reason,
+    fee,
+    outcome_tutor,
+    outcome_tutee,
+    updated_at,
+    tutoring_requests!request_id(
+        subjects,
+        topics,
+        time_slots,
+        urgency_category,
+        planning_areas,
+        accessibility_notes
+    ),
+    tutee:users!tutee_id(
+        full_name
+    )
+"""
+
+
+def _flatten_session_row(row: dict) -> dict:
+    """Flatten nested tutoring_requests and users joins into top-level fields."""
+    flat = dict(row)
+    req = row.get("tutoring_requests")
+    if isinstance(req, dict):
+        flat["subjects"] = req.get("subjects") or []
+        flat["topics"] = req.get("topics") or []
+        flat["time_slots"] = req.get("time_slots") or []
+        flat["urgency_category"] = req.get("urgency_category")
+        flat["planning_areas"] = req.get("planning_areas") or []
+        flat["accessibility_notes"] = req.get("accessibility_notes")
+    else:
+        flat["subjects"] = []
+        flat["topics"] = []
+        flat["time_slots"] = []
+        flat["urgency_category"] = None
+        flat["planning_areas"] = []
+        flat["accessibility_notes"] = None
+    tutee = row.get("tutee")
+    if isinstance(tutee, dict):
+        flat["tutee_name"] = tutee.get("full_name")
+    else:
+        flat["tutee_name"] = None
+    flat.pop("tutoring_requests", None)
+    flat.pop("tutee", None)
+    return flat
+
+
 def list_sessions(
     user_id: str,
     role: str | None = None,
@@ -123,31 +186,32 @@ def list_sessions(
 ) -> list[dict]:
     """List sessions for a user, optionally filtered by role and status group.
 
+    Returns flattened rows with tutee_name, subjects, topics, time_slots,
+    urgency_category from joined tutoring_requests and users tables.
+
     role: 'tutee' | 'tutor' | None (both)
     status_group: 'upcoming' | 'pending' | 'past' | 'cancelled' | None (all)
     """
     try:
-        query = supabase.table("tutoring_sessions").select(_SESSION_COLS)
+        query = supabase.table("tutoring_sessions").select(_LIST_SESSIONS_SELECT)
 
         if role == "tutee":
             query = query.eq("tutee_id", user_id)
         elif role == "tutor":
             query = query.eq("tutor_id", user_id)
         else:
-            # User may be tutee or tutor — fetch both and deduplicate
             query = query.or_(f"tutee_id.eq.{user_id},tutor_id.eq.{user_id}")
 
         if status_group and status_group in _STATUS_GROUPS:
             statuses = _STATUS_GROUPS[status_group]
             query = query.in_("status", statuses)
-
-            # For 'upcoming': only sessions scheduled in the future
             if status_group == "upcoming":
                 now_iso = datetime.now(timezone.utc).isoformat()
                 query = query.gte("scheduled_at", now_iso)
 
         result = query.order("created_at", desc=True).execute()
-        return result.data if result is not None and result.data is not None else []
+        rows = result.data if result is not None and result.data is not None else []
+        return [_flatten_session_row(r) for r in rows]
     except Exception as exc:
         raise _db_error("list_sessions", exc) from exc
 
