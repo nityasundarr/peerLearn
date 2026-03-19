@@ -49,7 +49,7 @@ def get_venues_by_planning_area(area: str, limit: int = 20) -> list[dict]:
             .limit(limit)
             .execute()
         )
-        return result.data or []
+        return result.data if result is not None and result.data is not None else []
     except Exception as exc:
         raise _db_error("get_venues_by_planning_area", exc) from exc
 
@@ -67,7 +67,7 @@ def get_venues_by_planning_areas(areas: list[str], limit: int = 50) -> list[dict
             .limit(limit)
             .execute()
         )
-        return result.data or []
+        return result.data if result is not None and result.data is not None else []
     except Exception as exc:
         raise _db_error("get_venues_by_planning_areas", exc) from exc
 
@@ -82,9 +82,32 @@ def get_venue_by_id(venue_id: str) -> dict | None:
             .maybe_single()
             .execute()
         )
-        return result.data
+        return result.data if result is not None and result.data is not None else None
     except Exception as exc:
         raise _db_error("get_venue_by_id", exc) from exc
+
+
+# ---------------------------------------------------------------------------
+# Fallback: all venues (no lat/lng) — used when OneMap is unavailable
+# ---------------------------------------------------------------------------
+
+def get_all_venues_for_fallback(limit: int = 50) -> list[dict]:
+    """Return all venues from the database for fallback when OneMap fails.
+
+    No coordinates — distance_bucket is computed from planning_area centroids
+    in venue_service using haversine. Hard Rule 10: never expose lat/lng.
+    """
+    try:
+        result = (
+            supabase.table("venues")
+            .select(_PUBLIC_COLS)
+            .in_("venue_type", ["library", "community_centre", "study_area"])
+            .limit(limit)
+            .execute()
+        )
+        return result.data if result is not None and result.data is not None else []
+    except Exception as exc:
+        raise _db_error("get_all_venues_for_fallback", exc) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +131,7 @@ def _get_venues_with_coords(areas: list[str], limit: int = 50) -> list[dict]:
             .limit(limit)
             .execute()
         )
-        return result.data or []
+        return result.data if result is not None and result.data is not None else []
     except Exception as exc:
         raise _db_error("_get_venues_with_coords", exc) from exc
 
@@ -126,6 +149,9 @@ def insert_venue(data: dict) -> dict:
             .select(_PUBLIC_COLS)
             .execute()
         )
-        return result.data[0]
+        data_list = result.data if result is not None and result.data is not None else []
+        if not data_list:
+            raise AppError(500, "Insert succeeded but no row returned.")
+        return data_list[0]
     except Exception as exc:
         raise _db_error("insert_venue", exc) from exc

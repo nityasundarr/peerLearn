@@ -17,8 +17,7 @@ import logging
 import httpx
 
 from app.core.config import settings
-from app.core.errors import AppError, NotFoundError
-from app.db import sessions_db, venues_db
+from app.db import venues_db
 from app.models.venue import VenueItem, VenueListResponse
 from app.services.location_service import (
     _get_centroid,  # Internal use — computes distance from stored coords
@@ -171,30 +170,18 @@ async def _fetch_onemap_venues(area: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 async def recommend_venues(
-    session_id: str,
-    user_id: str,
+    request_id: str | None = None,
+    tutor_id: str | None = None,
 ) -> VenueListResponse:
-    """Return ranked venue recommendations for a session.
+    """Return ranked venue recommendations.
 
-    Fetches the session to get tutee/tutor planning areas, then queries
-    the local venues table + OneMap (if configured).
+    Uses request_id for tutee planning areas (tutoring_requests) and
+    tutor_id for tutor planning areas (tutor_profiles). If either is
+    missing or not found, still returns seeded venues with distance_bucket
+    defaulting to "Medium".
 
     Hard Rule 10: lat/lng only used internally; stripped before response.
     """
-    from app.db.sessions_db import get_session_for_participant
-
-    session = get_session_for_participant(session_id, user_id)
-    if not session:
-        raise NotFoundError("Session not found or access denied.")
-
-    if session.get("status") not in {"tutor_accepted", "pending_confirmation", "confirmed"}:
-        raise AppError(
-            422,
-            "Venue recommendations are only available after the tutor has accepted.",
-        )
-
-    # Get tutee and tutor planning areas from the tutoring_request
-    request_id = session.get("request_id")
     tutee_areas: list[str] = []
     tutor_areas: list[str] = []
 
@@ -204,8 +191,6 @@ async def recommend_venues(
         if req:
             tutee_areas = req.get("planning_areas") or []
 
-    # Tutor planning areas from tutor_profiles
-    tutor_id = session.get("tutor_id", "")
     if tutor_id:
         from app.db.tutor_profile_db import get_profile
         profile = get_profile(tutor_id)
@@ -214,26 +199,34 @@ async def recommend_venues(
 
     all_areas = list(dict.fromkeys(tutee_areas + tutor_areas))  # deduplicated
 
-    # Query local venues DB (with internal coords for scoring)
+    # Query local venues DB (with internal coords for scoring) — filtered by planning areas
     local_venues = venues_db._get_venues_with_coords(all_areas, limit=50)
 
     # Fetch from OneMap if configured
     onemap_venues: list[dict] = []
-    for area in all_areas[:3]:  # limit API calls
-        try:
-            results = await _fetch_onemap_venues(area)
-            onemap_venues.extend(results)
-        except Exception as exc:
-            logger.warning("OneMap fetch failed for area '%s': %s", area, exc)
+    if settings.ONEMAP_API_KEY:
+        for area in all_areas[:3]:  # limit API calls
+            try:
+                results = await _fetch_onemap_venues(area)
+                onemap_venues.extend(results)
+            except Exception as exc:
+                logger.warning("OneMap fetch failed for area '%s': %s", area, exc)
 
     # Merge, deduplicate by name+address
     all_venues = local_venues.copy()
-    seen_keys: set[str] = {f"{v['name']}:{v['address']}" for v in local_venues}
+    seen_keys: set[str] = {f"{v.get('name', '')}:{v.get('address', '')}" for v in local_venues}
     for v in onemap_venues:
         key = f"{v.get('name', '')}:{v.get('address', '')}"
         if key not in seen_keys:
             all_venues.append(v)
             seen_keys.add(key)
+
+    # Fallback: when OneMap key missing, API failed, or no results — use all DB venues
+    if not all_venues:
+        logger.info("No venues from OneMap or area-filtered DB; falling back to all seeded venues")
+        fallback_venues = venues_db.get_all_venues_for_fallback(limit=50)
+        # Fallback venues have no lat/lng; _score_venue uses planning_area centroid distance
+        all_venues = fallback_venues
 
     if not all_venues:
         return VenueListResponse(

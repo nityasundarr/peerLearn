@@ -23,12 +23,13 @@ router = APIRouter(prefix="/venues", tags=["venues"])
     "/recommend",
     response_model=VenueListResponse,
     summary=(
-        "Recommend public study venues after tutor_accepted; "
+        "Recommend public study venues; "
         "returns planning_area + distance_bucket only — never lat/lng (UC-5.3, SRS 2.8)"
     ),
 )
 async def recommend_venues(
-    session_id: Annotated[str, Query(description="Session ID to derive planning areas from")],
     user_id: Annotated[str, Depends(get_current_user)],
+    request_id: Annotated[str | None, Query(description="Tutoring request ID for tutee planning areas")] = None,
+    tutor_id: Annotated[str | None, Query(description="Selected tutor ID for tutor planning areas")] = None,
 ) -> VenueListResponse:
-    return await venue_service.recommend_venues(session_id, user_id)
+    return await venue_service.recommend_venues(request_id=request_id, tutor_id=tutor_id)
