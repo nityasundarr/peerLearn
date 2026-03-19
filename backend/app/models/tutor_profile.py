@@ -16,7 +16,7 @@ SRS 2.2.2 field rules:
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.utils.validators import validate_free_text
 
@@ -84,16 +84,18 @@ class TutorProfileRequest(BaseModel):
 
     All fields are mandatory (SRS 2.2.2 — profile cannot be submitted with
     missing mandatory fields).
+    Accepts tutor_topics (frontend) as alias for topics.
     """
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True, populate_by_name=True)
 
     academic_levels: list[str]
     subjects: list[str]
-    topics: list[TopicInput]
+    topics: list[TopicInput] = Field(alias="tutor_topics")
     planning_areas: list[str]
     accessibility_capabilities: list[str] = []
     accessibility_notes: str | None = None
     max_weekly_hours: int
+    is_active_mode: bool = False
 
     @field_validator("academic_levels")
     @classmethod

@@ -47,7 +47,7 @@ def get_profile(tutor_id: str) -> dict | None:
             .maybe_single()
             .execute()
         )
-        return result.data
+        return result.data if result is not None and result.data is not None else None
     except Exception as exc:
         raise _db_error("get_profile", exc) from exc
 
@@ -69,13 +69,16 @@ def create_profile(tutor_id: str, data: dict) -> dict:
     """Insert a new tutor_profiles row. Returns the created row."""
     try:
         payload = {"user_id": tutor_id, **data}
-        result = (
-            supabase.table("tutor_profiles")
-            .insert(payload)
-            .select(_PROFILE_COLS)
-            .execute()
-        )
+        result = supabase.table("tutor_profiles").insert(payload).execute()
+        if result is None or not result.data or len(result.data) == 0:
+            # supabase-py v2 insert may not return data; fetch the created row
+            row = get_profile(tutor_id)
+            if row is None:
+                raise _db_error("create_profile", RuntimeError("Insert returned no data"))
+            return row
         return result.data[0]
+    except AppError:
+        raise
     except Exception as exc:
         raise _db_error("create_profile", exc) from exc
 
@@ -90,6 +93,8 @@ def update_profile(tutor_id: str, data: dict) -> dict:
             .select(_PROFILE_COLS)
             .execute()
         )
+        if result is None or not result.data or len(result.data) == 0:
+            raise _db_error("update_profile", RuntimeError("Update returned no data"))
         return result.data[0]
     except Exception as exc:
         raise _db_error("update_profile", exc) from exc
@@ -105,6 +110,8 @@ def set_active_mode(tutor_id: str, is_active: bool) -> dict:
             .select(_PROFILE_COLS)
             .execute()
         )
+        if result is None or not result.data or len(result.data) == 0:
+            raise _db_error("set_active_mode", RuntimeError("Update returned no data"))
         return result.data[0]
     except Exception as exc:
         raise _db_error("set_active_mode", exc) from exc
@@ -124,7 +131,7 @@ def get_topics(tutor_id: str) -> list[dict]:
             .order("topic")
             .execute()
         )
-        return result.data or []
+        return result.data if result is not None and result.data is not None else []
     except Exception as exc:
         raise _db_error("get_topics", exc) from exc
 
@@ -164,7 +171,7 @@ def get_availability(tutor_id: str) -> list[dict]:
             .order("hour_slot")
             .execute()
         )
-        return result.data or []
+        return result.data if result is not None and result.data is not None else []
     except Exception as exc:
         raise _db_error("get_availability", exc) from exc
 
@@ -210,7 +217,7 @@ def assign_tutor_role(user_id: str) -> None:
             .maybe_single()
             .execute()
         )
-        if not result.data:
+        if result is None or result.data is None:
             return
         current: list[str] = result.data.get("roles") or []
         if "tutor" not in current:

@@ -37,6 +37,7 @@ def _profile_data(body: TutorProfileRequest) -> dict:
         "accessibility_capabilities": body.accessibility_capabilities,
         "accessibility_notes": body.accessibility_notes,
         "max_weekly_hours": body.max_weekly_hours,
+        "is_active_mode": body.is_active_mode,
     }
 
 

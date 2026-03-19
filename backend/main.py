@@ -59,3 +59,13 @@ app.include_router(admin_router.router)
 @app.get("/health", tags=["health"])
 async def health_check():
     return {"status": "ok"}
+
+
+@app.on_event("startup")
+async def print_routes():
+    """Print all registered routes on startup for debugging."""
+    for route in app.routes:
+        if hasattr(route, "path") and hasattr(route, "methods") and route.methods:
+            for method in sorted(route.methods):
+                if method != "HEAD":
+                    print(f"  {method:6} {route.path}")
