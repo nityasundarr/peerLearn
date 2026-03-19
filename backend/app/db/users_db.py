@@ -43,6 +43,25 @@ def _db_error(operation: str, exc: Exception) -> AppError:
 # Profile
 # ---------------------------------------------------------------------------
 
+def get_user_full_names(user_ids: list[str]) -> dict[str, str]:
+    """Batch-fetch full_name for a list of user IDs. Returns {user_id: full_name}."""
+    if not user_ids:
+        return {}
+    try:
+        result = (
+            supabase.table("users")
+            .select("id, full_name")
+            .in_("id", user_ids)
+            .execute()
+        )
+        if result is None or result.data is None:
+            return {}
+        return {r["id"]: r.get("full_name", "") or "" for r in result.data}
+    except Exception as exc:
+        logger.error("DB error in get_user_full_names: %s", exc)
+        return {}
+
+
 def get_user_profile(user_id: str) -> dict | None:
     """Return public profile fields for a user. Excludes lock/failure state."""
     try:

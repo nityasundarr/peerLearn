@@ -58,7 +58,6 @@ def create_session(
     """Create a new session in pending_tutor_selection state."""
     try:
         payload = {
-            "request_id": request_id,
             "tutee_id": tutee_id,
             "tutor_id": tutor_id,
             "academic_level": academic_level,
@@ -66,15 +65,17 @@ def create_session(
             "status": "pending_tutor_selection",
             "proposed_slots": [],
         }
+        if request_id:
+            payload["request_id"] = str(request_id)
         result = supabase.table("tutoring_sessions").insert(payload).execute()
         if result is None or not result.data or len(result.data) == 0:
-            # supabase-py v2 insert may not return data; fetch by request_id
+            # supabase-py v2 insert may not return data; fetch by tutee_id + tutor_id
             fetch = (
                 supabase.table("tutoring_sessions")
                 .select(_SESSION_COLS)
-                .eq("request_id", request_id)
                 .eq("tutee_id", tutee_id)
                 .eq("tutor_id", tutor_id)
+                .eq("status", "pending_tutor_selection")
                 .order("created_at", desc=True)
                 .limit(1)
                 .execute()

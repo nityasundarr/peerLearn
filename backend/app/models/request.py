@@ -224,6 +224,7 @@ class IncomingRequestItem(BaseModel):
     """Returned by GET /tutor/requests/incoming — tutor-facing view."""
     session_id: str
     request_id: str | None
+    tutee_full_name: str
     academic_level: str
     subjects: list[str]
     topics: list[str]
