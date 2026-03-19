@@ -96,7 +96,7 @@ def create_session(tutee_id: str, body: CreateSessionBody) -> SessionResponse:
         raise UnprocessableError("Cannot create a session for a cancelled request.")
 
     row = sessions_db.create_session(
-        request_id=body.request_id,
+        request_id=request.get("id") or body.request_id,
         tutee_id=tutee_id,
         tutor_id=body.tutor_id,
         academic_level=request.get("academic_level", ""),

@@ -191,11 +191,7 @@ def get_incoming_requests(tutor_id: str) -> list[IncomingRequestItem]:
     """Return sessions in pending_tutor_selection for the current tutor.
 
     Each session is enriched with the originating tutoring_request details
-    so the tutor can see what the tutee needs.
-
-    Note: returns an empty list in Phase 4 since sessions are created in
-    Phase 5.  The endpoint is fully wired and will return data once sessions
-    exist.
+    and tutee full_name so the tutor can see what the tutee needs.
     """
     sessions = requests_db.get_incoming_sessions_for_tutor(tutor_id)
     if not sessions:
@@ -208,17 +204,24 @@ def get_incoming_requests(tutor_id: str) -> list[IncomingRequestItem]:
         request_rows = requests_db.get_requests_by_ids(request_ids)
         request_map = {r["id"]: r for r in request_rows}
 
-    # Also fetch learning needs to get urgency_level
+    # Batch-fetch tutee full names
+    tutee_ids = [s["tutee_id"] for s in sessions if s.get("tutee_id")]
+    from app.db import users_db
+    tutee_names = users_db.get_user_full_names(tutee_ids) if tutee_ids else {}
+
     result: list[IncomingRequestItem] = []
     for session in sessions:
         rid = session.get("request_id")
         req = request_map.get(rid, {}) if rid else {}
         need = requests_db.get_learning_need(rid) if rid else None
+        tutee_id = session.get("tutee_id")
+        tutee_full_name = tutee_names.get(tutee_id, "Unknown") if tutee_id else "Unknown"
 
         result.append(
             IncomingRequestItem(
                 session_id=session["id"],
                 request_id=rid,
+                tutee_full_name=tutee_full_name,
                 academic_level=req.get("academic_level") or session.get("academic_level", ""),
                 subjects=req.get("subjects") or [],
                 topics=req.get("topics") or [],
