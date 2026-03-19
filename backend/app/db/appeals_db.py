@@ -42,7 +42,7 @@ def get_disciplinary_record_by_id(record_id: str) -> dict | None:
             .maybe_single()
             .execute()
         )
-        return result.data
+        return result.data if result is not None and result.data is not None else None
     except Exception as exc:
         raise _db_error("get_disciplinary_record_by_id", exc) from exc
 
@@ -83,9 +83,21 @@ def create_appeal(
                     "status": "pending",
                 }
             )
-            .select(_APPEAL_COLS)
             .execute()
         )
+        if result is None or not result.data or len(result.data) == 0:
+            fetch = (
+                supabase.table("penalty_appeals")
+                .select(_APPEAL_COLS)
+                .eq("disciplinary_record_id", disciplinary_record_id)
+                .eq("user_id", user_id)
+                .order("submitted_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if fetch is None or not fetch.data or len(fetch.data) == 0:
+                raise _db_error("create_appeal", RuntimeError("Insert returned no data"))
+            return fetch.data[0]
         return result.data[0]
     except Exception as exc:
         raise _db_error("create_appeal", exc) from exc
@@ -100,7 +112,7 @@ def get_appeal_by_id(appeal_id: str) -> dict | None:
             .maybe_single()
             .execute()
         )
-        return result.data
+        return result.data if result is not None and result.data is not None else None
     except Exception as exc:
         raise _db_error("get_appeal_by_id", exc) from exc
 
@@ -115,7 +127,7 @@ def existing_appeal_for_record(disciplinary_record_id: str) -> dict | None:
             .maybe_single()
             .execute()
         )
-        return result.data
+        return result.data if result is not None and result.data is not None else None
     except Exception as exc:
         raise _db_error("existing_appeal_for_record", exc) from exc
 
@@ -131,7 +143,7 @@ def list_appeals(status_filter: str | None = None) -> list[dict]:
         if status_filter:
             query = query.eq("status", status_filter)
         result = query.execute()
-        return result.data or []
+        return result.data if result is not None and result.data is not None else []
     except Exception as exc:
         raise _db_error("list_appeals", exc) from exc
 
@@ -157,7 +169,7 @@ def decide_appeal(
             .select(_APPEAL_COLS)
             .execute()
         )
-        if not result.data:
+        if result is None or not result.data or len(result.data) == 0:
             raise NotFoundError("Appeal not found.")
         return result.data[0]
     except NotFoundError:

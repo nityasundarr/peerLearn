@@ -51,9 +51,21 @@ def create_rating(
                     "is_anonymous": is_anonymous,
                 }
             )
-            .select(_RATING_COLS)
             .execute()
         )
+        if result is None or not result.data or len(result.data) == 0:
+            fetch = (
+                supabase.table("tutor_ratings")
+                .select(_RATING_COLS)
+                .eq("session_id", session_id)
+                .eq("tutee_id", tutee_id)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if fetch is None or not fetch.data or len(fetch.data) == 0:
+                raise _db_error("create_rating", RuntimeError("Insert returned no data"))
+            return fetch.data[0]
         return result.data[0]
     except Exception as exc:
         raise _db_error("create_rating", exc) from exc
@@ -64,9 +76,20 @@ def create_review(rating_id: str, review_text: str) -> dict:
         result = (
             supabase.table("tutor_reviews")
             .insert({"rating_id": rating_id, "review_text": review_text})
-            .select(_REVIEW_COLS)
             .execute()
         )
+        if result is None or not result.data or len(result.data) == 0:
+            fetch = (
+                supabase.table("tutor_reviews")
+                .select(_REVIEW_COLS)
+                .eq("rating_id", rating_id)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if fetch is None or not fetch.data or len(fetch.data) == 0:
+                raise _db_error("create_review", RuntimeError("Insert returned no data"))
+            return fetch.data[0]
         return result.data[0]
     except Exception as exc:
         raise _db_error("create_review", exc) from exc
@@ -96,7 +119,7 @@ def get_review_by_rating(rating_id: str) -> dict | None:
             .maybe_single()
             .execute()
         )
-        return result.data
+        return result.data if result is not None and result.data is not None else None
     except Exception as exc:
         raise _db_error("get_review_by_rating", exc) from exc
 
@@ -114,7 +137,7 @@ def get_reliability_metrics(tutor_id: str) -> dict | None:
             .maybe_single()
             .execute()
         )
-        return result.data
+        return result.data if result is not None and result.data is not None else None
     except Exception as exc:
         raise _db_error("get_reliability_metrics", exc) from exc
 

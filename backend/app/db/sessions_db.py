@@ -57,22 +57,31 @@ def create_session(
 ) -> dict:
     """Create a new session in pending_tutor_selection state."""
     try:
-        result = (
-            supabase.table("tutoring_sessions")
-            .insert(
-                {
-                    "request_id": request_id,
-                    "tutee_id": tutee_id,
-                    "tutor_id": tutor_id,
-                    "academic_level": academic_level,
-                    "duration_hours": duration_hours,
-                    "status": "pending_tutor_selection",
-                    "proposed_slots": [],
-                }
+        payload = {
+            "request_id": request_id,
+            "tutee_id": tutee_id,
+            "tutor_id": tutor_id,
+            "academic_level": academic_level,
+            "duration_hours": duration_hours,
+            "status": "pending_tutor_selection",
+            "proposed_slots": [],
+        }
+        result = supabase.table("tutoring_sessions").insert(payload).execute()
+        if result is None or not result.data or len(result.data) == 0:
+            # supabase-py v2 insert may not return data; fetch by request_id
+            fetch = (
+                supabase.table("tutoring_sessions")
+                .select(_SESSION_COLS)
+                .eq("request_id", request_id)
+                .eq("tutee_id", tutee_id)
+                .eq("tutor_id", tutor_id)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
             )
-            .select(_SESSION_COLS)
-            .execute()
-        )
+            if fetch is None or not fetch.data or len(fetch.data) == 0:
+                raise _db_error("create_session", RuntimeError("Insert returned no data"))
+            return fetch.data[0]
         return result.data[0]
     except Exception as exc:
         raise _db_error("create_session", exc) from exc
@@ -91,7 +100,7 @@ def get_session(session_id: str) -> dict | None:
             .maybe_single()
             .execute()
         )
-        return result.data
+        return result.data if result is not None and result.data is not None else None
     except Exception as exc:
         raise _db_error("get_session", exc) from exc
 
@@ -137,7 +146,7 @@ def list_sessions(
                 query = query.gte("scheduled_at", now_iso)
 
         result = query.order("created_at", desc=True).execute()
-        return result.data or []
+        return result.data if result is not None and result.data is not None else []
     except Exception as exc:
         raise _db_error("list_sessions", exc) from exc
 
@@ -188,7 +197,7 @@ def set_proposed_slots(session_id: str, slots: list[dict]) -> dict:
             .select(_SESSION_COLS)
             .execute()
         )
-        if not result.data:
+        if result is None or not result.data or len(result.data) == 0:
             raise NotFoundError("Session not found.")
         return result.data[0]
     except NotFoundError:
@@ -209,7 +218,7 @@ def confirm_slot(session_id: str, scheduled_at: str) -> dict:
             .select(_SESSION_COLS)
             .execute()
         )
-        if not result.data:
+        if result is None or not result.data or len(result.data) == 0:
             raise NotFoundError("Session not found.")
         return result.data[0]
     except NotFoundError:
@@ -253,7 +262,7 @@ def finalize_outcome(session_id: str, new_status: str) -> dict:
             .select(_SESSION_COLS)
             .execute()
         )
-        if not result.data:
+        if result is None or not result.data or len(result.data) == 0:
             raise NotFoundError("Session not found.")
         return result.data[0]
     except NotFoundError:
@@ -316,7 +325,7 @@ def set_venue(
             .select(_SESSION_COLS)
             .execute()
         )
-        if not result.data:
+        if result is None or not result.data or len(result.data) == 0:
             raise NotFoundError("Session not found.")
         return result.data[0]
     except (AppError, NotFoundError):

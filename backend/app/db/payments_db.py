@@ -38,9 +38,21 @@ def create_payment_transaction(session_id: str, amount: float) -> dict:
         result = (
             supabase.table("payment_transactions")
             .insert({"session_id": session_id, "amount": amount, "status": "pending"})
-            .select(_TX_COLS)
             .execute()
         )
+        if result is None or not result.data or len(result.data) == 0:
+            # supabase-py v2 insert may not return data; fetch by session_id
+            fetch = (
+                supabase.table("payment_transactions")
+                .select(_TX_COLS)
+                .eq("session_id", session_id)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if fetch is None or not fetch.data or len(fetch.data) == 0:
+                raise _db_error("create_payment_transaction", RuntimeError("Insert returned no data"))
+            return fetch.data[0]
         return result.data[0]
     except Exception as exc:
         raise _db_error("create_payment_transaction", exc) from exc
@@ -79,7 +91,7 @@ def update_payment_status(
             .select(_TX_COLS)
             .execute()
         )
-        if not result.data:
+        if result is None or not result.data or len(result.data) == 0:
             raise NotFoundError("Payment transaction not found.")
         return result.data[0]
     except NotFoundError:
@@ -130,7 +142,7 @@ def get_tutor_max_weekly_hours(tutor_id: str) -> int:
             .maybe_single()
             .execute()
         )
-        if result.data:
+        if result is not None and result.data is not None:
             return int(result.data.get("max_weekly_hours") or 10)
         return 10  # safe default
     except Exception as exc:
@@ -148,7 +160,7 @@ def get_confirmed_hours_for_week(tutor_id: str, week_start: str) -> float:
             .maybe_single()
             .execute()
         )
-        if result.data:
+        if result is not None and result.data is not None:
             return float(result.data.get("confirmed_hours") or 0)
         return 0.0
     except Exception as exc:

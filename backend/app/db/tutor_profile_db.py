@@ -60,7 +60,7 @@ def profile_exists(tutor_id: str) -> bool:
             .eq("user_id", tutor_id)
             .execute()
         )
-        return (result.count or 0) > 0
+        return (result.count if result is not None and result.count is not None else 0) > 0
     except Exception as exc:
         raise _db_error("profile_exists", exc) from exc
 

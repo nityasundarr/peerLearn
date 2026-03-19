@@ -61,7 +61,7 @@ def get_request_by_id(request_id: str) -> dict | None:
             .maybe_single()
             .execute()
         )
-        if result is None:
+        if result is None or result.data is None:
             return None
         return result.data
     except Exception as exc:
@@ -79,7 +79,7 @@ def get_request_by_id_and_tutee(request_id: str, tutee_id: str) -> dict | None:
             .maybe_single()
             .execute()
         )
-        if result is None:
+        if result is None or result.data is None:
             return None
         return result.data
     except Exception as exc:
@@ -95,7 +95,7 @@ def list_requests_by_tutee(tutee_id: str) -> list[dict]:
             .order("created_at", desc=True)
             .execute()
         )
-        return result.data or []
+        return result.data if result is not None and result.data is not None else []
     except Exception as exc:
         raise _db_error("list_requests_by_tutee", exc) from exc
 
@@ -132,7 +132,7 @@ def cancel_request(request_id: str, tutee_id: str) -> dict:
             .select(_REQUEST_COLS)
             .execute()
         )
-        if not result.data:
+        if result is None or not result.data or len(result.data) == 0:
             raise NotFoundError(
                 "Request not found, already cancelled, or access denied."
             )
@@ -172,7 +172,7 @@ def get_learning_need(request_id: str) -> dict | None:
             .maybe_single()
             .execute()
         )
-        return result.data
+        return result.data if result is not None and result.data is not None else None
     except Exception as exc:
         raise _db_error("get_learning_need", exc) from exc
 
@@ -212,7 +212,7 @@ def count_prior_unfulfilled(tutee_id: str) -> int:
         )
         if result is None:
             return 0
-        return result.count or 0
+        return result.count if result.count is not None else 0
     except Exception as exc:
         raise _db_error("count_prior_unfulfilled", exc) from exc
 
@@ -231,7 +231,7 @@ def assign_tutee_role(user_id: str) -> None:
             .maybe_single()
             .execute()
         )
-        if not result.data:
+        if result is None or result.data is None:
             return
         current: list[str] = result.data.get("roles") or []
         if "tutee" not in current:
@@ -263,9 +263,9 @@ def get_incoming_sessions_for_tutor(tutor_id: str) -> list[dict]:
             .order("created_at", desc=True)
             .execute()
         )
-        if result is None:
+        if result is None or result.data is None:
             return []
-        return result.data or []
+        return result.data
     except Exception as exc:
         raise _db_error("get_incoming_sessions_for_tutor", exc) from exc
 
@@ -281,8 +281,8 @@ def get_requests_by_ids(request_ids: list[str]) -> list[dict]:
             .in_("id", request_ids)
             .execute()
         )
-        if result is None:
+        if result is None or result.data is None:
             return []
-        return result.data or []
+        return result.data
     except Exception as exc:
         raise _db_error("get_requests_by_ids", exc) from exc

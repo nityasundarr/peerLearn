@@ -35,9 +35,20 @@ def create_channel(session_id: str) -> dict:
         result = (
             supabase.table("messaging_channels")
             .insert({"session_id": session_id, "is_readonly": False, "is_suspended": False})
-            .select(_CHANNEL_COLS)
             .execute()
         )
+        if result is None or not result.data or len(result.data) == 0:
+            fetch = (
+                supabase.table("messaging_channels")
+                .select(_CHANNEL_COLS)
+                .eq("session_id", session_id)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if fetch is None or not fetch.data or len(fetch.data) == 0:
+                raise _db_error("create_channel", RuntimeError("Insert returned no data"))
+            return fetch.data[0]
         return result.data[0]
     except Exception as exc:
         raise _db_error("create_channel", exc) from exc
@@ -86,7 +97,7 @@ def get_messages(
             .range(offset, offset + limit - 1)
             .execute()
         )
-        return result.data or [], result.count or 0
+        return (result.data if result is not None and result.data is not None else []), (result.count if result is not None and result.count is not None else 0)
     except Exception as exc:
         raise _db_error("get_messages", exc) from exc
 
@@ -104,9 +115,21 @@ def create_message(channel_id: str, sender_id: str, content: str) -> dict:
                     "is_read": False,
                 }
             )
-            .select(_MESSAGE_COLS)
             .execute()
         )
+        if result is None or not result.data or len(result.data) == 0:
+            fetch = (
+                supabase.table("session_messages")
+                .select(_MESSAGE_COLS)
+                .eq("channel_id", channel_id)
+                .eq("sender_id", sender_id)
+                .order("sent_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if fetch is None or not fetch.data or len(fetch.data) == 0:
+                raise _db_error("create_message", RuntimeError("Insert returned no data"))
+            return fetch.data[0]
         return result.data[0]
     except Exception as exc:
         raise _db_error("create_message", exc) from exc

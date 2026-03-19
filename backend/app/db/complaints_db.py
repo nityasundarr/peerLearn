@@ -53,9 +53,21 @@ def create_complaint(
                     "status": "open",
                 }
             )
-            .select(_COMPLAINT_COLS)
             .execute()
         )
+        if result is None or not result.data or len(result.data) == 0:
+            fetch = (
+                supabase.table("complaints")
+                .select(_COMPLAINT_COLS)
+                .eq("reporter_id", reporter_id)
+                .eq("session_id", session_id)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if fetch is None or not fetch.data or len(fetch.data) == 0:
+                raise _db_error("create_complaint", RuntimeError("Insert returned no data"))
+            return fetch.data[0]
         return result.data[0]
     except Exception as exc:
         raise _db_error("create_complaint", exc) from exc
@@ -70,7 +82,7 @@ def get_complaint_by_id(complaint_id: str) -> dict | None:
             .maybe_single()
             .execute()
         )
-        return result.data
+        return result.data if result is not None and result.data is not None else None
     except Exception as exc:
         raise _db_error("get_complaint_by_id", exc) from exc
 
@@ -86,7 +98,7 @@ def get_complaint_by_id_for_reporter(complaint_id: str, reporter_id: str) -> dic
             .maybe_single()
             .execute()
         )
-        return result.data
+        return result.data if result is not None and result.data is not None else None
     except Exception as exc:
         raise _db_error("get_complaint_by_id_for_reporter", exc) from exc
 
@@ -116,7 +128,7 @@ def update_complaint_status(complaint_id: str, new_status: str) -> dict:
             .select(_COMPLAINT_COLS)
             .execute()
         )
-        if not result.data:
+        if result is None or not result.data or len(result.data) == 0:
             raise NotFoundError("Complaint not found.")
         return result.data[0]
     except NotFoundError:
@@ -146,9 +158,21 @@ def create_complaint_action(
                     "notes": notes,
                 }
             )
-            .select(_ACTION_COLS)
             .execute()
         )
+        if result is None or not result.data or len(result.data) == 0:
+            fetch = (
+                supabase.table("complaint_actions")
+                .select(_ACTION_COLS)
+                .eq("complaint_id", complaint_id)
+                .eq("admin_id", admin_id)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if fetch is None or not fetch.data or len(fetch.data) == 0:
+                raise _db_error("create_complaint_action", RuntimeError("Insert returned no data"))
+            return fetch.data[0]
         return result.data[0]
     except Exception as exc:
         raise _db_error("create_complaint_action", exc) from exc
@@ -189,9 +213,21 @@ def create_disciplinary_record(
                     "appeal_deadline": appeal_deadline,
                 }
             )
-            .select(_RECORD_COLS)
             .execute()
         )
+        if result is None or not result.data or len(result.data) == 0:
+            fetch = (
+                supabase.table("disciplinary_records")
+                .select(_RECORD_COLS)
+                .eq("user_id", user_id)
+                .eq("complaint_id", complaint_id)
+                .order("issued_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if fetch is None or not fetch.data or len(fetch.data) == 0:
+                raise _db_error("create_disciplinary_record", RuntimeError("Insert returned no data"))
+            return fetch.data[0]
         return result.data[0]
     except Exception as exc:
         raise _db_error("create_disciplinary_record", exc) from exc
@@ -219,7 +255,7 @@ def get_disciplinary_record_by_id(record_id: str) -> dict | None:
             .maybe_single()
             .execute()
         )
-        return result.data
+        return result.data if result is not None and result.data is not None else None
     except Exception as exc:
         raise _db_error("get_disciplinary_record_by_id", exc) from exc
 
@@ -237,7 +273,7 @@ def get_admin_user_ids() -> list[str]:
             .contains("roles", ["admin"])
             .execute()
         )
-        return [r["id"] for r in (result.data or [])]
+        return [r["id"] for r in (result.data if result is not None and result.data is not None else [])]
     except Exception as exc:
         logger.warning("Failed to fetch admin user IDs: %s", exc)
         return []

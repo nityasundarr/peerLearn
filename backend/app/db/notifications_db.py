@@ -44,7 +44,7 @@ def get_notifications(
             .range(offset, offset + limit - 1)
             .execute()
         )
-        return result.data or [], result.count or 0
+        return (result.data if result is not None and result.data is not None else []), (result.count if result is not None and result.count is not None else 0)
     except Exception as exc:
         raise _db_error("get_notifications", exc) from exc
 
@@ -75,7 +75,7 @@ def get_unread_count(user_id: str) -> int:
             .eq("is_read", False)
             .execute()
         )
-        return result.count or 0
+        return result.count if result is not None and result.count is not None else 0
     except Exception as exc:
         raise _db_error("get_unread_count", exc) from exc
 
@@ -99,7 +99,7 @@ def mark_notification_read(notification_id: str, user_id: str) -> dict:
             .select(_COLUMNS)
             .execute()
         )
-        if not result.data:
+        if result is None or not result.data or len(result.data) == 0:
             raise NotFoundError("Notification not found.")
         return result.data[0]
     except NotFoundError:
@@ -147,6 +147,6 @@ def mark_all_read(user_id: str) -> int:
             .select("id", count="exact")
             .execute()
         )
-        return result.count or 0
+        return result.count if result is not None and result.count is not None else 0
     except Exception as exc:
         raise _db_error("mark_all_read", exc) from exc
