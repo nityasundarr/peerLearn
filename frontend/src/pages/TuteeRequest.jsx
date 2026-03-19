@@ -314,7 +314,10 @@ const RequestHelpFlow = () => {
   useEffect(() => {
     if (currentStep === 4 && sessionId && selectedTutor) {
       const tutorId = typeof selectedTutor === 'object' ? selectedTutor.id : selectedTutor;
-      api.get('/venues/recommend', { params: { request_id: requestId, tutor_id: tutorId } })
+      const params = {};
+      if (requestId) params.request_id = requestId;
+      if (tutorId) params.tutor_id = tutorId;
+      api.get('/venues/recommend', { params })
         .then(({ data }) => {
           const list = Array.isArray(data) ? data : (data.venues ?? data.recommendations ?? []);
           setRecommendedVenues(list.map(mapVenueToUi));
