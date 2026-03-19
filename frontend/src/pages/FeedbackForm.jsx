@@ -13,7 +13,7 @@ import api from '../services/api';
 const TRAIT_OPTIONS = ['Patient', 'Clear explanations', 'Well prepared', 'Encouraging', 'Good examples', 'Thorough'];
 
 // Stable component at module level to prevent remount-on-typing (which caused scroll-to-top)
-const FeedbackNavHeader = () => (
+const FeedbackNavHeader = ({ hovered, setHovered }) => (
   <header style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #0d3d2e 100%)', padding: '0 32px', height: '72px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
       <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
@@ -21,11 +21,11 @@ const FeedbackNavHeader = () => (
     </div>
     <nav style={{ display: 'flex', gap: '8px' }}>
       {['🏠 Dashboard', '🎓 Get Help', '💡 Offer Help'].map((item, i) => (
-        <button key={i} style={{ background: 'transparent', border: 'none', padding: '10px 20px', borderRadius: '8px', color: '#fff', fontSize: '15px', fontWeight: '500', cursor: 'pointer' }}>{item}</button>
+        <button key={i} onMouseEnter={() => setHovered(`nav-${i}`)} onMouseLeave={() => setHovered(null)} style={{ background: hovered === `nav-${i}` ? 'rgba(255,255,255,0.1)' : 'transparent', border: 'none', padding: '10px 20px', borderRadius: '8px', color: '#fff', fontSize: '15px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.15s ease' }}>{item}</button>
       ))}
     </nav>
     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-      <button style={{ background: 'rgba(255,255,255,0.1)', border: 'none', width: '44px', height: '44px', borderRadius: '10px', cursor: 'pointer', fontSize: '20px' }}>🔔</button>
+      <button onMouseEnter={() => setHovered('bell')} onMouseLeave={() => setHovered(null)} style={{ background: hovered === 'bell' ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)', border: 'none', width: '44px', height: '44px', borderRadius: '10px', cursor: 'pointer', fontSize: '20px', transition: 'all 0.15s ease' }}>🔔</button>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.2)', padding: '6px 14px 6px 6px', borderRadius: '10px' }}>
         <div style={{ width: '34px', height: '34px', background: '#f59e0b', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '14px' }}>JD</div>
         <span style={{ color: '#fff', fontSize: '14px', fontWeight: '500' }}>John Doe</span>
@@ -53,6 +53,7 @@ const FeedbackForm = () => {
   const [alreadyRated, setAlreadyRated] = useState(false);
   const [rating, setRating] = useState(0);
   const [hoveredRating, setHoveredRating] = useState(0);
+  const [hovered, setHovered] = useState(null);
   const [reviewText, setReviewText] = useState('');
   const [traits, setTraits] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -255,15 +256,16 @@ const FeedbackForm = () => {
             {TRAIT_OPTIONS.map((label) => {
               const selected = traits.includes(label);
               return (
-                <button key={label} onClick={() => !alreadyRated && toggleTrait(label)} style={{
+                <button key={label} onClick={() => !alreadyRated && toggleTrait(label)} onMouseEnter={() => !alreadyRated && setHovered(`trait-${label}`)} onMouseLeave={() => setHovered(null)} style={{
                   padding: '8px 14px',
-                  background: selected ? '#1a5f4a' : '#fff',
+                  background: selected ? (hovered === `trait-${label}` ? '#145040' : '#1a5f4a') : (hovered === `trait-${label}` ? '#f0faf5' : '#fff'),
                   color: selected ? '#fff' : '#57534e',
-                  border: `1px solid ${selected ? '#1a5f4a' : '#e7e5e4'}`,
+                  border: `1px solid ${selected ? '#1a5f4a' : (hovered === `trait-${label}` ? '#1a5f4a' : '#e7e5e4')}`,
                   borderRadius: '20px',
                   fontSize: '13px',
                   cursor: alreadyRated ? 'default' : 'pointer',
                   fontWeight: '500',
+                  transition: 'all 0.15s ease',
                 }}>{selected && '✓ '}{label}</button>
               );
             })}
@@ -351,10 +353,12 @@ const FeedbackForm = () => {
         <button
           onClick={handleSubmitRating}
           disabled={rating === 0 || loading || alreadyRated}
+          onMouseEnter={() => rating > 0 && !loading && !alreadyRated && setHovered('submit')}
+          onMouseLeave={() => setHovered(null)}
           style={{
             width: '100%',
             padding: '16px',
-            background: rating > 0 && !alreadyRated ? '#1a5f4a' : '#e7e5e4',
+            background: rating > 0 && !alreadyRated ? (hovered === 'submit' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4',
             color: rating > 0 && !alreadyRated ? '#fff' : '#a8a29e',
             border: 'none',
             borderRadius: '12px',
@@ -363,6 +367,7 @@ const FeedbackForm = () => {
             fontSize: '16px',
             marginBottom: '12px',
             opacity: loading ? 0.7 : 1,
+            transition: 'all 0.2s ease',
           }}
         >
           Submit Feedback
@@ -370,7 +375,7 @@ const FeedbackForm = () => {
 
         {/* Skip / Mark no-show */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
-          <button onClick={() => navigate('/dashboard')} style={{
+          <button onClick={() => navigate('/dashboard')} onMouseEnter={() => setHovered('skip')} onMouseLeave={() => setHovered(null)} style={{
             width: '100%',
             padding: '12px',
             background: 'transparent',
@@ -378,16 +383,20 @@ const FeedbackForm = () => {
             border: 'none',
             fontSize: '14px',
             cursor: 'pointer',
+            opacity: hovered === 'skip' ? 0.85 : 1,
+            transition: 'all 0.15s ease',
           }}>
             Skip for now
           </button>
-          <button onClick={handleMarkNoShow} disabled={loading || alreadyRated} style={{
+          <button onClick={handleMarkNoShow} disabled={loading || alreadyRated} onMouseEnter={() => !loading && !alreadyRated && setHovered('noshow')} onMouseLeave={() => setHovered(null)} style={{
             background: 'transparent',
             color: '#ef4444',
             border: 'none',
             fontSize: '13px',
             cursor: loading || alreadyRated ? 'not-allowed' : 'pointer',
             textDecoration: 'underline',
+            opacity: hovered === 'noshow' ? 0.85 : 1,
+            transition: 'all 0.2s ease',
           }}>
             Mark as no-show
           </button>

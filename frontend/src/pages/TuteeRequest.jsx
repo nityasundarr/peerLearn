@@ -21,15 +21,18 @@ const DURATION_HOURS_MAP = { '1 hour': 1, '2 hours': 2, '4 hours': 4 };
 const getInitials = (name) => (name || '').split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '??';
 
 // Stable components at module level to prevent remount-on-typing (which caused scroll-to-top)
-const TuteeFlowHeader = ({ onCancel }) => (
-  <header style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #0d3d2e 100%)', padding: '0 32px', height: '72px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-      <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
-      <span style={{ color: '#fff', fontSize: '22px', fontWeight: '700' }}>PeerLearn</span>
-    </div>
-    <button onClick={onCancel} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>✕ Cancel Request</button>
-  </header>
-);
+const TuteeFlowHeader = ({ onCancel }) => {
+  const [h, setH] = useState(false);
+  return (
+    <header style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #0d3d2e 100%)', padding: '0 32px', height: '72px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
+        <span style={{ color: '#fff', fontSize: '22px', fontWeight: '700' }}>PeerLearn</span>
+      </div>
+      <button onClick={onCancel} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} style={{ background: h ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>✕ Cancel Request</button>
+    </header>
+  );
+};
 
 const TuteeStepIndicator = ({ currentStep }) => (
   <div style={{ background: '#fff', padding: '24px 32px', borderBottom: '1px solid #e7e5e4' }}>
@@ -88,6 +91,7 @@ const RequestHelpFlow = () => {
   const [sessionFee, setSessionFee] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [hovered, setHovered] = useState(null);
 
   // Predefined subjects and topics (matching Tutor flow)
   const allSubjects = [
@@ -339,8 +343,9 @@ const RequestHelpFlow = () => {
             { value: 'uni', label: 'University' },
           ].map(({ value, label }) => {
             const isSelected = academicLevel === value;
+            const h = hovered === `acad-${value}`;
             return (
-              <button key={value} onClick={() => setAcademicLevel(value)} style={{ padding: '12px 20px', background: isSelected ? '#1a5f4a' : '#fff', color: isSelected ? '#fff' : '#57534e', border: `2px solid ${isSelected ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}>
+              <button key={value} onClick={() => setAcademicLevel(value)} onMouseEnter={() => setHovered(`acad-${value}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 20px', background: h ? (isSelected ? '#145040' : '#f0faf5') : (isSelected ? '#1a5f4a' : '#fff'), color: isSelected ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `2px solid ${h ? '#1a5f4a' : (isSelected ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px', transition: 'all 0.15s ease' }}>
                 {isSelected && '✓ '}{label}
               </button>
             );
@@ -355,12 +360,16 @@ const RequestHelpFlow = () => {
           <span style={{ fontWeight: '400', color: '#a8a29e', marginLeft: '8px' }}>(select one or more)</span>
         </label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
-          {allSubjects.map(subject => (
-            <button key={subject.name} onClick={() => handleSubjectToggle(subject.name)} style={{ padding: '12px 20px', background: selectedSubjects.includes(subject.name) ? '#1a5f4a' : '#fff', color: selectedSubjects.includes(subject.name) ? '#fff' : '#57534e', border: `2px solid ${selectedSubjects.includes(subject.name) ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}>
-              {selectedSubjects.includes(subject.name) && '✓ '}{subject.name}
-            </button>
-          ))}
-          <button onClick={handleOtherSubjectToggle} style={{ padding: '12px 20px', background: showOtherSubject ? '#1a5f4a' : '#fff', color: showOtherSubject ? '#fff' : '#57534e', border: `2px solid ${showOtherSubject ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}>
+          {allSubjects.map(subject => {
+            const sel = selectedSubjects.includes(subject.name);
+            const h = hovered === `subj-${subject.name}`;
+            return (
+              <button key={subject.name} onClick={() => handleSubjectToggle(subject.name)} onMouseEnter={() => setHovered(`subj-${subject.name}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 20px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `2px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px', transition: 'all 0.15s ease' }}>
+                {sel && '✓ '}{subject.name}
+              </button>
+            );
+          })}
+          <button onClick={handleOtherSubjectToggle} onMouseEnter={() => setHovered('subj-other')} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 20px', background: hovered === 'subj-other' ? (showOtherSubject ? '#145040' : '#f0faf5') : (showOtherSubject ? '#1a5f4a' : '#fff'), color: showOtherSubject ? '#fff' : (hovered === 'subj-other' ? '#1a5f4a' : '#57534e'), border: `2px solid ${hovered === 'subj-other' ? '#1a5f4a' : (showOtherSubject ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px', transition: 'all 0.15s ease' }}>
             {showOtherSubject && '✓ '}Other
           </button>
         </div>
@@ -393,14 +402,15 @@ const RequestHelpFlow = () => {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                   {subject.topics.map(topic => {
                     const isSelected = subjectTopics.includes(topic);
+                    const h = hovered === `topic-${subjectName}-${topic}`;
                     return (
-                      <button key={topic} type="button" onClick={() => toggleTopic(subjectName, topic)} style={{ padding: '10px 16px', background: isSelected ? '#1a5f4a' : '#fff', color: isSelected ? '#fff' : '#57534e', border: `1px solid ${isSelected ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px' }}>
+                      <button key={topic} type="button" onClick={() => toggleTopic(subjectName, topic)} onMouseEnter={() => setHovered(`topic-${subjectName}-${topic}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: h ? (isSelected ? '#145040' : '#f0faf5') : (isSelected ? '#1a5f4a' : '#fff'), color: isSelected ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (isSelected ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px', transition: 'all 0.15s ease' }}>
                         {isSelected && '✓ '}{topic}
                       </button>
                     );
                   })}
                   {customTopics.map(topic => (
-                    <button key={topic} type="button" onClick={() => toggleTopic(subjectName, topic)} style={{ padding: '10px 16px', background: '#1a5f4a', color: '#fff', border: '1px solid #1a5f4a', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px' }}>
+                    <button key={topic} type="button" onClick={() => toggleTopic(subjectName, topic)} onMouseEnter={() => setHovered(`ctopic-${subjectName}-${topic}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === `ctopic-${subjectName}-${topic}` ? '#145040' : '#1a5f4a', color: '#fff', border: '1px solid #1a5f4a', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px', transition: 'all 0.15s ease' }}>
                       ✓ {topic}
                     </button>
                   ))}
@@ -415,7 +425,7 @@ const RequestHelpFlow = () => {
               <p style={{ fontSize: '13px', color: '#57534e', marginBottom: '8px' }}>Add custom topics below.</p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
                 {(topicsBySubject[otherSubject || 'Other'] || []).map(topic => (
-                  <button key={topic} type="button" onClick={() => toggleTopic(otherSubject || 'Other', topic)} style={{ padding: '10px 16px', background: '#1a5f4a', color: '#fff', border: '1px solid #1a5f4a', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px' }}>
+                  <button key={topic} type="button" onClick={() => toggleTopic(otherSubject || 'Other', topic)} onMouseEnter={() => setHovered(`otopic-${topic}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === `otopic-${topic}` ? '#145040' : '#1a5f4a', color: '#fff', border: '1px solid #1a5f4a', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px', transition: 'all 0.15s ease' }}>
                     ✓ {topic}
                   </button>
                 ))}
@@ -445,7 +455,7 @@ const RequestHelpFlow = () => {
                   </div>
                   <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
                     <input type="text" placeholder="Type a topic (1-100 characters)" maxLength={100} value={customTopicInput} onChange={(e) => { setCustomTopicInput(e.target.value); setCustomTopicWarning(''); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddCustomTopic(); } }} style={{ flex: 1, padding: '12px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '14px', boxSizing: 'border-box' }} />
-                    <button type="button" onClick={handleAddCustomTopic} style={{ padding: '12px 20px', background: '#f5f5f4', border: '1px solid #e7e5e4', borderRadius: '10px', cursor: 'pointer', fontWeight: '500', color: '#1a5f4a', fontSize: '14px' }}>+ Add</button>
+                    <button type="button" onClick={handleAddCustomTopic} onMouseEnter={() => setHovered('add-custom')} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 20px', background: hovered === 'add-custom' ? '#1a5f4a' : '#f5f5f4', color: hovered === 'add-custom' ? '#fff' : '#1a5f4a', border: '1px solid #e7e5e4', borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px', transition: 'all 0.2s ease' }}>+ Add</button>
                   </div>
                   {customTopicWarning && <p style={{ fontSize: '13px', color: '#dc2626', marginTop: '8px' }}>{customTopicWarning}</p>}
                 </>
@@ -473,14 +483,17 @@ const RequestHelpFlow = () => {
             { id: 'exam', icon: '🔥', label: 'Exam Soon', desc: 'Upcoming examination' },
             { id: 'assignment', icon: '📝', label: 'Assignment Due', desc: 'Near-term deadline' },
             { id: 'general', icon: '📚', label: 'General Study', desc: 'Ongoing learning' },
-          ].map(opt => (
-            <label key={opt.id} onClick={() => setUrgency(opt.id)} style={{ background: urgency === opt.id ? '#fef2f2' : '#fff', border: `2px solid ${urgency === opt.id ? '#fecaca' : '#e7e5e4'}`, borderRadius: '12px', padding: '20px 16px', cursor: 'pointer', textAlign: 'center' }}>
-              <input type="radio" name="urgency" checked={urgency === opt.id} readOnly style={{ display: 'none' }} />
-              <div style={{ fontSize: '28px', marginBottom: '8px' }}>{opt.icon}</div>
-              <div style={{ fontWeight: '600', color: '#1c1917', marginBottom: '4px', fontSize: '14px' }}>{opt.label}</div>
-              <div style={{ fontSize: '12px', color: '#a8a29e' }}>{opt.desc}</div>
-            </label>
-          ))}
+          ].map(opt => {
+            const h = hovered === `urgency-${opt.id}`;
+            return (
+              <label key={opt.id} onClick={() => setUrgency(opt.id)} onMouseEnter={() => setHovered(`urgency-${opt.id}`)} onMouseLeave={() => setHovered(null)} style={{ background: urgency === opt.id ? '#fef2f2' : '#fff', border: `2px solid ${urgency === opt.id ? '#fecaca' : '#e7e5e4'}`, borderRadius: '12px', padding: '20px 16px', cursor: 'pointer', textAlign: 'center', boxShadow: h ? '0 4px 16px rgba(0,0,0,0.12)' : '0 2px 8px rgba(0,0,0,0.08)', transform: h ? 'translateY(-2px)' : 'none', transition: 'all 0.2s ease' }}>
+                <input type="radio" name="urgency" checked={urgency === opt.id} readOnly style={{ display: 'none' }} />
+                <div style={{ fontSize: '28px', marginBottom: '8px' }}>{opt.icon}</div>
+                <div style={{ fontWeight: '600', color: '#1c1917', marginBottom: '4px', fontSize: '14px' }}>{opt.label}</div>
+                <div style={{ fontSize: '12px', color: '#a8a29e' }}>{opt.desc}</div>
+              </label>
+            );
+          })}
         </div>
       </div>
 
@@ -499,7 +512,7 @@ const RequestHelpFlow = () => {
       )}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button onClick={() => setCurrentStep(2)} disabled={!hasAnyTopics()} style={{ padding: '14px 32px', background: hasAnyTopics() ? '#1a5f4a' : '#e7e5e4', color: hasAnyTopics() ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: hasAnyTopics() ? 'pointer' : 'not-allowed', fontSize: '15px' }}>Continue →</button>
+        <button onClick={() => setCurrentStep(2)} disabled={!hasAnyTopics()} onMouseEnter={() => hasAnyTopics() && setHovered('cont1')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: hasAnyTopics() ? (hovered === 'cont1' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: hasAnyTopics() ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: hasAnyTopics() ? 'pointer' : 'not-allowed', fontSize: '15px', transition: 'all 0.2s ease' }}>Continue →</button>
       </div>
     </div>
   );
@@ -516,12 +529,15 @@ const RequestHelpFlow = () => {
           Preferred Dates <span style={{ color: '#ef4444' }}>*</span> <span style={{ fontWeight: '400', color: '#a8a29e' }}>(select multiple)</span>
         </label>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          {[{ day: 'Mon', date: '13', selected: false }, { day: 'Tue', date: '14', selected: true }, { day: 'Wed', date: '15', selected: false }, { day: 'Thu', date: '16', selected: true }, { day: 'Fri', date: '17', selected: false }, { day: 'Sat', date: '18', selected: false }, { day: 'Sun', date: '19', selected: false }].map((d, i) => (
-            <button key={i} style={{ padding: '12px 16px', background: d.selected ? '#1a5f4a' : '#fff', color: d.selected ? '#fff' : '#57534e', border: `2px solid ${d.selected ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', minWidth: '70px', textAlign: 'center' }}>
-              <div style={{ fontSize: '12px', opacity: 0.8 }}>{d.day}</div>
-              <div style={{ fontSize: '18px', fontWeight: '600' }}>{d.date}</div>
-            </button>
-          ))}
+          {[{ day: 'Mon', date: '13', selected: false }, { day: 'Tue', date: '14', selected: true }, { day: 'Wed', date: '15', selected: false }, { day: 'Thu', date: '16', selected: true }, { day: 'Fri', date: '17', selected: false }, { day: 'Sat', date: '18', selected: false }, { day: 'Sun', date: '19', selected: false }].map((d, i) => {
+            const h = hovered === `date-${i}`;
+            return (
+              <button key={i} onMouseEnter={() => setHovered(`date-${i}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 16px', background: h ? (d.selected ? '#145040' : '#f0faf5') : (d.selected ? '#1a5f4a' : '#fff'), color: d.selected ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `2px solid ${h ? '#1a5f4a' : (d.selected ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '10px', cursor: 'pointer', minWidth: '70px', textAlign: 'center', transition: 'all 0.15s ease' }}>
+                <div style={{ fontSize: '12px', opacity: 0.8 }}>{d.day}</div>
+                <div style={{ fontSize: '18px', fontWeight: '600' }}>{d.date}</div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -531,9 +547,13 @@ const RequestHelpFlow = () => {
           Preferred Time Slots <span style={{ color: '#ef4444' }}>*</span> <span style={{ fontWeight: '400', color: '#a8a29e' }}>(1-hour intervals)</span>
         </label>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
-          {['9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM'].map((time, i) => (
-            <button key={i} style={{ padding: '12px', background: [6, 7].includes(i) ? '#1a5f4a' : '#fff', color: [6, 7].includes(i) ? '#fff' : '#57534e', border: `1px solid ${[6, 7].includes(i) ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>{time}</button>
-          ))}
+          {['9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM'].map((time, i) => {
+            const sel = [6, 7].includes(i);
+            const h = hovered === `time-${i}`;
+            return (
+              <button key={i} onMouseEnter={() => setHovered(`time-${i}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', cursor: 'pointer', fontSize: '14px', transition: 'all 0.15s ease' }}>{time}</button>
+            );
+          })}
         </div>
       </div>
 
@@ -544,8 +564,9 @@ const RequestHelpFlow = () => {
           {['1 hour', '2 hours', '4 hours'].map((dur) => {
             const hrs = DURATION_HOURS_MAP[dur] ?? 1;
             const isSelected = durationHours === hrs;
+            const h = hovered === `dur-${dur}`;
             return (
-              <button key={dur} onClick={() => setDurationHours(hrs)} style={{ padding: '12px 24px', background: isSelected ? '#1a5f4a' : '#fff', color: isSelected ? '#fff' : '#57534e', border: `2px solid ${isSelected ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500' }}>{dur}</button>
+              <button key={dur} onClick={() => setDurationHours(hrs)} onMouseEnter={() => setHovered(`dur-${dur}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 24px', background: h ? (isSelected ? '#145040' : '#f0faf5') : (isSelected ? '#1a5f4a' : '#fff'), color: isSelected ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `2px solid ${h ? '#1a5f4a' : (isSelected ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>{dur}</button>
             );
           })}
         </div>
@@ -559,11 +580,12 @@ const RequestHelpFlow = () => {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
           {['Ang Mo Kio', 'Bedok', 'Bishan', 'Boon Lay', 'Bukit Batok', 'Bukit Merah', 'Bukit Panjang', 'Bukit Timah', 'Central Area', 'Choa Chu Kang', 'Clementi', 'Geylang', 'Hougang', 'Jurong East', 'Jurong West', 'Kallang', 'Marine Parade', 'Novena', 'Pasir Ris', 'Punggol', 'Queenstown', 'Sembawang', 'Sengkang', 'Serangoon', 'Tampines', 'Toa Payoh', 'Woodlands', 'Yishun'].map((area) => {
             const isSelected = !showOtherArea && planningAreas.includes(area);
+            const h = hovered === `area-${area}`;
             return (
-              <button key={area} onClick={() => { setShowOtherArea(false); setPlanningAreas([area]); }} style={{ padding: '10px 16px', background: isSelected ? '#1a5f4a' : '#fff', color: isSelected ? '#fff' : '#57534e', border: `1px solid ${isSelected ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>{isSelected && '✓ '}{area}</button>
+              <button key={area} onClick={() => { setShowOtherArea(false); setPlanningAreas([area]); }} onMouseEnter={() => setHovered(`area-${area}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: h ? (isSelected ? '#145040' : '#f0faf5') : (isSelected ? '#1a5f4a' : '#fff'), color: isSelected ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (isSelected ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>{isSelected && '✓ '}{area}</button>
             );
           })}
-          <button onClick={() => { setShowOtherArea(true); setPlanningAreas([]); }} style={{ padding: '10px 16px', background: showOtherArea ? '#1a5f4a' : '#fff', color: showOtherArea ? '#fff' : '#57534e', border: `1px solid ${showOtherArea ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>{showOtherArea && '✓ '}Other</button>
+          <button onClick={() => { setShowOtherArea(true); setPlanningAreas([]); }} onMouseEnter={() => setHovered('area-other')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === 'area-other' ? (showOtherArea ? '#145040' : '#f0faf5') : (showOtherArea ? '#1a5f4a' : '#fff'), color: showOtherArea ? '#fff' : (hovered === 'area-other' ? '#1a5f4a' : '#57534e'), border: `1px solid ${hovered === 'area-other' ? '#1a5f4a' : (showOtherArea ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>{showOtherArea && '✓ '}Other</button>
         </div>
         {showOtherArea && (
           <input type="text" placeholder="Enter planning area (1-100 characters)" maxLength={100} value={otherArea} onChange={(e) => setOtherArea(e.target.value)} style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', boxSizing: 'border-box' }} />
@@ -592,8 +614,8 @@ const RequestHelpFlow = () => {
         <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '12px', marginBottom: '20px', fontSize: '14px', color: '#b91c1c' }}>{error}</div>
       )}
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <button onClick={() => setCurrentStep(1)} style={{ padding: '14px 24px', background: '#fff', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '10px', fontWeight: '500', cursor: 'pointer' }}>← Back</button>
-        <button onClick={handleFindTutors} disabled={loading} style={{ padding: '14px 32px', background: loading ? '#e7e5e4' : '#1a5f4a', color: loading ? '#a8a29e' : '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer' }}>{loading ? 'Finding...' : 'Find Tutors →'}</button>
+        <button onClick={() => setCurrentStep(1)} onMouseEnter={() => setHovered('back2')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 24px', background: hovered === 'back2' ? '#f0faf5' : '#fff', color: '#57534e', border: `1px solid ${hovered === 'back2' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>← Back</button>
+        <button onClick={handleFindTutors} disabled={loading} onMouseEnter={() => !loading && setHovered('find')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: loading ? '#e7e5e4' : (hovered === 'find' ? '#2d7a61' : '#1a5f4a'), color: loading ? '#a8a29e' : '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer', transition: 'all 0.2s ease' }}>{loading ? 'Finding...' : 'Find Tutors →'}</button>
       </div> 
 
       {/* Planning Area with "Other" (SRS 2.2.3.7)
@@ -652,15 +674,19 @@ const RequestHelpFlow = () => {
 
       {/* Sort Options */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
-        {['Best Match', 'Highest Rated', 'Nearest', 'Most Reliable'].map((opt, i) => (
-          <button key={opt} style={{ padding: '8px 16px', background: i === 0 ? '#1a5f4a' : '#fff', color: i === 0 ? '#fff' : '#57534e', border: `1px solid ${i === 0 ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '13px' }}>{opt}</button>
-        ))}
+        {['Best Match', 'Highest Rated', 'Nearest', 'Most Reliable'].map((opt, i) => {
+          const sel = i === 0;
+          const h = hovered === `sort-${opt}`;
+          return (
+            <button key={opt} onMouseEnter={() => setHovered(`sort-${opt}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '8px 16px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '13px', transition: 'all 0.15s ease' }}>{opt}</button>
+          );
+        })}
       </div>
 
       {/* Tutor Cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '32px' }}>
         {recommendedTutors.map((tutor, index) => (
-          <div key={tutor.id} onClick={() => setSelectedTutor(tutor.id)} style={{ background: '#fff', borderRadius: '16px', border: selectedTutor === tutor.id ? '3px solid #1a5f4a' : '1px solid #e7e5e4', padding: '24px', cursor: 'pointer', position: 'relative' }}>
+          <div key={tutor.id} onClick={() => setSelectedTutor(tutor.id)} onMouseEnter={() => setHovered(`tutor-${tutor.id}`)} onMouseLeave={() => setHovered(null)} style={{ background: '#fff', borderRadius: '16px', border: selectedTutor === tutor.id ? '3px solid #1a5f4a' : '1px solid #e7e5e4', padding: '24px', cursor: 'pointer', position: 'relative', boxShadow: hovered === `tutor-${tutor.id}` ? '0 4px 16px rgba(0,0,0,0.12)' : '0 2px 8px rgba(0,0,0,0.08)', transform: hovered === `tutor-${tutor.id}` ? 'translateY(-2px)' : 'none', transition: 'all 0.2s ease' }}>
             {index === 0 && <div style={{ position: 'absolute', top: '-12px', right: '20px', background: '#f59e0b', color: '#fff', padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>⭐ Best Match</div>}
             <div style={{ display: 'flex', gap: '20px' }}>
               <div style={{ width: '64px', height: '64px', background: '#f59e0b', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px', flexShrink: 0 }}>{tutor.initials}</div>
@@ -700,8 +726,8 @@ const RequestHelpFlow = () => {
         <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '12px', marginBottom: '20px', fontSize: '14px', color: '#b91c1c' }}>{error}</div>
       )}
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <button onClick={() => setCurrentStep(2)} style={{ padding: '14px 24px', background: '#fff', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '10px', fontWeight: '500', cursor: 'pointer' }}>← Back</button>
-        <button onClick={handleSelectTutorAndProceed} disabled={!selectedTutor || loading} style={{ padding: '14px 32px', background: selectedTutor && !loading ? '#1a5f4a' : '#e7e5e4', color: selectedTutor && !loading ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedTutor && !loading ? 'pointer' : 'not-allowed' }}>{loading ? 'Creating...' : 'Choose Venue →'}</button>
+        <button onClick={() => setCurrentStep(2)} onMouseEnter={() => setHovered('back3')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 24px', background: hovered === 'back3' ? '#f0faf5' : '#fff', color: '#57534e', border: `1px solid ${hovered === 'back3' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>← Back</button>
+        <button onClick={handleSelectTutorAndProceed} disabled={!selectedTutor || loading} onMouseEnter={() => selectedTutor && !loading && setHovered('venue')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: selectedTutor && !loading ? (hovered === 'venue' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: selectedTutor && !loading ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedTutor && !loading ? 'pointer' : 'not-allowed', transition: 'all 0.2s ease' }}>{loading ? 'Creating...' : 'Choose Venue →'}</button>
       </div>
     </div>
   );
@@ -734,7 +760,7 @@ const RequestHelpFlow = () => {
       {/* Venue Cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '32px' }}>
         {recommendedVenues.map((venue, index) => (
-          <div key={venue.id} onClick={() => setSelectedVenue(venue.id)} style={{ background: '#fff', borderRadius: '16px', border: selectedVenue === venue.id ? '3px solid #1a5f4a' : '1px solid #e7e5e4', padding: '24px', cursor: 'pointer', position: 'relative' }}>
+          <div key={venue.id} onClick={() => setSelectedVenue(venue.id)} onMouseEnter={() => setHovered(`venue-${venue.id}`)} onMouseLeave={() => setHovered(null)} style={{ background: '#fff', borderRadius: '16px', border: selectedVenue === venue.id ? '3px solid #1a5f4a' : '1px solid #e7e5e4', padding: '24px', cursor: 'pointer', position: 'relative', boxShadow: hovered === `venue-${venue.id}` ? '0 4px 16px rgba(0,0,0,0.12)' : '0 2px 8px rgba(0,0,0,0.08)', transform: hovered === `venue-${venue.id}` ? 'translateY(-2px)' : 'none', transition: 'all 0.2s ease' }}>
             {index === 0 && <div style={{ position: 'absolute', top: '-12px', right: '20px', background: '#1a5f4a', color: '#fff', padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>🏆 Recommended</div>}
             <div style={{ display: 'flex', gap: '20px' }}>
               <div style={{ width: '64px', height: '64px', background: venue.type === 'Library' ? '#dbeafe' : '#fef3c7', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', flexShrink: 0 }}>{venue.type === 'Library' ? '📚' : '🏢'}</div>
@@ -765,8 +791,8 @@ const RequestHelpFlow = () => {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <button onClick={() => setCurrentStep(3)} style={{ padding: '14px 24px', background: '#fff', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '10px', fontWeight: '500', cursor: 'pointer' }}>← Back</button>
-        <button onClick={handleProceedToPayment} disabled={!selectedVenue} style={{ padding: '14px 32px', background: selectedVenue ? '#1a5f4a' : '#e7e5e4', color: selectedVenue ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedVenue ? 'pointer' : 'not-allowed' }}>Proceed to Payment →</button>
+        <button onClick={() => setCurrentStep(3)} onMouseEnter={() => setHovered('back4')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 24px', background: hovered === 'back4' ? '#f0faf5' : '#fff', color: '#57534e', border: `1px solid ${hovered === 'back4' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>← Back</button>
+        <button onClick={handleProceedToPayment} disabled={!selectedVenue} onMouseEnter={() => selectedVenue && setHovered('pay4')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: selectedVenue ? (hovered === 'pay4' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: selectedVenue ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedVenue ? 'pointer' : 'not-allowed', transition: 'all 0.2s ease' }}>Proceed to Payment →</button>
       </div>
     </div>
   );
@@ -813,7 +839,7 @@ const RequestHelpFlow = () => {
       <div style={{ marginBottom: '24px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>Payment Method</label>
         {[{ id: 'card', label: 'Credit / Debit Card', icon: '💳', selected: true }, { id: 'paynow', label: 'PayNow', icon: '📱', selected: false }].map(m => (
-          <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px', background: m.selected ? '#f0fdf4' : '#fff', border: `2px solid ${m.selected ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '12px', cursor: 'pointer', marginBottom: '12px' }}>
+          <label key={m.id} onMouseEnter={() => setHovered(`paym-${m.id}`)} onMouseLeave={() => setHovered(null)} style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px', background: m.selected ? '#f0fdf4' : '#fff', border: `2px solid ${m.selected ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '12px', cursor: 'pointer', marginBottom: '12px', boxShadow: hovered === `paym-${m.id}` ? '0 4px 16px rgba(0,0,0,0.12)' : '0 2px 8px rgba(0,0,0,0.08)', transform: hovered === `paym-${m.id}` ? 'translateY(-2px)' : 'none', transition: 'all 0.2s ease' }}>
             <input type="radio" name="payment" defaultChecked={m.selected} style={{ display: 'none' }} />
             <span style={{ fontSize: '24px' }}>{m.icon}</span>
             <span style={{ fontWeight: '500', color: '#1c1917' }}>{m.label}</span>
@@ -841,8 +867,8 @@ const RequestHelpFlow = () => {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <button onClick={() => setCurrentStep(4)} style={{ padding: '14px 24px', background: '#fff', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '10px', fontWeight: '500', cursor: 'pointer' }}>← Back</button>
-        <button onClick={handlePay} disabled={loading} style={{ padding: '14px 32px', background: loading ? '#e7e5e4' : '#1a5f4a', color: loading ? '#a8a29e' : '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer' }}>{loading ? 'Processing...' : `Pay $${sessionFee != null ? Number(sessionFee).toFixed(2) : '27.50'} →`}</button>
+        <button onClick={() => setCurrentStep(4)} onMouseEnter={() => setHovered('back5')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 24px', background: hovered === 'back5' ? '#f0faf5' : '#fff', color: '#57534e', border: `1px solid ${hovered === 'back5' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>← Back</button>
+        <button onClick={handlePay} disabled={loading} onMouseEnter={() => !loading && setHovered('pay5')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: loading ? '#e7e5e4' : (hovered === 'pay5' ? '#2d7a61' : '#1a5f4a'), color: loading ? '#a8a29e' : '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer', transition: 'all 0.2s ease' }}>{loading ? 'Processing...' : `Pay $${sessionFee != null ? Number(sessionFee).toFixed(2) : '27.50'} →`}</button>
       </div>
     </div>
   );
@@ -898,9 +924,9 @@ const RequestHelpFlow = () => {
 
       {/* Actions */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        <button style={{ width: '100%', padding: '16px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', fontSize: '16px' }}>📅 Add to Calendar</button>
-        <button style={{ width: '100%', padding: '14px', background: '#fff', color: '#1a5f4a', border: '2px solid #1a5f4a', borderRadius: '12px', fontWeight: '600', cursor: 'pointer' }}>💬 Message Tutor</button>
-        <button onClick={() => navigate('/dashboard')} style={{ width: '100%', padding: '14px', background: '#fff', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '12px', fontWeight: '500', cursor: 'pointer' }}>← Back to Dashboard</button>
+        <button onMouseEnter={() => setHovered('cal')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '16px', background: hovered === 'cal' ? '#2d7a61' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', fontSize: '16px', transition: 'all 0.2s ease' }}>📅 Add to Calendar</button>
+        <button onMouseEnter={() => setHovered('msg')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'msg' ? '#f0faf5' : '#fff', color: '#1a5f4a', border: '2px solid #1a5f4a', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s ease' }}>💬 Message Tutor</button>
+        <button onClick={() => navigate('/dashboard')} onMouseEnter={() => setHovered('dash')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'dash' ? '#f0faf5' : '#fff', color: '#57534e', border: `1px solid ${hovered === 'dash' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '12px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>← Back to Dashboard</button>
       </div>
     </div>
   );

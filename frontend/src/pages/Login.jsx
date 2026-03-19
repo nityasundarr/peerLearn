@@ -6,6 +6,7 @@ import api from '../services/api';
 const Login = () => {
   const navigate = useNavigate();
   const { signIn, resetPassword } = useAuth();
+  const [hovered, setHovered] = useState(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
@@ -116,8 +117,8 @@ const Login = () => {
           }}>P</div>
           <span style={{ color: '#fff', fontSize: '24px', fontWeight: '700', letterSpacing: '-0.5px' }}>PeerLearn</span>
         </Link>
-        <Link to="/" style={{
-          background: 'transparent',
+        <Link to="/" onMouseEnter={() => setHovered('back')} onMouseLeave={() => setHovered(null)} style={{
+          background: hovered === 'back' ? 'rgba(255,255,255,0.1)' : 'transparent',
           border: '2px solid rgba(255,255,255,0.4)',
           color: '#fff',
           padding: '10px 24px',
@@ -126,6 +127,7 @@ const Login = () => {
           fontWeight: '500',
           cursor: 'pointer',
           textDecoration: 'none',
+          transition: 'all 0.15s ease',
         }}>Back to Home</Link>
       </nav>
 
@@ -232,7 +234,7 @@ const Login = () => {
                 color: '#92400e',
               }}>
                 📧 Please verify your email first. Check your inbox or{' '}
-                <a href="#" onClick={handleResendVerification} style={{ color: '#1a5f4a', fontWeight: '600', textDecoration: 'none' }}>resend verification email</a>.
+                <a href="#" onClick={handleResendVerification} onMouseEnter={() => setHovered('resend')} onMouseLeave={() => setHovered(null)} style={{ color: '#1a5f4a', fontWeight: '600', textDecoration: 'none', cursor: 'pointer', opacity: hovered === 'resend' ? 0.85 : 1, transition: 'all 0.15s ease' }}>resend verification email</a>.
               </div>
             )}
 
@@ -309,11 +311,14 @@ const Login = () => {
 
             {/* Forgot Password Link */}
             <div style={{ textAlign: 'right', marginBottom: '24px' }}>
-              <a href="#" onClick={handleForgotPassword} style={{
+              <a href="#" onClick={handleForgotPassword} onMouseEnter={() => setHovered('forgot')} onMouseLeave={() => setHovered(null)} style={{
                 color: '#1a5f4a',
                 fontSize: '14px',
                 textDecoration: 'none',
                 fontWeight: '500',
+                cursor: 'pointer',
+                opacity: hovered === 'forgot' ? 0.85 : 1,
+                transition: 'all 0.15s ease',
               }}>Forgot password?</a>
             </div>
 
@@ -349,10 +354,12 @@ const Login = () => {
             <button
               type="submit"
               disabled={loading}
+              onMouseEnter={() => !loading && setHovered('submit')}
+              onMouseLeave={() => setHovered(null)}
               style={{
                 width: '100%',
                 padding: '14px',
-                background: '#1a5f4a',
+                background: loading ? '#1a5f4a' : (hovered === 'submit' ? '#2d7a61' : '#1a5f4a'),
                 color: '#fff',
                 border: 'none',
                 borderRadius: '10px',
@@ -360,6 +367,7 @@ const Login = () => {
                 fontWeight: '600',
                 cursor: loading ? 'wait' : 'pointer',
                 marginBottom: '20px',
+                transition: 'all 0.2s ease',
               }}
             >
               {loading ? 'Logging in...' : 'Log In'}
@@ -374,7 +382,7 @@ const Login = () => {
             fontSize: '15px',
           }}>
             Don&apos;t have an account?{' '}
-            <Link to="/signup" style={{ color: '#1a5f4a', fontWeight: '600', textDecoration: 'none' }}>Sign up free</Link>
+            <Link to="/signup" onMouseEnter={() => setHovered('signup')} onMouseLeave={() => setHovered(null)} style={{ color: '#1a5f4a', fontWeight: '600', textDecoration: 'none', cursor: 'pointer', opacity: hovered === 'signup' ? 0.85 : 1, transition: 'all 0.15s ease' }}>Sign up free</Link>
           </p>
         </div>
       </div>

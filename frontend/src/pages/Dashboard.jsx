@@ -96,6 +96,7 @@ const Dashboard = () => {
   const [tutoringSessions, setTutoringSessions] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [hovered, setHovered] = useState(null);
 
   const sessionStates = {
     PENDING_TUTOR: { label: 'Pending Tutor Selection', color: '#f59e0b', bg: '#fef3c7' },
@@ -282,8 +283,8 @@ const Dashboard = () => {
           <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px' }}>Welcome back, {user?.full_name || 'User'}! 👋</h1>
           <p style={{ opacity: 0.9, marginBottom: '20px' }}>Ready to learn or teach today?</p>
           <div style={{ display: 'flex', gap: '12px' }}>
-            <button onClick={() => navigate('/request-help')} style={{ background: '#f59e0b', border: 'none', padding: '12px 24px', borderRadius: '10px', color: '#fff', fontWeight: '600', cursor: 'pointer' }}>🎓 Request Help</button>
-            <button onClick={() => navigate('/offer-tutor')} style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)', padding: '12px 24px', borderRadius: '10px', color: '#fff', fontWeight: '600', cursor: 'pointer' }}>💡 Offer to Tutor</button>
+            <button onClick={() => navigate('/request-help')} onMouseEnter={() => setHovered('req-help')} onMouseLeave={() => setHovered(null)} style={{ background: hovered === 'req-help' ? '#fbbf24' : '#f59e0b', border: 'none', padding: '12px 24px', borderRadius: '10px', color: '#fff', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s ease' }}>🎓 Request Help</button>
+            <button onClick={() => navigate('/offer-tutor')} onMouseEnter={() => setHovered('offer')} onMouseLeave={() => setHovered(null)} style={{ background: hovered === 'offer' ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)', padding: '12px 24px', borderRadius: '10px', color: '#fff', fontWeight: '600', cursor: 'pointer', transition: 'all 0.15s ease' }}>💡 Offer to Tutor</button>
           </div>
         </div>
 
@@ -294,7 +295,7 @@ const Dashboard = () => {
             {pendingActions.map(a => (
               <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '12px 16px', borderRadius: '10px' }}>
                 <span style={{ fontSize: '14px', color: '#1c1917' }}>{a.text}</span>
-                <button onClick={() => handlePendingAction(a)} style={{ padding: '8px 16px', background: a.urgent ? '#ef4444' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '13px' }}>{a.action}</button>
+                <button onClick={() => handlePendingAction(a)} onMouseEnter={() => setHovered(`pending-${a.id}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '8px 16px', background: a.urgent ? (hovered === `pending-${a.id}` ? '#dc2626' : '#ef4444') : (hovered === `pending-${a.id}` ? '#2d7a61' : '#1a5f4a'), color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '13px', transition: 'all 0.2s ease' }}>{a.action}</button>
               </div>
             ))}
           </div>
@@ -303,7 +304,7 @@ const Dashboard = () => {
         {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
           {statItems.map((s, i) => (
-            <div key={i} style={{ background: '#fff', borderRadius: '12px', padding: '20px', border: '1px solid #e7e5e4', textAlign: 'center' }}>
+            <div key={i} onMouseEnter={() => setHovered(`stat-${i}`)} onMouseLeave={() => setHovered(null)} style={{ background: '#fff', borderRadius: '12px', padding: '20px', border: '1px solid #e7e5e4', textAlign: 'center', boxShadow: hovered === `stat-${i}` ? '0 4px 16px rgba(0,0,0,0.12)' : '0 2px 8px rgba(0,0,0,0.08)', transform: hovered === `stat-${i}` ? 'translateY(-2px)' : 'none', transition: 'all 0.2s ease' }}>
               <div style={{ fontSize: '24px', marginBottom: '8px' }}>{s.icon}</div>
               <div style={{ fontSize: '28px', fontWeight: '700', color: '#1c1917' }}>{s.value}</div>
               <div style={{ fontSize: '13px', color: '#57534e' }}>{s.label}</div>
@@ -315,7 +316,7 @@ const Dashboard = () => {
         <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', padding: '24px' }}>
           <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px', color: '#1c1917' }}>📅 Upcoming Sessions</h3>
           {upcomingSessions.map(session => (
-            <div key={session.id} onClick={() => { setSelectedSession(session); setShowDetailPanel(true); }} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: '#f5f5f4', borderRadius: '12px', marginBottom: '12px', cursor: 'pointer' }}>
+            <div key={session.id} onClick={() => { setSelectedSession(session); setShowDetailPanel(true); }} onMouseEnter={() => setHovered(`session-${session.id}`)} onMouseLeave={() => setHovered(null)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: '#f5f5f4', borderRadius: '12px', marginBottom: '12px', cursor: 'pointer', boxShadow: hovered === `session-${session.id}` ? '0 4px 16px rgba(0,0,0,0.12)' : '0 2px 8px rgba(0,0,0,0.08)', transform: hovered === `session-${session.id}` ? 'translateY(-2px)' : 'none', transition: 'all 0.2s ease' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                 <div style={{ width: '48px', height: '48px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold' }}>{session.initials}</div>
                 <div>
@@ -356,9 +357,9 @@ const Dashboard = () => {
               <div style={{ fontSize: '14px', color: '#1a5f4a', fontWeight: '600', marginBottom: '12px' }}>Fee: {req.fee}</div>
               {/* Accept/Decline/Message (SRS 2.12.6.3) */}
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={() => handleAccept(req.id)} style={{ flex: 1, padding: '10px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}>✓ Accept</button>
-                <button onClick={() => handleDecline(req.id)} style={{ flex: 1, padding: '10px', background: '#fff', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '13px' }}>✕ Decline</button>
-                <button onClick={() => navigate(`/session/${req.session_id || req.id}/chat`)} style={{ padding: '10px 14px', background: '#fff', color: '#3b82f6', border: '1px solid #93c5fd', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '13px' }}>💬</button>
+                <button onClick={() => handleAccept(req.id)} onMouseEnter={() => setHovered(`accept-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ flex: 1, padding: '10px', background: hovered === `accept-${req.id}` ? '#2d7a61' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '13px', transition: 'all 0.2s ease' }}>✓ Accept</button>
+                <button onClick={() => handleDecline(req.id)} onMouseEnter={() => setHovered(`decline-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ flex: 1, padding: '10px', background: hovered === `decline-${req.id}` ? '#fef2f2' : '#fff', color: '#ef4444', border: `1px solid ${hovered === `decline-${req.id}` ? '#ef4444' : '#fecaca'}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '13px', transition: 'all 0.2s ease' }}>✕ Decline</button>
+                <button onClick={() => navigate(`/session/${req.session_id || req.id}/chat`)} onMouseEnter={() => setHovered(`msg-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 14px', background: hovered === `msg-${req.id}` ? '#eff6ff' : '#fff', color: '#3b82f6', border: `1px solid ${hovered === `msg-${req.id}` ? '#3b82f6' : '#93c5fd'}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '13px', transition: 'all 0.2s ease' }}>💬</button>
               </div>
             </div>
           ))}
@@ -372,9 +373,13 @@ const Dashboard = () => {
   const LearningTab = () => (
     <div>
       <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
-        {['Upcoming', 'Pending', 'Past', 'Cancelled'].map((tab, i) => (
-          <button key={tab} style={{ padding: '10px 20px', background: i === 0 ? '#1a5f4a' : '#fff', color: i === 0 ? '#fff' : '#57534e', border: `1px solid ${i === 0 ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>{tab}</button>
-        ))}
+        {['Upcoming', 'Pending', 'Past', 'Cancelled'].map((tab, i) => {
+          const sel = i === 0;
+          const h = hovered === `learn-tab-${tab}`;
+          return (
+            <button key={tab} onMouseEnter={() => setHovered(`learn-tab-${tab}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 20px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.15s ease' }}>{tab}</button>
+          );
+        })}
       </div>
       
       {learningSessions.map(session => (
@@ -422,12 +427,16 @@ const Dashboard = () => {
       </div>
 
       <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
-        {[{ label: 'Incoming Requests', badge: incomingRequests.length }, { label: 'Upcoming' }, { label: 'Past' }, { label: 'Cancelled' }].map((tab, i) => (
-          <button key={tab.label} style={{ padding: '10px 20px', background: i === 0 ? '#1a5f4a' : '#fff', color: i === 0 ? '#fff' : '#57534e', border: `1px solid ${i === 0 ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {tab.label}
-            {tab.badge > 0 && <span style={{ background: '#ef4444', color: '#fff', padding: '2px 8px', borderRadius: '10px', fontSize: '12px' }}>{tab.badge}</span>}
-          </button>
-        ))}
+        {[{ label: 'Incoming Requests', badge: incomingRequests.length }, { label: 'Upcoming' }, { label: 'Past' }, { label: 'Cancelled' }].map((tab, i) => {
+          const sel = i === 0;
+          const h = hovered === `tutor-tab-${tab.label}`;
+          return (
+            <button key={tab.label} onMouseEnter={() => setHovered(`tutor-tab-${tab.label}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 20px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.15s ease' }}>
+              {tab.label}
+              {tab.badge > 0 && <span style={{ background: '#ef4444', color: '#fff', padding: '2px 8px', borderRadius: '10px', fontSize: '12px' }}>{tab.badge}</span>}
+            </button>
+          );
+        })}
       </div>
 
       {/* Incoming Requests with Accept/Decline/Message (SRS 2.12.6.3) */}
@@ -451,9 +460,9 @@ const Dashboard = () => {
             </div>
           </div>
           <div style={{ display: 'flex', gap: '12px' }}>
-            <button onClick={() => handleAccept(req.id)} style={{ flex: 1, padding: '14px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px' }}>✓ Accept Request</button>
-            <button onClick={() => handleDecline(req.id)} style={{ flex: 1, padding: '14px', background: '#fff', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '10px', fontWeight: '500', cursor: 'pointer', fontSize: '15px' }}>✕ Decline</button>
-            <button onClick={() => navigate(`/session/${req.session_id || req.id}/chat`)} style={{ padding: '14px 24px', background: '#fff', color: '#3b82f6', border: '1px solid #93c5fd', borderRadius: '10px', fontWeight: '500', cursor: 'pointer', fontSize: '15px' }}>💬 Message</button>
+            <button onClick={() => handleAccept(req.id)} onMouseEnter={() => setHovered(`tutor-accept-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ flex: 1, padding: '14px', background: hovered === `tutor-accept-${req.id}` ? '#2d7a61' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>✓ Accept Request</button>
+            <button onClick={() => handleDecline(req.id)} onMouseEnter={() => setHovered(`tutor-decline-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ flex: 1, padding: '14px', background: hovered === `tutor-decline-${req.id}` ? '#fef2f2' : '#fff', color: '#ef4444', border: `1px solid ${hovered === `tutor-decline-${req.id}` ? '#ef4444' : '#fecaca'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>✕ Decline</button>
+            <button onClick={() => navigate(`/session/${req.session_id || req.id}/chat`)} onMouseEnter={() => setHovered(`tutor-msg-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 24px', background: hovered === `tutor-msg-${req.id}` ? '#eff6ff' : '#fff', color: '#3b82f6', border: `1px solid ${hovered === `tutor-msg-${req.id}` ? '#3b82f6' : '#93c5fd'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>💬 Message</button>
           </div>
         </div>
       ))}
@@ -488,7 +497,7 @@ const Dashboard = () => {
             <input type="text" placeholder="Search conversations..." style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #e7e5e4', fontSize: '14px', boxSizing: 'border-box' }} />
           </div>
           {chatList.map(chat => (
-            <div key={chat.id} onClick={() => setSelectedChat(chat.id)} style={{ padding: '16px 20px', borderBottom: '1px solid #f5f5f4', cursor: 'pointer', background: selectedChat === chat.id ? '#f0fdf4' : '#fff', borderLeft: selectedChat === chat.id ? '3px solid #1a5f4a' : '3px solid transparent' }}>
+            <div key={chat.id} onClick={() => setSelectedChat(chat.id)} onMouseEnter={() => setHovered(`chat-${chat.id}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '16px 20px', borderBottom: '1px solid #f5f5f4', cursor: 'pointer', background: selectedChat === chat.id ? '#f0fdf4' : (hovered === `chat-${chat.id}` ? '#f0fdf4' : '#fff'), borderLeft: selectedChat === chat.id ? '3px solid #1a5f4a' : (hovered === `chat-${chat.id}` ? '3px solid #1a5f4a' : '3px solid transparent'), transition: 'all 0.15s ease' }}>
               <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                 <div style={{ width: '48px', height: '48px', background: '#f59e0b', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', flexShrink: 0 }}>{chat.initials}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -520,7 +529,7 @@ const Dashboard = () => {
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
               <span style={{ background: currentChat?.status === 'confirmed' ? '#dcfce7' : '#fef3c7', color: currentChat?.status === 'confirmed' ? '#166534' : '#92400e', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: '500' }}>{currentChat?.status === 'confirmed' ? '✓ Confirmed' : '⏳ Pending'}</span>
-              <button style={{ padding: '8px 16px', background: '#f5f5f4', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', color: '#57534e' }}>View Session</button>
+              <button onMouseEnter={() => setHovered('view-sess')} onMouseLeave={() => setHovered(null)} style={{ padding: '8px 16px', background: hovered === 'view-sess' ? '#f0faf5' : '#f5f5f4', border: `1px solid ${hovered === 'view-sess' ? '#1a5f4a' : 'transparent'}`, borderRadius: '8px', cursor: 'pointer', fontSize: '13px', color: hovered === 'view-sess' ? '#1a5f4a' : '#57534e', transition: 'all 0.15s ease' }}>View Session</button>
             </div>
           </div>
 
@@ -563,9 +572,13 @@ const Dashboard = () => {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', gap: '12px' }}>
-          {['All', 'Reminders', 'Requests', 'Feedback', 'System'].map((filter, i) => (
-            <button key={filter} style={{ padding: '10px 20px', background: i === 0 ? '#1a5f4a' : '#fff', color: i === 0 ? '#fff' : '#57534e', border: `1px solid ${i === 0 ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>{filter}</button>
-          ))}
+          {['All', 'Reminders', 'Requests', 'Feedback', 'System'].map((filter, i) => {
+            const sel = i === 0;
+            const h = hovered === `notif-${filter}`;
+            return (
+              <button key={filter} onMouseEnter={() => setHovered(`notif-${filter}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 20px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.15s ease' }}>{filter}</button>
+            );
+          })}
         </div>
         {notifications.some((n) => n.unread) && (
           <button onClick={handleMarkAllNotificationsRead} style={{ padding: '10px 20px', background: '#fff', color: '#1a5f4a', border: '1px solid #1a5f4a', borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>Mark all read</button>
@@ -600,7 +613,7 @@ const Dashboard = () => {
             <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)' }}>Calculus Session • Tue 3 PM</div>
           </div>
         </div>
-        <button onClick={() => setShowMessaging(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', color: '#fff', fontSize: '16px' }}>✕</button>
+        <button onClick={() => setShowMessaging(false)} onMouseEnter={() => setHovered('msg-close')} onMouseLeave={() => setHovered(null)} style={{ background: hovered === 'msg-close' ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.2)', border: 'none', width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', color: '#fff', fontSize: '16px', transition: 'all 0.15s ease' }}>✕</button>
       </div>
 
       {/* Messages Area */}
@@ -650,7 +663,7 @@ const Dashboard = () => {
           <div style={{ flex: 1, background: '#f5f5f4', borderRadius: '12px', padding: '12px 16px' }}>
             <textarea rows={1} placeholder="Type a message..." style={{ width: '100%', border: 'none', background: 'transparent', fontSize: '14px', resize: 'none', outline: 'none', fontFamily: 'inherit' }} />
           </div>
-          <button style={{ width: '44px', height: '44px', background: '#1a5f4a', border: 'none', borderRadius: '12px', cursor: 'pointer', color: '#fff', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>➤</button>
+          <button onMouseEnter={() => setHovered('msg-send')} onMouseLeave={() => setHovered(null)} style={{ width: '44px', height: '44px', background: hovered === 'msg-send' ? '#2d7a61' : '#1a5f4a', border: 'none', borderRadius: '12px', cursor: 'pointer', color: '#fff', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease' }}>➤</button>
         </div>
         <p style={{ fontSize: '11px', color: '#a8a29e', marginTop: '8px', textAlign: 'center' }}>Messages are for session coordination only</p>
       </div>
@@ -704,12 +717,12 @@ const Dashboard = () => {
 
         {/* Action Buttons with Messaging (SRS 2.9) */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <button onClick={() => setShowMessaging(true)} style={{ width: '100%', padding: '14px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px' }}>💬 Message Tutor</button>
-          {s.state === 'PENDING_CONFIRM' && <button onClick={() => handlePay(s.id)} style={{ width: '100%', padding: '14px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px' }}>💳 Pay Now</button>}
-          {(s.state === 'CONFIRMED' || s.state === 'COMPLETED') && <button onClick={() => handleMarkOutcome(s.id, 'attended')} style={{ width: '100%', padding: '14px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px' }}>✓ Mark as Completed</button>}
-          <button onClick={() => s.id && navigate(`/feedback/${s.id}`)} style={{ width: '100%', padding: '14px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px' }}>⭐ Leave Feedback</button>
-          <button style={{ width: '100%', padding: '14px', background: '#fff', color: '#1c1917', border: '1px solid #e7e5e4', borderRadius: '10px', fontWeight: '500', cursor: 'pointer' }}>📅 Reschedule</button>
-          <button style={{ width: '100%', padding: '14px', background: '#fff', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '10px', fontWeight: '500', cursor: 'pointer' }}>Cancel Session</button>
+          <button onClick={() => setShowMessaging(true)} onMouseEnter={() => setHovered('detail-msg')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-msg' ? '#2563eb' : '#3b82f6', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>💬 Message Tutor</button>
+          {s.state === 'PENDING_CONFIRM' && <button onClick={() => handlePay(s.id)} onMouseEnter={() => setHovered('detail-pay')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-pay' ? '#16a34a' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>💳 Pay Now</button>}
+          {(s.state === 'CONFIRMED' || s.state === 'COMPLETED') && <button onClick={() => handleMarkOutcome(s.id, 'attended')} onMouseEnter={() => setHovered('detail-done')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-done' ? '#16a34a' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>✓ Mark as Completed</button>}
+          <button onClick={() => s.id && navigate(`/feedback/${s.id}`)} onMouseEnter={() => setHovered('detail-fb')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-fb' ? '#d97706' : '#f59e0b', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>⭐ Leave Feedback</button>
+          <button onMouseEnter={() => setHovered('detail-res')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-res' ? '#f0faf5' : '#fff', color: '#1c1917', border: `1px solid ${hovered === 'detail-res' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>📅 Reschedule</button>
+          <button onMouseEnter={() => setHovered('detail-cancel')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-cancel' ? '#fef2f2' : '#fff', color: '#ef4444', border: `1px solid ${hovered === 'detail-cancel' ? '#ef4444' : '#fecaca'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>Cancel Session</button>
         </div>
       </div>
     </div>

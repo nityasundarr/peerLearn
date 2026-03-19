@@ -11,15 +11,18 @@ const DAY_TO_DOW = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0 };
 const TIME_TO_HOUR = { '9 AM': 9, '10 AM': 10, '11 AM': 11, '12 PM': 12, '1 PM': 13, '2 PM': 14, '3 PM': 15, '4 PM': 16, '5 PM': 17, '6 PM': 18, '7 PM': 19, '8 PM': 20 };
 
 // Stable components at module level to prevent remount-on-typing (which caused scroll-to-top)
-const OfferFlowHeader = ({ onCancel }) => (
-  <header style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #0d3d2e 100%)', padding: '0 32px', height: '72px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-      <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
-      <span style={{ color: '#fff', fontSize: '22px', fontWeight: '700' }}>PeerLearn</span>
-    </div>
-    <button onClick={onCancel} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>✕ Cancel</button>
-  </header>
-);
+const OfferFlowHeader = ({ onCancel }) => {
+  const [h, setH] = useState(false);
+  return (
+    <header style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #0d3d2e 100%)', padding: '0 32px', height: '72px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
+        <span style={{ color: '#fff', fontSize: '22px', fontWeight: '700' }}>PeerLearn</span>
+      </div>
+      <button onClick={onCancel} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} style={{ background: h ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>✕ Cancel</button>
+    </header>
+  );
+};
 
 const OfferStepIndicator = ({ currentStep }) => (
   <div style={{ background: '#fff', padding: '28px 32px', borderBottom: '1px solid #e7e5e4' }}>
@@ -60,6 +63,7 @@ const OfferToTutorFlow = () => {
   const [accessibilityNotes, setAccessibilityNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [hovered, setHovered] = useState(null);
 
   const allSubjects = [
     { name: 'Mathematics', topics: ['Calculus', 'Integration', 'Differentiation', 'Linear Algebra', 'Statistics'] },
@@ -209,7 +213,7 @@ const OfferToTutorFlow = () => {
         </label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
           {['Primary', 'Secondary', 'Junior College', 'Polytechnic', 'ITE', 'University'].map(level => (
-            <button key={level} style={{ padding: '12px 20px', background: '#fff', color: '#57534e', border: '2px solid #e7e5e4', borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}>
+            <button key={level} onMouseEnter={() => setHovered(`acad-${level}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 20px', background: hovered === `acad-${level}` ? '#f0faf5' : '#fff', color: hovered === `acad-${level}` ? '#1a5f4a' : '#57534e', border: `2px solid ${hovered === `acad-${level}` ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px', transition: 'all 0.15s ease' }}>
               {level}
             </button>
           ))}
@@ -222,12 +226,16 @@ const OfferToTutorFlow = () => {
           Select Subjects <span style={{ color: '#ef4444' }}>*</span>
         </label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
-          {allSubjects.map(subject => (
-            <button key={subject.name} onClick={() => handleSubjectToggle(subject.name)} style={{ padding: '12px 20px', background: selectedSubjects.includes(subject.name) ? '#1a5f4a' : '#fff', color: selectedSubjects.includes(subject.name) ? '#fff' : '#57534e', border: `2px solid ${selectedSubjects.includes(subject.name) ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}>
-              {selectedSubjects.includes(subject.name) && '✓ '}{subject.name}
-            </button>
-          ))}
-          <button onClick={handleOtherSubjectToggle} style={{ padding: '12px 20px', background: showOtherSubject ? '#1a5f4a' : '#fff', color: showOtherSubject ? '#fff' : '#57534e', border: `2px solid ${showOtherSubject ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}>
+          {allSubjects.map(subject => {
+            const sel = selectedSubjects.includes(subject.name);
+            const h = hovered === `subj-${subject.name}`;
+            return (
+              <button key={subject.name} onClick={() => handleSubjectToggle(subject.name)} onMouseEnter={() => setHovered(`subj-${subject.name}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 20px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `2px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px', transition: 'all 0.15s ease' }}>
+                {sel && '✓ '}{subject.name}
+              </button>
+            );
+          })}
+          <button onClick={handleOtherSubjectToggle} onMouseEnter={() => setHovered('subj-other')} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 20px', background: hovered === 'subj-other' ? (showOtherSubject ? '#145040' : '#f0faf5') : (showOtherSubject ? '#1a5f4a' : '#fff'), color: showOtherSubject ? '#fff' : (hovered === 'subj-other' ? '#1a5f4a' : '#57534e'), border: `2px solid ${hovered === 'subj-other' ? '#1a5f4a' : (showOtherSubject ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px', transition: 'all 0.15s ease' }}>
             {showOtherSubject && '✓ '}Other
           </button>
         </div>
@@ -280,7 +288,7 @@ const OfferToTutorFlow = () => {
               <p style={{ fontSize: '13px', color: '#57534e', marginBottom: '8px' }}>Add custom topics below.</p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
                 {(topicsBySubject['Other'] || []).map(topic => (
-                  <button key={topic} type="button" onClick={() => toggleTopic('Other', topic)} style={{ padding: '8px 14px', background: '#1a5f4a', color: '#fff', border: '1px solid #1a5f4a', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px' }}>
+                  <button key={topic} type="button" onClick={() => toggleTopic('Other', topic)} onMouseEnter={() => setHovered(`otopic-${topic}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '8px 14px', background: hovered === `otopic-${topic}` ? '#145040' : '#1a5f4a', color: '#fff', border: '1px solid #1a5f4a', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px', transition: 'all 0.15s ease' }}>
                     ✓ {topic}
                   </button>
                 ))}
@@ -316,7 +324,7 @@ const OfferToTutorFlow = () => {
         })()}
         <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
           <input type="text" placeholder="Type a topic..." maxLength={100} value={customTopicInput} onChange={(e) => { setCustomTopicInput(e.target.value); setCustomTopicWarning(''); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddCustomTopic(); } }} style={{ flex: 1, padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', boxSizing: 'border-box' }} />
-          <button type="button" onClick={handleAddCustomTopic} style={{ padding: '14px 24px', background: '#f5f5f4', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '10px', cursor: 'pointer', fontWeight: '500' }}>+ Add</button>
+          <button type="button" onClick={handleAddCustomTopic} onMouseEnter={() => setHovered('add-custom')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 24px', background: hovered === 'add-custom' ? '#1a5f4a' : '#f5f5f4', color: hovered === 'add-custom' ? '#fff' : '#57534e', border: '1px solid #e7e5e4', borderRadius: '10px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.2s ease' }}>+ Add</button>
         </div>
         {customTopicWarning && <p style={{ fontSize: '13px', color: '#dc2626', marginTop: '8px' }}>{customTopicWarning}</p>}
       </div>
@@ -336,7 +344,7 @@ const OfferToTutorFlow = () => {
       )}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button onClick={() => setCurrentStep(2)} disabled={!hasAnyTopics()} style={{ padding: '14px 32px', background: hasAnyTopics() ? '#1a5f4a' : '#e7e5e4', color: hasAnyTopics() ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: hasAnyTopics() ? 'pointer' : 'not-allowed' }}>Continue →</button>
+        <button onClick={() => setCurrentStep(2)} disabled={!hasAnyTopics()} onMouseEnter={() => hasAnyTopics() && setHovered('cont1')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: hasAnyTopics() ? (hovered === 'cont1' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: hasAnyTopics() ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: hasAnyTopics() ? 'pointer' : 'not-allowed', transition: 'all 0.2s ease' }}>Continue →</button>
       </div>
     </div>
   );
@@ -373,8 +381,8 @@ const OfferToTutorFlow = () => {
                 const slotId = `${day}-${time}`;
                 const isSelected = selectedSlots.includes(slotId);
                 return (
-                  <div key={slotId} onClick={() => toggleSlot(day, time)} style={{ padding: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                    <div style={{ width: '100%', height: '28px', background: isSelected ? '#1a5f4a' : '#f5f5f4', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isSelected ? '#fff' : 'transparent', fontSize: '11px' }}>
+                  <div key={slotId} onClick={() => toggleSlot(day, time)} onMouseEnter={() => setHovered(`slot-${slotId}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                    <div style={{ width: '100%', height: '28px', background: hovered === `slot-${slotId}` ? (isSelected ? '#2d7a61' : '#e8f5e9') : (isSelected ? '#1a5f4a' : '#f5f5f4'), borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isSelected ? '#fff' : 'transparent', fontSize: '11px', transition: 'all 0.2s ease' }}>
                       {isSelected && '✓'}
                     </div>
                   </div>
@@ -393,8 +401,8 @@ const OfferToTutorFlow = () => {
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <button onClick={() => setCurrentStep(1)} style={{ padding: '14px 24px', background: '#fff', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '10px', fontWeight: '500', cursor: 'pointer' }}>← Back</button>
-          <button onClick={() => setCurrentStep(3)} disabled={selectedSlots.length === 0} style={{ padding: '14px 32px', background: selectedSlots.length > 0 ? '#1a5f4a' : '#e7e5e4', color: selectedSlots.length > 0 ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedSlots.length > 0 ? 'pointer' : 'not-allowed' }}>Continue →</button>
+          <button onClick={() => setCurrentStep(1)} onMouseEnter={() => setHovered('back2')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 24px', background: hovered === 'back2' ? '#f0faf5' : '#fff', color: '#57534e', border: `1px solid ${hovered === 'back2' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>← Back</button>
+          <button onClick={() => setCurrentStep(3)} disabled={selectedSlots.length === 0} onMouseEnter={() => selectedSlots.length > 0 && setHovered('cont2')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: selectedSlots.length > 0 ? (hovered === 'cont2' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: selectedSlots.length > 0 ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedSlots.length > 0 ? 'pointer' : 'not-allowed', transition: 'all 0.2s ease' }}>Continue →</button>
         </div>
       </div>
     );
@@ -415,7 +423,7 @@ const OfferToTutorFlow = () => {
             <div style={{ fontSize: '13px', color: '#57534e' }}>{tutorModeActive ? "You're visible in recommendations" : "You won't appear in searches"}</div>
           </div>
         </div>
-        <div onClick={handleTutorModeToggle} style={{ width: '50px', height: '28px', background: tutorModeActive ? '#22c55e' : '#e7e5e4', borderRadius: '14px', position: 'relative', cursor: 'pointer' }}>
+        <div onClick={handleTutorModeToggle} onMouseEnter={() => setHovered('toggle')} onMouseLeave={() => setHovered(null)} style={{ width: '50px', height: '28px', background: tutorModeActive ? (hovered === 'toggle' ? '#16a34a' : '#22c55e') : '#e7e5e4', borderRadius: '14px', position: 'relative', cursor: 'pointer', transition: 'all 0.15s ease' }}>
           <div style={{ width: '24px', height: '24px', background: '#fff', borderRadius: '50%', position: 'absolute', top: '2px', left: tutorModeActive ? 'auto' : '2px', right: tutorModeActive ? '2px' : 'auto', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}></div>
         </div>
       </div>
@@ -427,9 +435,13 @@ const OfferToTutorFlow = () => {
         </label>
         <p style={{ fontSize: '13px', color: '#a8a29e', marginBottom: '12px' }}>Helps prevent burnout.</p>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          {[2, 3, 5, 8, 10].map((hrs) => (
-            <button key={hrs} onClick={() => setMaxWeeklyHours(hrs)} style={{ padding: '12px 20px', background: maxWeeklyHours === hrs ? '#1a5f4a' : '#fff', color: maxWeeklyHours === hrs ? '#fff' : '#57534e', border: `2px solid ${maxWeeklyHours === hrs ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500' }}>{hrs} hrs</button>
-          ))}
+          {[2, 3, 5, 8, 10].map((hrs) => {
+            const sel = maxWeeklyHours === hrs;
+            const h = hovered === `hrs-${hrs}`;
+            return (
+              <button key={hrs} onClick={() => setMaxWeeklyHours(hrs)} onMouseEnter={() => setHovered(`hrs-${hrs}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 20px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `2px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>{hrs} hrs</button>
+            );
+          })}
         </div>
       </div>
 
@@ -510,8 +522,8 @@ const OfferToTutorFlow = () => {
       )}
       {/* Navigation */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        <button onClick={handleFormSubmit} disabled={loading} style={{ width: '100%', padding: '16px', background: loading ? '#e7e5e4' : '#1a5f4a', color: loading ? '#a8a29e' : '#fff', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '16px' }}>{loading ? 'Activating...' : '✓ Activate Tutor Profile'}</button>
-        <button onClick={() => setCurrentStep(2)} style={{ width: '100%', padding: '14px', background: '#fff', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '12px', fontWeight: '500', cursor: 'pointer' }}>← Back to Edit</button>
+        <button onClick={handleFormSubmit} disabled={loading} onMouseEnter={() => !loading && setHovered('activate')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '16px', background: loading ? '#e7e5e4' : (hovered === 'activate' ? '#2d7a61' : '#1a5f4a'), color: loading ? '#a8a29e' : '#fff', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '16px', transition: 'all 0.2s ease' }}>{loading ? 'Activating...' : '✓ Activate Tutor Profile'}</button>
+        <button onClick={() => setCurrentStep(2)} onMouseEnter={() => setHovered('back3')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'back3' ? '#f0faf5' : '#fff', color: '#57534e', border: `1px solid ${hovered === 'back3' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '12px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>← Back to Edit</button>
       </div>
     </div>
   );

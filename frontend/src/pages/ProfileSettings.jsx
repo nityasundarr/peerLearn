@@ -17,7 +17,7 @@ const PLANNING_AREAS = ['Clementi', 'Jurong East', 'Jurong West', 'Bukit Batok',
 const SCHOOLS = ['Nanyang Technological University (NTU)', 'National University of Singapore (NUS)', 'Singapore Management University (SMU)', 'Singapore Polytechnic', 'Ngee Ann Polytechnic'];
 
 // Stable components at module level to prevent remount-on-typing (which caused scroll-to-top)
-const ProfileNavHeader = ({ initials, fullName, onNavClick }) => (
+const ProfileNavHeader = ({ initials, fullName, onNavClick, hovered, setHovered }) => (
   <header style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #0d3d2e 100%)', padding: '0 32px', height: '72px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
       <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
@@ -25,11 +25,11 @@ const ProfileNavHeader = ({ initials, fullName, onNavClick }) => (
     </div>
     <nav style={{ display: 'flex', gap: '8px' }}>
       {['🏠 Dashboard', '🎓 Get Help', '💡 Offer Help'].map((item, i) => (
-        <button key={i} onClick={onNavClick} style={{ background: 'transparent', border: 'none', padding: '10px 20px', borderRadius: '8px', color: '#fff', fontSize: '15px', fontWeight: '500', cursor: 'pointer' }}>{item}</button>
+        <button key={i} onClick={onNavClick} onMouseEnter={() => setHovered(`nav-${i}`)} onMouseLeave={() => setHovered(null)} style={{ background: hovered === `nav-${i}` ? 'rgba(255,255,255,0.1)' : 'transparent', border: 'none', padding: '10px 20px', borderRadius: '8px', color: '#fff', fontSize: '15px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.15s ease' }}>{item}</button>
       ))}
     </nav>
     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-      <button style={{ background: 'rgba(255,255,255,0.1)', border: 'none', width: '44px', height: '44px', borderRadius: '10px', cursor: 'pointer', fontSize: '20px' }}>🔔</button>
+      <button onMouseEnter={() => setHovered('bell')} onMouseLeave={() => setHovered(null)} style={{ background: hovered === 'bell' ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)', border: 'none', width: '44px', height: '44px', borderRadius: '10px', cursor: 'pointer', fontSize: '20px', transition: 'all 0.15s ease' }}>🔔</button>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.2)', padding: '6px 14px 6px 6px', borderRadius: '10px' }}>
         <div style={{ width: '34px', height: '34px', background: '#f59e0b', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '14px' }}>{initials}</div>
         <span style={{ color: '#fff', fontSize: '14px', fontWeight: '500' }}>{fullName}</span>
@@ -38,14 +38,14 @@ const ProfileNavHeader = ({ initials, fullName, onNavClick }) => (
   </header>
 );
 
-const ProfilePageHeader = ({ activeTab, onTabChange }) => (
+const ProfilePageHeader = ({ activeTab, onTabChange, hovered, setHovered }) => (
   <div style={{ background: '#fff', borderBottom: '1px solid #e7e5e4' }}>
     <div style={{ maxWidth: '900px', margin: '0 auto', padding: '32px 24px 0' }}>
       <h1 style={{ fontSize: '28px', fontWeight: '700', color: '#1c1917', marginBottom: '8px' }}>Settings</h1>
       <p style={{ color: '#57534e', marginBottom: '24px' }}>Manage your account and preferences</p>
       <div style={{ display: 'flex', gap: '0' }}>
         {[{ id: 'profile', label: '👤 Profile' }, { id: 'tutor', label: '🎓 Tutor Settings' }, { id: 'preferences', label: '⚙️ Preferences' }, { id: 'account', label: '🔐 Account' }].map(tab => (
-          <button key={tab.id} onClick={() => onTabChange(tab.id)} style={{ background: 'transparent', border: 'none', padding: '16px 24px', fontSize: '15px', fontWeight: activeTab === tab.id ? '600' : '500', color: activeTab === tab.id ? '#1a5f4a' : '#57534e', cursor: 'pointer', borderBottom: activeTab === tab.id ? '3px solid #1a5f4a' : '3px solid transparent' }}>{tab.label}</button>
+          <button key={tab.id} onClick={() => onTabChange(tab.id)} onMouseEnter={() => setHovered(`tab-${tab.id}`)} onMouseLeave={() => setHovered(null)} style={{ background: hovered === `tab-${tab.id}` ? '#f0faf5' : 'transparent', border: 'none', padding: '16px 24px', fontSize: '15px', fontWeight: activeTab === tab.id ? '600' : '500', color: activeTab === tab.id ? '#1a5f4a' : '#57534e', cursor: 'pointer', borderBottom: activeTab === tab.id ? '3px solid #1a5f4a' : '3px solid transparent', transition: 'all 0.15s ease' }}>{tab.label}</button>
         ))}
       </div>
     </div>
@@ -55,6 +55,7 @@ const ProfilePageHeader = ({ activeTab, onTabChange }) => (
 const ProfileSettings = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [hovered, setHovered] = useState(null);
   const [activeTab, setActiveTab] = useState('profile');
   const [showOtherArea, setShowOtherArea] = useState(false);
   const [showOtherSchool, setShowOtherSchool] = useState(false);
@@ -217,8 +218,8 @@ const ProfileSettings = () => {
           <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1c1917', marginBottom: '8px' }}>Profile Photo</h3>
           <p style={{ fontSize: '14px', color: '#57534e', marginBottom: '12px' }}>JPG or PNG. Max 2MB.</p>
           <div style={{ display: 'flex', gap: '12px' }}>
-            <button style={{ padding: '10px 20px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>Upload Photo</button>
-            <button style={{ padding: '10px 20px', background: '#fff', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>Remove</button>
+            <button onMouseEnter={() => setHovered('upload')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 20px', background: hovered === 'upload' ? '#2d7a61' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>Upload Photo</button>
+            <button onMouseEnter={() => setHovered('remove')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 20px', background: hovered === 'remove' ? '#fef2f2' : '#fff', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>Remove</button>
           </div>
         </div>
       </div>
@@ -283,7 +284,7 @@ const ProfileSettings = () => {
         </div>
       </div>
 
-      <button onClick={handleSaveProfile} disabled={loading} style={{ padding: '14px 32px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '15px', opacity: loading ? 0.7 : 1 }}>Save Changes</button>
+      <button onClick={handleSaveProfile} disabled={loading} onMouseEnter={() => !loading && setHovered('profile-save')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: loading ? '#1a5f4a' : (hovered === 'profile-save' ? '#2d7a61' : '#1a5f4a'), color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '15px', opacity: loading ? 0.7 : 1, transition: 'all 0.2s ease' }}>Save Changes</button>
     </div>
   );
 
@@ -320,7 +321,7 @@ const ProfileSettings = () => {
       <div style={{ marginBottom: '32px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
           <label style={{ fontSize: '14px', fontWeight: '600', color: '#1c1917' }}>Subjects & Topics</label>
-          <button style={{ padding: '8px 16px', background: '#fff', border: '1px solid #e7e5e4', borderRadius: '8px', fontSize: '13px', cursor: 'pointer', color: '#1a5f4a', fontWeight: '500' }}>+ Edit Topics</button>
+          <button onMouseEnter={() => setHovered('edit-topics')} onMouseLeave={() => setHovered(null)} style={{ padding: '8px 16px', background: hovered === 'edit-topics' ? '#f0faf5' : '#fff', border: `1px solid ${hovered === 'edit-topics' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', fontSize: '13px', cursor: 'pointer', color: '#1a5f4a', fontWeight: '500', transition: 'all 0.2s ease' }}>+ Edit Topics</button>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
           {['Mathematics', 'Calculus', 'Integration', 'Differentiation', 'Linear Algebra'].map(topic => (
@@ -334,7 +335,7 @@ const ProfileSettings = () => {
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>Maximum hours per week</label>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
           {['2 hrs', '3 hrs', '5 hrs', '8 hrs', '10 hrs', '15 hrs', '20 hrs'].map((hrs, i) => (
-            <button key={hrs} style={{ padding: '12px 20px', background: i === 2 ? '#1a5f4a' : '#fff', color: i === 2 ? '#fff' : '#57534e', border: `2px solid ${i === 2 ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500' }}>{hrs}</button>
+            <button key={hrs} onMouseEnter={() => setHovered(`hrs-${i}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 20px', background: i === 2 ? (hovered === `hrs-${i}` ? '#145040' : '#1a5f4a') : (hovered === `hrs-${i}` ? '#f0faf5' : '#fff'), color: i === 2 ? '#fff' : '#57534e', border: `2px solid ${i === 2 ? '#1a5f4a' : (hovered === `hrs-${i}` ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>{hrs}</button>
           ))}
         </div>
       </div>
@@ -369,8 +370,8 @@ const ProfileSettings = () => {
       </div>
 
       <div style={{ display: 'flex', gap: '12px' }}>
-        <button style={{ padding: '14px 24px', background: '#fff', color: '#1a5f4a', border: '2px solid #1a5f4a', borderRadius: '10px', fontWeight: '600', cursor: 'pointer' }}>📅 Edit Availability</button>
-        <button onClick={handleSaveTutorProfile} disabled={loading} style={{ padding: '14px 32px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>Save Changes</button>
+        <button onMouseEnter={() => setHovered('edit-avail')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 24px', background: hovered === 'edit-avail' ? '#f0faf5' : '#fff', color: '#1a5f4a', border: '2px solid #1a5f4a', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s ease' }}>📅 Edit Availability</button>
+        <button onClick={handleSaveTutorProfile} disabled={loading} onMouseEnter={() => !loading && setHovered('tutor-save')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: loading ? '#1a5f4a' : (hovered === 'tutor-save' ? '#2d7a61' : '#1a5f4a'), color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1, transition: 'all 0.2s ease' }}>Save Changes</button>
       </div>
     </div>
   );
@@ -388,7 +389,7 @@ const ProfileSettings = () => {
         <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1c1917', marginBottom: '16px' }}>🔔 Notifications</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {notifKeys.map((key, i) => (
-            <div key={key} onClick={() => setNotifications((n) => ({ ...n, [key]: !n[key] }))} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: '#f5f5f4', borderRadius: '10px', cursor: 'pointer' }}>
+            <div key={key} onClick={() => setNotifications((n) => ({ ...n, [key]: !n[key] }))} onMouseEnter={() => setHovered(`notif-${key}`)} onMouseLeave={() => setHovered(null)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: hovered === `notif-${key}` ? '#e7e5e4' : '#f5f5f4', borderRadius: '10px', cursor: 'pointer', transition: 'all 0.15s ease' }}>
               <span style={{ fontSize: '14px', color: '#1c1917' }}>{notifLabels[i]}</span>
               <div style={{ width: '50px', height: '28px', background: notifications[key] ? '#22c55e' : '#e7e5e4', borderRadius: '14px', position: 'relative' }}>
                 <div style={{ width: '24px', height: '24px', background: '#fff', borderRadius: '50%', position: 'absolute', top: '2px', left: notifications[key] ? 'auto' : '2px', right: notifications[key] ? '2px' : 'auto', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}></div>
@@ -402,7 +403,7 @@ const ProfileSettings = () => {
         <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1c1917', marginBottom: '16px' }}>🔒 Privacy</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {privacyKeys.map((key, i) => (
-            <div key={key} onClick={() => setPrivacy((p) => ({ ...p, [key]: !p[key] }))} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: '#f5f5f4', borderRadius: '10px', cursor: 'pointer' }}>
+            <div key={key} onClick={() => setPrivacy((p) => ({ ...p, [key]: !p[key] }))} onMouseEnter={() => setHovered(`privacy-${key}`)} onMouseLeave={() => setHovered(null)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: hovered === `privacy-${key}` ? '#e7e5e4' : '#f5f5f4', borderRadius: '10px', cursor: 'pointer', transition: 'all 0.15s ease' }}>
               <span style={{ fontSize: '14px', color: '#1c1917' }}>{privacyLabels[i]}</span>
               <div style={{ width: '50px', height: '28px', background: privacy[key] ? '#22c55e' : '#e7e5e4', borderRadius: '14px', position: 'relative' }}>
                 <div style={{ width: '24px', height: '24px', background: '#fff', borderRadius: '50%', position: 'absolute', top: '2px', left: privacy[key] ? 'auto' : '2px', right: privacy[key] ? '2px' : 'auto', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}></div>
@@ -412,7 +413,7 @@ const ProfileSettings = () => {
         </div>
       </div>
 
-      <button onClick={handleSavePrivacy} disabled={loading} style={{ padding: '14px 32px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>Save Preferences</button>
+      <button onClick={handleSavePrivacy} disabled={loading} onMouseEnter={() => !loading && setHovered('pref-save')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: loading ? '#1a5f4a' : (hovered === 'pref-save' ? '#2d7a61' : '#1a5f4a'), color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1, transition: 'all 0.2s ease' }}>Save Preferences</button>
     </div>
   );
 
@@ -458,7 +459,7 @@ const ProfileSettings = () => {
               <div style={{ fontSize: '13px', color: '#57534e' }}>john.doe@gmail.com</div>
             </div>
           </div>
-          <button style={{ padding: '8px 16px', background: '#fff', border: '1px solid #e7e5e4', borderRadius: '8px', fontSize: '13px', cursor: 'pointer', color: '#ef4444' }}>Disconnect</button>
+          <button onMouseEnter={() => setHovered('disconnect')} onMouseLeave={() => setHovered(null)} style={{ padding: '8px 16px', background: hovered === 'disconnect' ? '#fef2f2' : '#fff', border: '1px solid #e7e5e4', borderRadius: '8px', fontSize: '13px', cursor: 'pointer', color: '#ef4444', transition: 'all 0.2s ease' }}>Disconnect</button>
         </div>
       </div>
 
@@ -466,8 +467,8 @@ const ProfileSettings = () => {
         <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#ef4444', marginBottom: '8px' }}>⚠️ Danger Zone</h3>
         <p style={{ fontSize: '14px', color: '#57534e', marginBottom: '16px' }}>Once you delete your account, there is no going back.</p>
         <div style={{ display: 'flex', gap: '12px' }}>
-          <button style={{ padding: '12px 24px', background: '#fff', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '10px', fontWeight: '500', cursor: 'pointer' }}>Deactivate Account</button>
-          <button style={{ padding: '12px 24px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer' }}>Delete Account</button>
+          <button onMouseEnter={() => setHovered('deactivate')} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 24px', background: hovered === 'deactivate' ? '#fef2f2' : '#fff', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '10px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>Deactivate Account</button>
+          <button onMouseEnter={() => setHovered('delete')} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 24px', background: hovered === 'delete' ? '#dc2626' : '#ef4444', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s ease' }}>Delete Account</button>
         </div>
       </div>
     </div>
@@ -475,12 +476,12 @@ const ProfileSettings = () => {
 
   return (
     <div style={{ minHeight: '100vh', background: '#fafaf9', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-      <ProfileNavHeader initials={getInitials()} fullName={profile.full_name || user?.full_name || 'User'} onNavClick={() => navigate('/dashboard')} />
-      <ProfilePageHeader activeTab={activeTab} onTabChange={(tabId) => { setActiveTab(tabId); setError(null); }} />
+      <ProfileNavHeader initials={getInitials()} fullName={profile.full_name || user?.full_name || 'User'} onNavClick={() => navigate('/dashboard')} hovered={hovered} setHovered={setHovered} />
+      <ProfilePageHeader activeTab={activeTab} onTabChange={(tabId) => { setActiveTab(tabId); setError(null); }} hovered={hovered} setHovered={setHovered} />
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '40px 24px' }}>
         {activeTab === 'profile' && renderProfileTab()}
         {activeTab === 'tutor' && renderTutorTab()}
-        {activeTab === 'preferences' && renderPreferencesTab()}
+        {activeTab === 'preferences' && <PreferencesTab />}
         {activeTab === 'account' && renderAccountTab()}
       </div>
     </div>

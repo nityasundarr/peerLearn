@@ -14,6 +14,7 @@ const LandingPage = () => {
   const navigate = useNavigate();
   const { signIn, signUp, resetPassword } = useAuth();
   const [showModal, setShowModal] = useState(null); // 'login' | 'signup' | 'verify' | null
+  const [hovered, setHovered] = useState(null);
   const [showOtherPlanningArea, setShowOtherPlanningArea] = useState(false);
   const [showOtherSchool, setShowOtherSchool] = useState(false);
 
@@ -176,8 +177,10 @@ const LandingPage = () => {
         <div style={{ display: 'flex', gap: '12px' }}>
           <button
             onClick={() => setShowModal('login')}
+            onMouseEnter={() => setHovered('nav-login')}
+            onMouseLeave={() => setHovered(null)}
             style={{
-              background: 'transparent',
+              background: hovered === 'nav-login' ? 'rgba(255,255,255,0.1)' : 'transparent',
               border: '2px solid rgba(255,255,255,0.4)',
               color: '#fff',
               padding: '10px 24px',
@@ -185,12 +188,15 @@ const LandingPage = () => {
               fontSize: '15px',
               fontWeight: '500',
               cursor: 'pointer',
+              transition: 'all 0.15s ease',
             }}
           >Log In</button>
           <button
             onClick={() => setShowModal('signup')}
+            onMouseEnter={() => setHovered('nav-signup')}
+            onMouseLeave={() => setHovered(null)}
             style={{
-              background: '#f59e0b',
+              background: hovered === 'nav-signup' ? '#fbbf24' : '#f59e0b',
               border: 'none',
               color: '#fff',
               padding: '10px 24px',
@@ -198,6 +204,7 @@ const LandingPage = () => {
               fontSize: '15px',
               fontWeight: '600',
               cursor: 'pointer',
+              transition: 'all 0.2s ease',
             }}
           >Sign Up Free</button>
         </div>
@@ -235,8 +242,8 @@ const LandingPage = () => {
         </p>
         
         <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
-          <button style={{
-            background: '#f59e0b',
+          <button onMouseEnter={() => setHovered('hero-find')} onMouseLeave={() => setHovered(null)} style={{
+            background: hovered === 'hero-find' ? '#fbbf24' : '#f59e0b',
             border: 'none',
             color: '#fff',
             padding: '16px 32px',
@@ -247,9 +254,10 @@ const LandingPage = () => {
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
+            transition: 'all 0.2s ease',
           }}>🎓 Find a Tutor</button>
-          <button style={{
-            background: 'rgba(255,255,255,0.15)',
+          <button onMouseEnter={() => setHovered('hero-tutor')} onMouseLeave={() => setHovered(null)} style={{
+            background: hovered === 'hero-tutor' ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.15)',
             border: '2px solid rgba(255,255,255,0.4)',
             color: '#fff',
             padding: '16px 32px',
@@ -260,6 +268,7 @@ const LandingPage = () => {
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
+            transition: 'all 0.15s ease',
           }}>💡 Start Tutoring</button>
         </div>
       </section>
@@ -414,17 +423,20 @@ const LandingPage = () => {
             {/* Close Button */}
             <button
               onClick={() => setShowModal(null)}
+              onMouseEnter={() => setHovered('login-close')}
+              onMouseLeave={() => setHovered(null)}
               style={{
                 position: 'absolute',
                 top: '16px',
                 right: '16px',
-                background: '#f5f5f4',
+                background: hovered === 'login-close' ? '#e7e5e4' : '#f5f5f4',
                 border: 'none',
                 width: '32px',
                 height: '32px',
                 borderRadius: '8px',
                 cursor: 'pointer',
                 fontSize: '16px',
+                transition: 'all 0.15s ease',
               }}
             >✕</button>
 
@@ -518,7 +530,7 @@ const LandingPage = () => {
                   color: '#92400e',
                 }}>
                   📧 Please verify your email first. Check your inbox or{' '}
-                  <a href="#" onClick={(e) => { e.preventDefault(); setShowModal('verify'); setVerifyEmail(loginEmail); setResendError(null); setResendSuccess(false); }} style={{ color: '#1a5f4a', fontWeight: '600', textDecoration: 'none' }}>resend verification email</a>.
+                  <a href="#" onClick={(e) => { e.preventDefault(); setShowModal('verify'); setVerifyEmail(loginEmail); setResendError(null); setResendSuccess(false); }} onMouseEnter={() => setHovered('login-resend')} onMouseLeave={() => setHovered(null)} style={{ color: '#1a5f4a', fontWeight: '600', textDecoration: 'none', cursor: 'pointer', opacity: hovered === 'login-resend' ? 0.85 : 1, transition: 'all 0.15s ease' }}>resend verification email</a>.
                 </div>
               )}
 
@@ -567,11 +579,14 @@ const LandingPage = () => {
 
               {/* Forgot Password Link */}
               <div style={{ textAlign: 'right', marginBottom: '24px' }}>
-                <a href="#" onClick={handleForgotPassword} style={{
+                <a href="#" onClick={handleForgotPassword} onMouseEnter={() => setHovered('login-forgot')} onMouseLeave={() => setHovered(null)} style={{
                   color: '#1a5f4a',
                   fontSize: '14px',
                   textDecoration: 'none',
                   fontWeight: '500',
+                  cursor: 'pointer',
+                  opacity: hovered === 'login-forgot' ? 0.85 : 1,
+                  transition: 'all 0.15s ease',
                 }}>Forgot password?</a>
               </div>
 
@@ -607,10 +622,12 @@ const LandingPage = () => {
               <button
                 type="submit"
                 disabled={loginLoading}
+                onMouseEnter={() => !loginLoading && setHovered('login-submit')}
+                onMouseLeave={() => setHovered(null)}
                 style={{
                   width: '100%',
                   padding: '14px',
-                  background: '#1a5f4a',
+                  background: loginLoading ? '#1a5f4a' : (hovered === 'login-submit' ? '#2d7a61' : '#1a5f4a'),
                   color: '#fff',
                   border: 'none',
                   borderRadius: '10px',
@@ -618,6 +635,7 @@ const LandingPage = () => {
                   fontWeight: '600',
                   cursor: loginLoading ? 'wait' : 'pointer',
                   marginBottom: '20px',
+                  transition: 'all 0.2s ease',
                 }}
               >
                 {loginLoading ? 'Logging in...' : 'Log In'}
@@ -667,7 +685,9 @@ const LandingPage = () => {
               <a
                 href="#"
                 onClick={(e) => { e.preventDefault(); setShowModal('signup'); }}
-                style={{ color: '#1a5f4a', fontWeight: '600', textDecoration: 'none' }}
+                onMouseEnter={() => setHovered('login-signup-link')}
+                onMouseLeave={() => setHovered(null)}
+                style={{ color: '#1a5f4a', fontWeight: '600', textDecoration: 'none', cursor: 'pointer', opacity: hovered === 'login-signup-link' ? 0.85 : 1, transition: 'all 0.15s ease' }}
               >Sign up free</a>
             </p>
           </div>
@@ -713,17 +733,20 @@ const LandingPage = () => {
             {/* Close Button */}
             <button
               onClick={() => setShowModal(null)}
+              onMouseEnter={() => setHovered('signup-close')}
+              onMouseLeave={() => setHovered(null)}
               style={{
                 position: 'absolute',
                 top: '16px',
                 right: '16px',
-                background: '#f5f5f4',
+                background: hovered === 'signup-close' ? '#e7e5e4' : '#f5f5f4',
                 border: 'none',
                 width: '32px',
                 height: '32px',
                 borderRadius: '8px',
                 cursor: 'pointer',
                 fontSize: '16px',
+                transition: 'all 0.15s ease',
               }}
             >✕</button>
 
@@ -1100,10 +1123,12 @@ const LandingPage = () => {
             <button
               type="submit"
               disabled={signupLoading}
+              onMouseEnter={() => !signupLoading && setHovered('signup-submit')}
+              onMouseLeave={() => setHovered(null)}
               style={{
                 width: '100%',
                 padding: '14px',
-                background: '#1a5f4a',
+                background: signupLoading ? '#1a5f4a' : (hovered === 'signup-submit' ? '#2d7a61' : '#1a5f4a'),
                 color: '#fff',
                 border: 'none',
                 borderRadius: '10px',
@@ -1111,6 +1136,7 @@ const LandingPage = () => {
                 fontWeight: '600',
                 cursor: signupLoading ? 'wait' : 'pointer',
                 marginBottom: '20px',
+                transition: 'all 0.2s ease',
               }}
             >
               {signupLoading ? 'Creating account...' : 'Create Account'}
@@ -1237,7 +1263,7 @@ const LandingPage = () => {
               </p>
               <p style={{ fontSize: '13px', color: '#a8a29e' }}>
                 Didn't receive the email? Check your spam folder or{' '}
-                <a href="#" onClick={handleResendVerification} style={{ color: '#1a5f4a', textDecoration: 'none', fontWeight: '500' }}>
+                <a href="#" onClick={handleResendVerification} onMouseEnter={() => setHovered('verify-resend')} onMouseLeave={() => setHovered(null)} style={{ color: '#1a5f4a', textDecoration: 'none', fontWeight: '500', cursor: 'pointer', opacity: hovered === 'verify-resend' ? 0.85 : 1, transition: 'all 0.15s ease' }}>
                   resend verification email
                 </a>
               </p>
@@ -1255,16 +1281,19 @@ const LandingPage = () => {
 
             <button
               onClick={() => setShowModal('login')}
+              onMouseEnter={() => setHovered('verify-back')}
+              onMouseLeave={() => setHovered(null)}
               style={{
                 width: '100%',
                 padding: '14px',
-                background: '#1a5f4a',
+                background: hovered === 'verify-back' ? '#2d7a61' : '#1a5f4a',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '10px',
                 fontSize: '16px',
                 fontWeight: '600',
                 cursor: 'pointer',
+                transition: 'all 0.2s ease',
             }}>Back to Login</button>
           </div>
         </div>
