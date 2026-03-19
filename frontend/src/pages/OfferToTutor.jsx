@@ -70,6 +70,7 @@ const OfferToTutorFlow = () => {
   const [customTopicWarning, setCustomTopicWarning] = useState('');
   const [customTopicTargetSubject, setCustomTopicTargetSubject] = useState(null);
   const [accessibilityNotes, setAccessibilityNotes] = useState('');
+  const [accessibilityAccommodations, setAccessibilityAccommodations] = useState(['I am flexible with venue accessibility requirements']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [hovered, setHovered] = useState(null);
@@ -527,8 +528,8 @@ const OfferToTutorFlow = () => {
             'I can provide visual aids/large print materials',
             'I am flexible with venue accessibility requirements'
           ].map((opt, i) => (
-            <label key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-              <input type="checkbox" defaultChecked={i === 3} style={{ width: '20px', height: '20px', accentColor: '#1a5f4a' }} />
+            <label key={i} onClick={() => setAccessibilityAccommodations((prev) => prev.includes(opt) ? prev.filter((o) => o !== opt) : [...prev, opt])} style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={accessibilityAccommodations.includes(opt)} readOnly style={{ width: '20px', height: '20px', accentColor: '#1a5f4a' }} />
               <span style={{ fontSize: '14px', color: '#57534e' }}>{opt}</span>
             </label>
           ))}
@@ -565,6 +566,8 @@ const OfferToTutorFlow = () => {
           <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Subjects</div><div style={{ fontWeight: '600' }}>{selectedSubjects.join(', ')}</div></div>
           <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Topics</div><div style={{ fontWeight: '600' }}>{formatTopicsSummary() || '—'}</div></div>
           <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Availability</div><div style={{ fontWeight: '600' }}>{formatAvailabilitySummary() || '—'}</div></div>
+          <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Planning areas</div><div style={{ fontWeight: '600' }}>{(showOtherArea && otherArea ? [otherArea] : planningAreas).join(', ') || '—'}</div></div>
+          <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Accessibility accommodations</div><div style={{ fontWeight: '600' }}>{accessibilityAccommodations.length > 0 ? accessibilityAccommodations.map((a) => ({ 'I can accommodate wheelchair users': 'Wheelchair', 'I can use hearing assistance devices': 'Hearing assistance', 'I can provide visual aids/large print materials': 'Visual aids', 'I am flexible with venue accessibility requirements': 'Venue flexibility' }[a] || a)).join(', ') : 'None specified'}</div></div>
           <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Max hours/week</div><div style={{ fontWeight: '600' }}>{maxWeeklyHours} hours</div></div>
         </div>
       </div>

@@ -15,6 +15,13 @@ import api from '../services/api';
 // ============================================================
 
 const ACADEMIC_LEVEL_MAP = { primary: 'Primary', secondary: 'Secondary', jc: 'Junior College', poly: 'Polytechnic', ite: 'ITE', uni: 'University' };
+const PLANNING_AREAS_FULL = [
+  'Ang Mo Kio', 'Bedok', 'Bishan', 'Boon Lay', 'Bukit Batok', 'Bukit Merah',
+  'Bukit Panjang', 'Bukit Timah', 'Central Area', 'Choa Chu Kang', 'Clementi',
+  'Geylang', 'Hougang', 'Jurong East', 'Jurong West', 'Kallang', 'Marine Parade',
+  'Novena', 'Pasir Ris', 'Punggol', 'Queenstown', 'Sembawang', 'Sengkang',
+  'Serangoon', 'Tampines', 'Toa Payoh', 'Woodlands', 'Yishun',
+];
 const URGENCY_MAP = { exam: 'exam_soon', assignment: 'assignment_due', general: 'general_study' };
 const DURATION_HOURS_MAP = { '1 hour': 1, '2 hours': 2, '4 hours': 4 };
 
@@ -83,6 +90,8 @@ const RequestHelpFlow = () => {
   const [customTopicWarning, setCustomTopicWarning] = useState('');
   const [customTopicTargetSubject, setCustomTopicTargetSubject] = useState(null);
   const [accessibilityNotes, setAccessibilityNotes] = useState('');
+  const [accessibilityNeeds, setAccessibilityNeeds] = useState([]);
+  const [description, setDescription] = useState('');
 
   const [requestId, setRequestId] = useState(null);
   const [sessionId, setSessionId] = useState(null);
@@ -237,7 +246,7 @@ const RequestHelpFlow = () => {
       time_slots: timeSlots,
       duration_hours: Number(durationHours),
       urgency_category: URGENCY_MAP[urgency] || 'general_study',
-      accessibility_needs: [],
+      accessibility_needs: accessibilityNeeds,
       accessibility_notes: accessibilityNotes?.trim() || '',
     };
     return payload;
@@ -470,7 +479,7 @@ const RequestHelpFlow = () => {
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#1c1917' }}>
           What specifically are you struggling with? <span style={{ fontWeight: '400', color: '#a8a29e' }}>(optional)</span>
         </label>
-        <textarea rows={3} placeholder="Describe what you need help with..." style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+        <textarea rows={3} placeholder="Describe what you need help with..." value={description} onChange={(e) => setDescription(e.target.value)} style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }} />
       </div>
 
       {/* Urgency (SRS 2.2.3.9) */}
@@ -496,20 +505,6 @@ const RequestHelpFlow = () => {
           })}
         </div>
       </div>
-
-      {/* Confirmation Summary — grouped by subject (matching OfferToTutor style) */}
-      {hasAnyTopics() && (
-        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '16px', marginBottom: '32px' }}>
-          <div style={{ fontSize: '14px', fontWeight: '600', color: '#166534', marginBottom: '12px' }}>For confirmation, you need help with:</div>
-          {Object.entries(topicsBySubject).map(([subject, topics]) => (
-            topics.length > 0 && (
-              <div key={subject} style={{ fontSize: '14px', color: '#166534', marginBottom: '4px' }}>
-                <strong>{subject}</strong>: {topics.join(', ')}
-              </div>
-            )
-          ))}
-        </div>
-      )}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <button onClick={() => setCurrentStep(2)} disabled={!hasAnyTopics()} onMouseEnter={() => hasAnyTopics() && setHovered('cont1')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: hasAnyTopics() ? (hovered === 'cont1' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: hasAnyTopics() ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: hasAnyTopics() ? 'pointer' : 'not-allowed', fontSize: '15px', transition: 'all 0.2s ease' }}>Continue →</button>
@@ -575,14 +570,15 @@ const RequestHelpFlow = () => {
       {/* Planning Area with buttons + "Other" (matching Tutor UI) */}
       <div style={{ marginBottom: '28px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>
-          Preferred Area <span style={{ color: '#ef4444' }}>*</span>
+          Preferred Areas <span style={{ color: '#ef4444' }}>*</span>
+          <span style={{ fontWeight: '400', color: '#a8a29e', marginLeft: '8px' }}>(select one or more)</span>
         </label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
-          {['Ang Mo Kio', 'Bedok', 'Bishan', 'Boon Lay', 'Bukit Batok', 'Bukit Merah', 'Bukit Panjang', 'Bukit Timah', 'Central Area', 'Choa Chu Kang', 'Clementi', 'Geylang', 'Hougang', 'Jurong East', 'Jurong West', 'Kallang', 'Marine Parade', 'Novena', 'Pasir Ris', 'Punggol', 'Queenstown', 'Sembawang', 'Sengkang', 'Serangoon', 'Tampines', 'Toa Payoh', 'Woodlands', 'Yishun'].map((area) => {
+          {PLANNING_AREAS_FULL.map((area) => {
             const isSelected = !showOtherArea && planningAreas.includes(area);
             const h = hovered === `area-${area}`;
             return (
-              <button key={area} onClick={() => { setShowOtherArea(false); setPlanningAreas([area]); }} onMouseEnter={() => setHovered(`area-${area}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: h ? (isSelected ? '#145040' : '#f0faf5') : (isSelected ? '#1a5f4a' : '#fff'), color: isSelected ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (isSelected ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>{isSelected && '✓ '}{area}</button>
+              <button key={area} onClick={() => { setShowOtherArea(false); setPlanningAreas((prev) => prev.includes(area) ? prev.filter((a) => a !== area) : [...prev, area]); }} onMouseEnter={() => setHovered(`area-${area}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: h ? (isSelected ? '#145040' : '#f0faf5') : (isSelected ? '#1a5f4a' : '#fff'), color: isSelected ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (isSelected ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>{isSelected && '✓ '}{area}</button>
             );
           })}
           <button onClick={() => { setShowOtherArea(true); setPlanningAreas([]); }} onMouseEnter={() => setHovered('area-other')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === 'area-other' ? (showOtherArea ? '#145040' : '#f0faf5') : (showOtherArea ? '#1a5f4a' : '#fff'), color: showOtherArea ? '#fff' : (hovered === 'area-other' ? '#1a5f4a' : '#57534e'), border: `1px solid ${hovered === 'area-other' ? '#1a5f4a' : (showOtherArea ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>{showOtherArea && '✓ '}Other</button>
@@ -600,14 +596,30 @@ const RequestHelpFlow = () => {
         <p style={{ fontSize: '13px', color: '#a8a29e', marginBottom: '12px' }}>Select any accessibility requirements for the venue.</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '12px' }}>
           {['Wheelchair accessible venue required', 'Ground floor / lift access required', 'Hearing assistance / quiet environment needed', 'Visual aids / good lighting required'].map((opt, i) => (
-            <label key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-              <input type="checkbox" style={{ width: '20px', height: '20px', accentColor: '#1a5f4a' }} />
+            <label key={i} onClick={() => setAccessibilityNeeds((prev) => prev.includes(opt) ? prev.filter((o) => o !== opt) : [...prev, opt])} style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={accessibilityNeeds.includes(opt)} readOnly style={{ width: '20px', height: '20px', accentColor: '#1a5f4a' }} />
               <span style={{ fontSize: '14px', color: '#57534e' }}>{opt}</span>
             </label>
           ))}
         </div>
         <textarea rows={2} maxLength={256} placeholder="Additional accessibility notes (optional, max 256 characters)" value={accessibilityNotes} onChange={(e) => setAccessibilityNotes(e.target.value)} style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }} />
         <div style={{ textAlign: 'right', fontSize: '12px', color: '#a8a29e', marginTop: '4px' }}>{accessibilityNotes.length} / 256</div>
+      </div>
+
+      {/* Full Confirmation Summary */}
+      <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '20px', marginBottom: '32px' }}>
+        <div style={{ fontSize: '14px', fontWeight: '600', color: '#166534', marginBottom: '16px' }}>For confirmation, you need help with:</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '14px' }}>
+          <div><span style={{ color: '#78716c', marginRight: '8px' }}>Academic Level:</span><strong style={{ color: '#166534' }}>{ACADEMIC_LEVEL_MAP[academicLevel] ?? academicLevel}</strong></div>
+          <div><span style={{ color: '#78716c', marginRight: '8px' }}>Subjects:</span><strong style={{ color: '#166534' }}>{[...selectedSubjects, ...(showOtherSubject && otherSubject ? [otherSubject] : [])].filter(Boolean).join(', ') || '—'}</strong></div>
+          <div><span style={{ color: '#78716c', marginRight: '8px' }}>Topics:</span><strong style={{ color: '#166534' }}>{Object.entries(topicsBySubject).filter(([, t]) => t.length > 0).map(([s, t]) => `${s}: ${t.join(', ')}`).join(' | ') || '—'}</strong></div>
+          <div><span style={{ color: '#78716c', marginRight: '8px' }}>What you need help with:</span><strong style={{ color: '#166534' }}>{accessibilityNotes.trim() || 'None'}</strong></div>
+          <div><span style={{ color: '#78716c', marginRight: '8px' }}>Urgency:</span><strong style={{ color: '#166534' }}>{urgency === 'exam' ? 'Exam Soon' : urgency === 'assignment' ? 'Assignment Due' : 'General Study'}</strong></div>
+          <div><span style={{ color: '#78716c', marginRight: '8px' }}>Preferred times:</span><strong style={{ color: '#166534' }}>{selectedDates.length > 0 && selectedTimeSlots.length > 0 ? (() => { const times = ['9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM']; const fmt = (t) => (t || '').replace(':00 ', '').toLowerCase(); const sel = [...selectedTimeSlots].sort((a, b) => a - b); const start = fmt(times[sel[0]]); const end = fmt(times[Math.min(sel[sel.length - 1] + 1, 11)] || times[11]); return selectedDates.map((d) => `${d.day} ${d.date} Jan ${start}-${end}`).join(', '); })() : '—'}</strong></div>
+          <div><span style={{ color: '#78716c', marginRight: '8px' }}>Preferred areas:</span><strong style={{ color: '#166534' }}>{(showOtherArea && otherArea ? [otherArea] : planningAreas).join(', ') || '—'}</strong></div>
+          <div><span style={{ color: '#78716c', marginRight: '8px' }}>Accessibility needs:</span><strong style={{ color: '#166534' }}>{accessibilityNeeds.length > 0 ? accessibilityNeeds.map((a) => ({ 'Wheelchair accessible venue required': 'Wheelchair access', 'Ground floor / lift access required': 'Ground floor / lift access', 'Hearing assistance / quiet environment needed': 'Hearing assistance', 'Visual aids / good lighting required': 'Visual aids' }[a] || a)).join(', ') : 'None specified'}</strong></div>
+          <div><span style={{ color: '#78716c', marginRight: '8px' }}>Session duration:</span><strong style={{ color: '#166534' }}>{durationHours} hour{durationHours > 1 ? 's' : ''}</strong></div>
+        </div>
       </div>
 
       {error && (
