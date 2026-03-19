@@ -129,7 +129,7 @@ const RequestHelpFlow = () => {
   });
 
   const mapVenueToUi = (v) => ({
-    id: v.id,
+    id: v.venue_id ?? v.id,
     name: v.name ?? '—',
     type: v.venue_type ?? 'Library',
     address: v.address ?? v.planning_area ?? '—',
@@ -292,9 +292,18 @@ const RequestHelpFlow = () => {
     }
   };
 
-  const handleProceedToPayment = () => {
+  const handleProceedToPayment = async () => {
+    if (!sessionId || !selectedVenue) return;
     setError(null);
-    setCurrentStep(5);
+    setLoading(true);
+    try {
+      await api.post(`/sessions/${sessionId}/venue`, { venue_id: selectedVenue });
+      setCurrentStep(5);
+    } catch (err) {
+      setError(err.response?.data?.detail ?? err.message ?? 'Failed to set venue');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handlePay = async () => {
@@ -317,6 +326,7 @@ const RequestHelpFlow = () => {
       const params = {};
       if (requestId) params.request_id = requestId;
       if (tutorId) params.tutor_id = tutorId;
+      setSelectedVenue(null);
       api.get('/venues/recommend', { params })
         .then(({ data }) => {
           const list = Array.isArray(data) ? data : (data.venues ?? data.recommendations ?? []);
@@ -805,9 +815,12 @@ const RequestHelpFlow = () => {
         ))}
       </div>
 
+      {error && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '12px', marginBottom: '20px', fontSize: '14px', color: '#b91c1c' }}>{error}</div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <button onClick={() => setCurrentStep(3)} onMouseEnter={() => setHovered('back4')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 24px', background: hovered === 'back4' ? '#f0faf5' : '#fff', color: '#57534e', border: `1px solid ${hovered === 'back4' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>← Back</button>
-        <button onClick={handleProceedToPayment} disabled={!selectedVenue} onMouseEnter={() => selectedVenue && setHovered('pay4')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: selectedVenue ? (hovered === 'pay4' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: selectedVenue ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedVenue ? 'pointer' : 'not-allowed', transition: 'all 0.2s ease' }}>Proceed to Payment →</button>
+        <button onClick={handleProceedToPayment} disabled={!selectedVenue || loading} onMouseEnter={() => selectedVenue && !loading && setHovered('pay4')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: selectedVenue && !loading ? (hovered === 'pay4' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: selectedVenue && !loading ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedVenue && !loading ? 'pointer' : 'not-allowed', transition: 'all 0.2s ease' }}>{loading ? 'Setting venue...' : 'Proceed to Payment →'}</button>
       </div>
     </div>
   );
