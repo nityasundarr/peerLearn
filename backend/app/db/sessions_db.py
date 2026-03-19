@@ -158,16 +158,11 @@ def list_sessions(
 def update_status(session_id: str, new_status: str) -> dict:
     """Set status to new_status. Service layer must validate the transition."""
     try:
-        result = (
-            supabase.table("tutoring_sessions")
-            .update({"status": new_status})
-            .eq("id", session_id)
-            .select(_SESSION_COLS)
-            .execute()
-        )
-        if not result.data:
+        supabase.table("tutoring_sessions").update({"status": new_status}).eq("id", session_id).execute()
+        row = get_session(session_id)
+        if not row:
             raise NotFoundError("Session not found.")
-        return result.data[0]
+        return row
     except NotFoundError:
         raise
     except Exception as exc:
@@ -209,18 +204,13 @@ def set_proposed_slots(session_id: str, slots: list[dict]) -> dict:
 def confirm_slot(session_id: str, scheduled_at: str) -> dict:
     """Set scheduled_at and transition status to pending_confirmation."""
     try:
-        result = (
-            supabase.table("tutoring_sessions")
-            .update(
-                {"scheduled_at": scheduled_at, "status": "pending_confirmation"}
-            )
-            .eq("id", session_id)
-            .select(_SESSION_COLS)
-            .execute()
-        )
-        if result is None or not result.data or len(result.data) == 0:
+        supabase.table("tutoring_sessions").update(
+            {"scheduled_at": scheduled_at, "status": "pending_confirmation"}
+        ).eq("id", session_id).execute()
+        row = get_session(session_id)
+        if not row:
             raise NotFoundError("Session not found.")
-        return result.data[0]
+        return row
     except NotFoundError:
         raise
     except Exception as exc:
@@ -236,16 +226,11 @@ def set_outcome_field(session_id: str, field: str, value: str) -> dict:
     if field not in {"outcome_tutor", "outcome_tutee"}:
         raise AppError(422, "Invalid outcome field.")
     try:
-        result = (
-            supabase.table("tutoring_sessions")
-            .update({field: value})
-            .eq("id", session_id)
-            .select(_SESSION_COLS)
-            .execute()
-        )
-        if not result.data:
+        supabase.table("tutoring_sessions").update({field: value}).eq("id", session_id).execute()
+        row = get_session(session_id)
+        if not row:
             raise NotFoundError("Session not found.")
-        return result.data[0]
+        return row
     except NotFoundError:
         raise
     except Exception as exc:
@@ -281,16 +266,11 @@ def lock_fee_and_confirm(session_id: str, fee: float) -> dict:
     Hard Rule 9: fee is ALWAYS computed server-side — never from client input.
     """
     try:
-        result = (
-            supabase.table("tutoring_sessions")
-            .update({"fee": fee, "status": "confirmed"})
-            .eq("id", session_id)
-            .select(_SESSION_COLS)
-            .execute()
-        )
-        if not result.data:
+        supabase.table("tutoring_sessions").update({"fee": fee, "status": "confirmed"}).eq("id", session_id).execute()
+        row = get_session(session_id)
+        if not row:
             raise NotFoundError("Session not found.")
-        return result.data[0]
+        return row
     except NotFoundError:
         raise
     except Exception as exc:
@@ -318,16 +298,11 @@ def set_venue(
         else:
             raise AppError(422, "Either venue_id or venue_manual must be provided.")
 
-        result = (
-            supabase.table("tutoring_sessions")
-            .update(updates)
-            .eq("id", session_id)
-            .select(_SESSION_COLS)
-            .execute()
-        )
-        if result is None or not result.data or len(result.data) == 0:
+        supabase.table("tutoring_sessions").update(updates).eq("id", session_id).execute()
+        row = get_session(session_id)
+        if not row:
             raise NotFoundError("Session not found.")
-        return result.data[0]
+        return row
     except (AppError, NotFoundError):
         raise
     except Exception as exc:

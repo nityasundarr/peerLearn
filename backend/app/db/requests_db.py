@@ -103,17 +103,11 @@ def list_requests_by_tutee(tutee_id: str) -> list[dict]:
 def update_request(request_id: str, tutee_id: str, data: dict) -> dict:
     """Partial update — only updates the fields present in data."""
     try:
-        result = (
-            supabase.table("tutoring_requests")
-            .update(data)
-            .eq("id", request_id)
-            .eq("tutee_id", tutee_id)  # ownership enforced in DB query
-            .select(_REQUEST_COLS)
-            .execute()
-        )
-        if result is None or not result.data:
+        supabase.table("tutoring_requests").update(data).eq("id", request_id).eq("tutee_id", tutee_id).execute()
+        row = get_request_by_id_and_tutee(request_id, tutee_id)
+        if row is None:
             raise NotFoundError("Request not found or access denied.")
-        return result.data[0]
+        return row
     except NotFoundError:
         raise
     except Exception as exc:
@@ -123,20 +117,13 @@ def update_request(request_id: str, tutee_id: str, data: dict) -> dict:
 def cancel_request(request_id: str, tutee_id: str) -> dict:
     """Set status = cancelled. Returns the updated row."""
     try:
-        result = (
-            supabase.table("tutoring_requests")
-            .update({"status": "cancelled"})
-            .eq("id", request_id)
-            .eq("tutee_id", tutee_id)
-            .eq("status", "open")  # only open requests can be cancelled
-            .select(_REQUEST_COLS)
-            .execute()
-        )
-        if result is None or not result.data or len(result.data) == 0:
+        row = get_request_by_id_and_tutee(request_id, tutee_id)
+        if row is None or row.get("status") != "open":
             raise NotFoundError(
                 "Request not found, already cancelled, or access denied."
             )
-        return result.data[0]
+        supabase.table("tutoring_requests").update({"status": "cancelled"}).eq("id", request_id).eq("tutee_id", tutee_id).eq("status", "open").execute()
+        return get_request_by_id_and_tutee(request_id, tutee_id)
     except NotFoundError:
         raise
     except Exception as exc:

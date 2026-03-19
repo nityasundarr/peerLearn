@@ -156,22 +156,13 @@ def decide_appeal(
 ) -> dict:
     """Admin records a decision on a pending appeal."""
     try:
-        result = (
-            supabase.table("penalty_appeals")
-            .update(
-                {
-                    "status": outcome,
-                    "outcome_notes": outcome_notes,
-                    "decided_at": decided_at,
-                }
-            )
-            .eq("id", appeal_id)
-            .select(_APPEAL_COLS)
-            .execute()
-        )
-        if result is None or not result.data or len(result.data) == 0:
+        supabase.table("penalty_appeals").update(
+            {"status": outcome, "outcome_notes": outcome_notes, "decided_at": decided_at}
+        ).eq("id", appeal_id).execute()
+        row = get_appeal_by_id(appeal_id)
+        if row is None:
             raise NotFoundError("Appeal not found.")
-        return result.data[0]
+        return row
     except NotFoundError:
         raise
     except Exception as exc:

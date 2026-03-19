@@ -121,16 +121,11 @@ def list_complaints(status_filter: str | None = None) -> list[dict]:
 
 def update_complaint_status(complaint_id: str, new_status: str) -> dict:
     try:
-        result = (
-            supabase.table("complaints")
-            .update({"status": new_status})
-            .eq("id", complaint_id)
-            .select(_COMPLAINT_COLS)
-            .execute()
-        )
-        if result is None or not result.data or len(result.data) == 0:
+        supabase.table("complaints").update({"status": new_status}).eq("id", complaint_id).execute()
+        row = get_complaint_by_id(complaint_id)
+        if row is None:
             raise NotFoundError("Complaint not found.")
-        return result.data[0]
+        return row
     except NotFoundError:
         raise
     except Exception as exc:

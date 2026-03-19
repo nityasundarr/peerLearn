@@ -58,6 +58,21 @@ def create_payment_transaction(session_id: str, amount: float) -> dict:
         raise _db_error("create_payment_transaction", exc) from exc
 
 
+def get_transaction_by_id(transaction_id: str) -> dict | None:
+    """Return a payment_transaction by id."""
+    try:
+        result = (
+            supabase.table("payment_transactions")
+            .select(_TX_COLS)
+            .eq("id", transaction_id)
+            .maybe_single()
+            .execute()
+        )
+        return result.data if result is not None and result.data is not None else None
+    except Exception as exc:
+        raise _db_error("get_transaction_by_id", exc) from exc
+
+
 def get_payment_by_session(session_id: str) -> dict | None:
     """Return the most recent payment_transaction for a session."""
     try:
@@ -84,16 +99,11 @@ def update_payment_status(
         updates: dict = {"status": status}
         if provider_transaction_id:
             updates["provider_transaction_id"] = provider_transaction_id
-        result = (
-            supabase.table("payment_transactions")
-            .update(updates)
-            .eq("id", transaction_id)
-            .select(_TX_COLS)
-            .execute()
-        )
-        if result is None or not result.data or len(result.data) == 0:
+        supabase.table("payment_transactions").update(updates).eq("id", transaction_id).execute()
+        row = get_transaction_by_id(transaction_id)
+        if row is None:
             raise NotFoundError("Payment transaction not found.")
-        return result.data[0]
+        return row
     except NotFoundError:
         raise
     except Exception as exc:

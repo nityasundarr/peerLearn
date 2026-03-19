@@ -86,16 +86,11 @@ def create_profile(tutor_id: str, data: dict) -> dict:
 def update_profile(tutor_id: str, data: dict) -> dict:
     """Full replacement of profile fields (PUT semantics). Returns updated row."""
     try:
-        result = (
-            supabase.table("tutor_profiles")
-            .update(data)
-            .eq("user_id", tutor_id)
-            .select(_PROFILE_COLS)
-            .execute()
-        )
-        if result is None or not result.data or len(result.data) == 0:
+        supabase.table("tutor_profiles").update(data).eq("user_id", tutor_id).execute()
+        row = get_profile(tutor_id)
+        if row is None:
             raise _db_error("update_profile", RuntimeError("Update returned no data"))
-        return result.data[0]
+        return row
     except Exception as exc:
         raise _db_error("update_profile", exc) from exc
 
@@ -103,16 +98,11 @@ def update_profile(tutor_id: str, data: dict) -> dict:
 def set_active_mode(tutor_id: str, is_active: bool) -> dict:
     """Toggle is_active_mode. Returns the updated profile row."""
     try:
-        result = (
-            supabase.table("tutor_profiles")
-            .update({"is_active_mode": is_active})
-            .eq("user_id", tutor_id)
-            .select(_PROFILE_COLS)
-            .execute()
-        )
-        if result is None or not result.data or len(result.data) == 0:
+        supabase.table("tutor_profiles").update({"is_active_mode": is_active}).eq("user_id", tutor_id).execute()
+        row = get_profile(tutor_id)
+        if row is None:
             raise _db_error("set_active_mode", RuntimeError("Update returned no data"))
-        return result.data[0]
+        return row
     except Exception as exc:
         raise _db_error("set_active_mode", exc) from exc
 

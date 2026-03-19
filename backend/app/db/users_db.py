@@ -68,16 +68,8 @@ def update_user_profile(user_id: str, updates: dict) -> dict | None:
     Caller must pass only the fields that changed (use model_dump(exclude_unset=True)).
     """
     try:
-        result = (
-            supabase.table("users")
-            .update(updates)
-            .eq("id", user_id)
-            .select(_PROFILE_COLUMNS)
-            .execute()
-        )
-        if result is None:
-            return None
-        return result.data[0]
+        supabase.table("users").update(updates).eq("id", user_id).execute()
+        return get_user_profile(user_id)
     except Exception as exc:
         logger.error("DB error: %s", exc)
         return None
@@ -111,16 +103,8 @@ def update_user_privacy(user_id: str, updates: dict) -> dict | None:
     Returns the updated preference row.
     """
     try:
-        result = (
-            supabase.table("users")
-            .update(updates)
-            .eq("id", user_id)
-            .select(_PRIVACY_COLUMNS)
-            .execute()
-        )
-        if result is None:
-            return None
-        return result.data[0]
+        supabase.table("users").update(updates).eq("id", user_id).execute()
+        return get_user_privacy(user_id)
     except Exception as exc:
         logger.error("DB error: %s", exc)
         return None

@@ -91,17 +91,11 @@ def mark_notification_read(notification_id: str, user_id: str) -> dict:
     Returns the updated row.
     """
     try:
-        result = (
-            supabase.table("notifications")
-            .update({"is_read": True})
-            .eq("id", notification_id)
-            .eq("user_id", user_id)   # ownership check — never trust client-supplied IDs
-            .select(_COLUMNS)
-            .execute()
-        )
-        if result is None or not result.data or len(result.data) == 0:
+        supabase.table("notifications").update({"is_read": True}).eq("id", notification_id).eq("user_id", user_id).execute()
+        row = get_notification_by_id(notification_id, user_id)
+        if row is None:
             raise NotFoundError("Notification not found.")
-        return result.data[0]
+        return row
     except NotFoundError:
         raise
     except Exception as exc:
@@ -139,14 +133,8 @@ def mark_all_read(user_id: str) -> int:
     Returns the number of rows updated.
     """
     try:
-        result = (
-            supabase.table("notifications")
-            .update({"is_read": True})
-            .eq("user_id", user_id)
-            .eq("is_read", False)
-            .select("id", count="exact")
-            .execute()
-        )
-        return result.count if result is not None and result.count is not None else 0
+        count_before = get_unread_count(user_id)
+        supabase.table("notifications").update({"is_read": True}).eq("user_id", user_id).eq("is_read", False).execute()
+        return count_before
     except Exception as exc:
         raise _db_error("mark_all_read", exc) from exc
