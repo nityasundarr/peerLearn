@@ -10,6 +10,14 @@ import api from '../services/api';
 const DAY_TO_DOW = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0 };
 const TIME_TO_HOUR = { '9 AM': 9, '10 AM': 10, '11 AM': 11, '12 PM': 12, '1 PM': 13, '2 PM': 14, '3 PM': 15, '4 PM': 16, '5 PM': 17, '6 PM': 18, '7 PM': 19, '8 PM': 20 };
 
+const PLANNING_AREAS_FULL = [
+  'Ang Mo Kio', 'Bedok', 'Bishan', 'Boon Lay', 'Bukit Batok', 'Bukit Merah',
+  'Bukit Panjang', 'Bukit Timah', 'Central Area', 'Choa Chu Kang', 'Clementi',
+  'Geylang', 'Hougang', 'Jurong East', 'Jurong West', 'Kallang', 'Marine Parade',
+  'Novena', 'Pasir Ris', 'Punggol', 'Queenstown', 'Sembawang', 'Sengkang',
+  'Serangoon', 'Tampines', 'Toa Payoh', 'Woodlands', 'Yishun',
+];
+
 // Stable components at module level to prevent remount-on-typing (which caused scroll-to-top)
 const OfferFlowHeader = ({ onCancel }) => {
   const [h, setH] = useState(false);
@@ -47,6 +55,7 @@ const OfferStepIndicator = ({ currentStep }) => (
 const OfferToTutorFlow = () => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
+  const [selectedAcademicLevels, setSelectedAcademicLevels] = useState(['Secondary', 'Junior College']);
   const [selectedSubjects, setSelectedSubjects] = useState(['Mathematics']);
   const [topicsBySubject, setTopicsBySubject] = useState({ Mathematics: ['Calculus', 'Integration'] });
   const [showOtherSubject, setShowOtherSubject] = useState(false);
@@ -140,6 +149,12 @@ const OfferToTutorFlow = () => {
     }
   };
 
+  const handleAcademicLevelToggle = (level) => {
+    setSelectedAcademicLevels((prev) =>
+      prev.includes(level) ? prev.filter((l) => l !== level) : [...prev, level]
+    );
+  };
+
   const handleOtherSubjectToggle = () => {
     setShowOtherSubject(!showOtherSubject);
     if (showOtherSubject) {
@@ -156,6 +171,38 @@ const OfferToTutorFlow = () => {
       topics.map((topic) => ({ subject, topic }))
     );
 
+  const formatTopicsSummary = () =>
+    Object.entries(topicsBySubject)
+      .filter(([, topics]) => topics.length > 0)
+      .map(([subject, topics]) => `${subject}: ${topics.join(', ')}`)
+      .join(' | ');
+
+  const formatAvailabilitySummary = () => {
+    const timesOrder = ['9 AM', '10 AM', '11 AM', '12 PM', '1 PM', '2 PM', '3 PM', '4 PM', '5 PM', '6 PM', '7 PM', '8 PM'];
+    const byDay = {};
+    for (const slotId of selectedSlots) {
+      const [day, time] = slotId.split('-');
+      if (!byDay[day]) byDay[day] = [];
+      byDay[day].push(time);
+    }
+    const dayOrder = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const fmt = (t) => {
+      const h = TIME_TO_HOUR[t] ?? 9;
+      if (h === 12) return '12pm';
+      if (h > 12) return `${h - 12}pm`;
+      return `${h}am`;
+    };
+    return dayOrder
+      .filter((d) => byDay[d])
+      .map((day) => {
+        const times = byDay[day].sort((a, b) => timesOrder.indexOf(a) - timesOrder.indexOf(b));
+        const first = times[0];
+        const last = times[times.length - 1];
+        return `${day} ${fmt(first)}-${fmt(last)}`;
+      })
+      .join(', ');
+  };
+
   const slotsToAvailability = () => {
     return selectedSlots.map((slotId) => {
       const [day, time] = slotId.split('-');
@@ -163,16 +210,8 @@ const OfferToTutorFlow = () => {
     });
   };
 
-  const handleTutorModeToggle = async () => {
-    const next = !tutorModeActive;
-    setTutorModeActive(next);
-    setError(null);
-    try {
-      await api.patch('/tutor-profile/mode', { is_active_mode: next });
-    } catch (err) {
-      setError(err.response?.data?.detail ?? err.message ?? 'Failed to update mode');
-      setTutorModeActive(!next);
-    }
+  const handleTutorModeToggle = () => {
+    setTutorModeActive((prev) => !prev);
   };
 
   const handleFormSubmit = async () => {
@@ -182,7 +221,7 @@ const OfferToTutorFlow = () => {
       const areas = showOtherArea && otherArea ? [otherArea] : planningAreas;
       const subjects = [...selectedSubjects, ...(showOtherSubject && (topicsBySubject['Other']?.length ?? 0) > 0 ? ['Other'] : [])];
       await api.post('/tutor-profile', {
-        academic_levels: ['Primary', 'Secondary', 'Junior College', 'Polytechnic', 'ITE', 'University'],
+        academic_levels: selectedAcademicLevels,
         subjects,
         tutor_topics: buildTutorTopics(),
         planning_areas: areas,
@@ -192,6 +231,7 @@ const OfferToTutorFlow = () => {
         is_active_mode: tutorModeActive,
       });
       await api.put('/tutor-profile/availability', { slots: slotsToAvailability() });
+      await api.patch('/tutor-profile/mode', { is_active_mode: tutorModeActive });
       navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.detail ?? err.message ?? 'Failed to activate profile');
@@ -212,11 +252,15 @@ const OfferToTutorFlow = () => {
           Academic Levels you can teach <span style={{ color: '#ef4444' }}>*</span>
         </label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-          {['Primary', 'Secondary', 'Junior College', 'Polytechnic', 'ITE', 'University'].map(level => (
-            <button key={level} onMouseEnter={() => setHovered(`acad-${level}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 20px', background: hovered === `acad-${level}` ? '#f0faf5' : '#fff', color: hovered === `acad-${level}` ? '#1a5f4a' : '#57534e', border: `2px solid ${hovered === `acad-${level}` ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px', transition: 'all 0.15s ease' }}>
-              {level}
-            </button>
-          ))}
+          {['Primary', 'Secondary', 'Junior College', 'Polytechnic', 'ITE', 'University'].map(level => {
+            const sel = selectedAcademicLevels.includes(level);
+            const h = hovered === `acad-${level}`;
+            return (
+              <button key={level} onClick={() => handleAcademicLevelToggle(level)} onMouseEnter={() => setHovered(`acad-${level}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 20px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `2px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px', transition: 'all 0.15s ease' }}>
+                {sel && '✓ '}{level}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -333,6 +377,11 @@ const OfferToTutorFlow = () => {
       {hasAnyTopics() && (
         <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '16px', marginBottom: '32px' }}>
           <div style={{ fontSize: '14px', fontWeight: '600', color: '#166534', marginBottom: '12px' }}>For confirmation, you&apos;ll teach:</div>
+          {selectedAcademicLevels.length > 0 && (
+            <div style={{ fontSize: '14px', color: '#166534', marginBottom: '8px' }}>
+              <strong>Levels:</strong> {selectedAcademicLevels.join(', ')}
+            </div>
+          )}
           {Object.entries(topicsBySubject).map(([subject, topics]) => (
             topics.length > 0 && (
               <div key={subject} style={{ fontSize: '14px', color: '#166534', marginBottom: '4px' }}>
@@ -344,7 +393,7 @@ const OfferToTutorFlow = () => {
       )}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button onClick={() => setCurrentStep(2)} disabled={!hasAnyTopics()} onMouseEnter={() => hasAnyTopics() && setHovered('cont1')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: hasAnyTopics() ? (hovered === 'cont1' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: hasAnyTopics() ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: hasAnyTopics() ? 'pointer' : 'not-allowed', transition: 'all 0.2s ease' }}>Continue →</button>
+        <button onClick={() => setCurrentStep(2)} disabled={!hasAnyTopics() || selectedAcademicLevels.length === 0} onMouseEnter={() => hasAnyTopics() && selectedAcademicLevels.length > 0 && setHovered('cont1')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: hasAnyTopics() && selectedAcademicLevels.length > 0 ? (hovered === 'cont1' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: hasAnyTopics() && selectedAcademicLevels.length > 0 ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: hasAnyTopics() && selectedAcademicLevels.length > 0 ? 'pointer' : 'not-allowed', transition: 'all 0.2s ease' }}>Continue →</button>
       </div>
     </div>
   );
@@ -449,10 +498,10 @@ const OfferToTutorFlow = () => {
       <div style={{ marginBottom: '28px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>Preferred tutoring areas</label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
-          {['Clementi', 'Jurong East', 'Jurong West', 'Bukit Batok', 'Queenstown'].map((area) => {
+          {PLANNING_AREAS_FULL.map((area) => {
             const isSelected = !showOtherArea && planningAreas.includes(area);
             return (
-              <button key={area} onClick={() => { setShowOtherArea(false); setPlanningAreas(planningAreas.includes(area) ? planningAreas.filter((a) => a !== area) : [...planningAreas.filter((a) => !['Clementi', 'Jurong East', 'Jurong West', 'Bukit Batok', 'Queenstown'].includes(a)), area]); }} style={{ padding: '10px 16px', background: isSelected ? '#1a5f4a' : '#fff', color: isSelected ? '#fff' : '#57534e', border: `1px solid ${isSelected ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>{isSelected && '✓ '}{area}</button>
+              <button key={area} onClick={() => { setShowOtherArea(false); setPlanningAreas(planningAreas.includes(area) ? planningAreas.filter((a) => a !== area) : [...planningAreas.filter((a) => !PLANNING_AREAS_FULL.includes(a)), area]); }} style={{ padding: '10px 16px', background: isSelected ? '#1a5f4a' : '#fff', color: isSelected ? '#fff' : '#57534e', border: `1px solid ${isSelected ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>{isSelected && '✓ '}{area}</button>
             );
           })}
           <button onClick={() => { setShowOtherArea(true); setPlanningAreas([]); }} style={{ padding: '10px 16px', background: showOtherArea ? '#1a5f4a' : '#fff', color: showOtherArea ? '#fff' : '#57534e', border: `1px solid ${showOtherArea ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>{showOtherArea && '✓ '}Other</button>
@@ -509,10 +558,13 @@ const OfferToTutorFlow = () => {
       {/* Summary Card */}
       <div style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #2d8a6e 100%)', borderRadius: '16px', padding: '24px', color: '#fff', marginBottom: '24px' }}>
         <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>📋 Your Tutor Profile Summary</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontSize: '14px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '14px' }}>
+          {selectedAcademicLevels.length > 0 && (
+            <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Academic levels</div><div style={{ fontWeight: '600' }}>{selectedAcademicLevels.join(', ')}</div></div>
+          )}
           <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Subjects</div><div style={{ fontWeight: '600' }}>{selectedSubjects.join(', ')}</div></div>
-          <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Topics</div><div style={{ fontWeight: '600' }}>{getAllTopics().length} topics</div></div>
-          <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Availability</div><div style={{ fontWeight: '600' }}>{selectedSlots.length} time slots</div></div>
+          <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Topics</div><div style={{ fontWeight: '600' }}>{formatTopicsSummary() || '—'}</div></div>
+          <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Availability</div><div style={{ fontWeight: '600' }}>{formatAvailabilitySummary() || '—'}</div></div>
           <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Max hours/week</div><div style={{ fontWeight: '600' }}>{maxWeeklyHours} hours</div></div>
         </div>
       </div>
