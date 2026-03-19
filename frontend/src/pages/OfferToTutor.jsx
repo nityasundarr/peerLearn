@@ -55,6 +55,8 @@ const OfferToTutorFlow = () => {
   const [planningAreas, setPlanningAreas] = useState(['Clementi', 'Jurong East']);
   const [otherArea, setOtherArea] = useState('');
   const [customTopicInput, setCustomTopicInput] = useState('');
+  const [customTopicWarning, setCustomTopicWarning] = useState('');
+  const [customTopicTargetSubject, setCustomTopicTargetSubject] = useState(null);
   const [accessibilityNotes, setAccessibilityNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -73,6 +75,7 @@ const OfferToTutorFlow = () => {
   const hasAnyTopics = () => getAllTopics().length > 0;
 
   const toggleTopic = (subjectKey, topic) => {
+    setCustomTopicTargetSubject(subjectKey);
     setTopicsBySubject((prev) => {
       const current = prev[subjectKey] || [];
       const has = current.includes(topic);
@@ -88,12 +91,36 @@ const OfferToTutorFlow = () => {
     });
   };
 
-  const addCustomTopic = (topic) => {
-    const targetKey = showOtherSubject ? 'Other' : (selectedSubjects[0] || 'Other');
+  const CUSTOM_TOPIC_REGEX = /^[a-zA-Z0-9\s\-']+$/;
+
+  const handleAddCustomTopic = () => {
+    setCustomTopicWarning('');
+    const trimmed = customTopicInput.trim();
+    if (selectedSubjects.length === 0 && !showOtherSubject) {
+      setCustomTopicWarning('Please select a subject first');
+      return;
+    }
+    if (!trimmed) {
+      setCustomTopicWarning('Please type a topic name before clicking Add');
+      return;
+    }
+    if (trimmed.length > 100) {
+      setCustomTopicWarning('Topic must be 1-100 characters');
+      return;
+    }
+    if (!CUSTOM_TOPIC_REGEX.test(trimmed)) {
+      setCustomTopicWarning('Topic must use only letters, numbers, spaces, hyphens, apostrophes');
+      return;
+    }
+    const availableSubjects = [...selectedSubjects, ...(showOtherSubject ? ['Other'] : [])].filter(Boolean);
+    const targetKey = availableSubjects.length === 1
+      ? availableSubjects[0]
+      : (availableSubjects.includes(customTopicTargetSubject) ? customTopicTargetSubject : availableSubjects[0]);
     setTopicsBySubject((prev) => ({
       ...prev,
-      [targetKey]: [...(prev[targetKey] || []), topic],
+      [targetKey]: [...(prev[targetKey] || []), trimmed],
     }));
+    setCustomTopicInput('');
   };
 
   const handleSubjectToggle = (subjectName) => {
@@ -225,6 +252,7 @@ const OfferToTutorFlow = () => {
             const subject = allSubjects.find(s => s.name === subjectName);
             if (!subject) return null;
             const subjectTopics = topicsBySubject[subjectName] || [];
+            const customTopics = subjectTopics.filter((t) => !subject.topics.includes(t));
             return (
               <div key={subjectName} style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px', marginBottom: '12px' }}>
                 <div style={{ fontWeight: '600', color: '#1c1917', marginBottom: '12px' }}>📚 {subjectName}</div>
@@ -232,11 +260,16 @@ const OfferToTutorFlow = () => {
                   {subject.topics.map(topic => {
                     const isSelected = subjectTopics.includes(topic);
                     return (
-                      <button key={topic} onClick={() => toggleTopic(subjectName, topic)} style={{ padding: '8px 14px', background: isSelected ? '#1a5f4a' : '#fff', color: isSelected ? '#fff' : '#57534e', border: `1px solid ${isSelected ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px' }}>
+                      <button key={topic} type="button" onClick={() => toggleTopic(subjectName, topic)} style={{ padding: '8px 14px', background: isSelected ? '#1a5f4a' : '#fff', color: isSelected ? '#fff' : '#57534e', border: `1px solid ${isSelected ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px' }}>
                         {isSelected && '✓ '}{topic}
                       </button>
                     );
                   })}
+                  {customTopics.map(topic => (
+                    <button key={topic} type="button" onClick={() => toggleTopic(subjectName, topic)} style={{ padding: '8px 14px', background: '#1a5f4a', color: '#fff', border: '1px solid #1a5f4a', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px' }}>
+                      ✓ {topic}
+                    </button>
+                  ))}
                 </div>
               </div>
             );
@@ -245,6 +278,13 @@ const OfferToTutorFlow = () => {
             <div style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px', marginBottom: '12px' }}>
               <div style={{ fontWeight: '600', color: '#1c1917', marginBottom: '12px' }}>📚 Other Topics</div>
               <p style={{ fontSize: '13px', color: '#57534e', marginBottom: '8px' }}>Add custom topics below.</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+                {(topicsBySubject['Other'] || []).map(topic => (
+                  <button key={topic} type="button" onClick={() => toggleTopic('Other', topic)} style={{ padding: '8px 14px', background: '#1a5f4a', color: '#fff', border: '1px solid #1a5f4a', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px' }}>
+                    ✓ {topic}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -252,13 +292,33 @@ const OfferToTutorFlow = () => {
 
       {/* Custom Topic */}
       <div style={{ marginBottom: '40px' }}>
-        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#1c1917' }}>
+        <div style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#1c1917' }}>
           Add Custom Topic <span style={{ fontWeight: '400', color: '#a8a29e' }}>(optional, 1-100 chars)</span>
-        </label>
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <input type="text" placeholder="Type a topic..." maxLength={100} value={customTopicInput} onChange={(e) => setCustomTopicInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); const t = customTopicInput.trim(); if (t) { addCustomTopic(t); setCustomTopicInput(''); } } }} style={{ flex: 1, padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', boxSizing: 'border-box' }} />
-          <button type="button" onClick={() => { const t = customTopicInput.trim(); if (t) { addCustomTopic(t); setCustomTopicInput(''); } }} style={{ padding: '14px 24px', background: '#f5f5f4', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '10px', cursor: 'pointer', fontWeight: '500' }}>+ Add</button>
         </div>
+        {(selectedSubjects.length > 0 || showOtherSubject) && (() => {
+          const availableSubjects = [...selectedSubjects, ...(showOtherSubject ? ['Other'] : [])].filter(Boolean);
+          const showDropdown = availableSubjects.length > 1;
+          const effectiveTarget = availableSubjects.length === 1 ? availableSubjects[0] : (availableSubjects.includes(customTopicTargetSubject) ? customTopicTargetSubject : availableSubjects[0]);
+          return (
+            <div style={{ fontSize: '13px', color: '#57534e', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span>Add custom topic to:</span>
+              {showDropdown ? (
+                <select value={effectiveTarget} onChange={(e) => setCustomTopicTargetSubject(e.target.value)} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #e7e5e4', fontSize: '14px', background: '#fff', cursor: 'pointer' }}>
+                  {availableSubjects.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              ) : (
+                <span style={{ fontWeight: '600', color: '#1c1917' }}>{effectiveTarget}</span>
+              )}
+            </div>
+          );
+        })()}
+        <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+          <input type="text" placeholder="Type a topic..." maxLength={100} value={customTopicInput} onChange={(e) => { setCustomTopicInput(e.target.value); setCustomTopicWarning(''); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddCustomTopic(); } }} style={{ flex: 1, padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', boxSizing: 'border-box' }} />
+          <button type="button" onClick={handleAddCustomTopic} style={{ padding: '14px 24px', background: '#f5f5f4', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '10px', cursor: 'pointer', fontWeight: '500' }}>+ Add</button>
+        </div>
+        {customTopicWarning && <p style={{ fontSize: '13px', color: '#dc2626', marginTop: '8px' }}>{customTopicWarning}</p>}
       </div>
 
       {/* Selected Summary — grouped by subject */}
