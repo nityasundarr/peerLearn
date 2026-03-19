@@ -59,18 +59,49 @@ const mapSessionToUi = (s) => ({
 });
 
 const mapRequestToUi = (r) => ({
-  id: r.id,
+  id: r.session_id || r.id,
+  session_id: r.session_id || r.id,
   subject: r.subject || r.subjects?.[0] || '—',
+  subjects: r.subjects || [],
   topic: r.topic || r.topics?.[0] || '—',
-  student: r.tutee_name || r.tutee?.full_name || 'Student',
-  initials: getInitials(r.tutee_name || r.tutee?.full_name),
+  topics: r.topics || [],
+  student: r.tutee_full_name || r.tutee_name || r.tutee?.full_name || 'Student',
+  initials: getInitials(r.tutee_full_name || r.tutee_name || r.tutee?.full_name),
   date: formatDate(r.proposed_at || r.created_at || r.date),
   time: formatTime(r.proposed_at || r.created_at || r.date),
-  urgency: r.urgency_category || r.urgency || '—',
+  urgency: r.urgency_level || r.urgency_category || r.urgency || '—',
   level: r.academic_level || '—',
+  time_slots: r.time_slots || [],
+  planning_areas: r.planning_areas || [],
+  distance_bucket: r.distance_bucket || '—',
+  duration_hours: r.duration_hours ?? 1,
   fee: r.fee ? `$${typeof r.fee === 'number' ? r.fee.toFixed(2) : r.fee}` : '—',
   ...r,
 });
+
+const mapSessionToIncomingRequest = (s) => {
+  const needs = Array.isArray(s.learning_needs) ? s.learning_needs[0] : s.learning_needs;
+  const timeSlots = needs?.time_slots || s.time_slots || s.proposed_slots || [];
+  return {
+    id: s.id,
+    session_id: s.id,
+    subject: s.academic_level || s.subject || '—',
+    subjects: needs?.subjects || [],
+    topic: s.topic || needs?.topics?.[0] || '—',
+    topics: needs?.topics || [],
+    student: s.tutee_name || s.tutee?.full_name || s.tutee || 'Student',
+    initials: getInitials(s.tutee_name || s.tutee?.full_name || s.tutee),
+    date: formatDate(s.created_at || s.scheduled_at),
+    time: formatTime(s.created_at || s.scheduled_at),
+    urgency: needs?.urgency_category || '—',
+    level: s.academic_level || '—',
+    time_slots: timeSlots,
+    planning_areas: needs?.planning_areas || [],
+    distance_bucket: s.distance_bucket || '—',
+    duration_hours: s.duration_hours ?? needs?.duration_hours ?? 1,
+    fee: s.fee ? `$${typeof s.fee === 'number' ? s.fee.toFixed(2) : s.fee}` : '—',
+  };
+};
 
 const mapNotificationToUi = (n) => ({
   id: n.id,
@@ -94,6 +125,10 @@ const Dashboard = () => {
   const [badges, setBadges] = useState({ tutoring: 0, notifications: 0, chats: 0 });
   const [learningSessions, setLearningSessions] = useState([]);
   const [tutoringSessions, setTutoringSessions] = useState([]);
+  const [tutorIncomingRequests, setTutorIncomingRequests] = useState([]);
+  const [tutorSessionsPending, setTutorSessionsPending] = useState([]);
+  const [proposingSessionId, setProposingSessionId] = useState(null);
+  const [proposedSlots, setProposedSlots] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [hovered, setHovered] = useState(null);
@@ -110,6 +145,42 @@ const Dashboard = () => {
   const upcomingSessions = (summary?.upcoming_sessions || []).map(mapSessionToUi);
   const incomingRequests = (summary?.incoming_requests || []).map(mapRequestToUi);
   const pendingActions = summary?.pending_actions || [];
+
+  // Merged incoming requests for My Tutoring tab: prefer /tutor/requests/incoming, else sessions with pending_tutor_selection
+  const mergedTutorIncoming = (() => {
+    if (tutorIncomingRequests.length > 0) {
+      return tutorIncomingRequests.map(mapRequestToUi);
+    }
+    const pending = tutorSessionsPending.filter((s) => {
+      const st = (s.status || s.state || '').toLowerCase().replace(/\s/g, '_');
+      return st === 'pending_tutor_selection' || st === 'pending';
+    });
+    if (pending.length > 0) return pending.map(mapSessionToIncomingRequest);
+    // Fallback: GET /sessions?role=tutor may return pending_tutor_selection
+    const fromTutoring = tutoringSessions.filter((s) => {
+      const st = (s.state || s.status || '').toUpperCase().replace(/\s/g, '_');
+      return st === 'PENDING_TUTOR_SELECTION' || st === 'PENDING_TUTOR';
+    });
+    return fromTutoring.map((s) => ({
+      ...mapRequestToUi({
+        session_id: s.id,
+        id: s.id,
+        tutee_full_name: s.tutee,
+        subjects: s.subject ? [s.subject] : [],
+        topics: s.topic ? [s.topic] : [],
+        academic_level: s.subject || s.level || '—',
+        time_slots: s.time_slots || s.proposed_slots || [],
+        planning_areas: [],
+        distance_bucket: s.distance_bucket || '—',
+        urgency_level: s.urgency || '—',
+        duration_hours: s.duration_hours ?? 1,
+        fee: s.fee,
+        created_at: s.created_at,
+        date: s.date,
+      }),
+      time_slots: s.time_slots || s.proposed_slots || [],
+    }));
+  })();
 
   const fetchSummary = async () => {
     try {
@@ -148,8 +219,34 @@ const Dashboard = () => {
       const { data } = await api.get('/sessions', { params: { role: 'tutor' } });
       const list = Array.isArray(data) ? data : (data.sessions || data.items || []);
       setTutoringSessions(list.map(mapSessionToUi));
-    } catch {
+      console.log('[Dashboard] GET /sessions?role=tutor', data);
+    } catch (e) {
       setTutoringSessions([]);
+      console.error('[Dashboard] GET /sessions?role=tutor', e);
+    }
+  };
+
+  const fetchTutorIncomingRequests = async () => {
+    try {
+      const { data } = await api.get('/tutor/requests/incoming');
+      const list = Array.isArray(data) ? data : (data.items || data.requests || []);
+      setTutorIncomingRequests(list);
+      console.log('[Dashboard] GET /tutor/requests/incoming', data);
+    } catch (e) {
+      setTutorIncomingRequests([]);
+      console.error('[Dashboard] GET /tutor/requests/incoming', e);
+    }
+  };
+
+  const fetchTutorSessionsPending = async () => {
+    try {
+      const { data } = await api.get('/sessions', { params: { role: 'tutor', status: 'pending' } });
+      const list = Array.isArray(data) ? data : (data.sessions || data.items || []);
+      setTutorSessionsPending(list);
+      console.log('[Dashboard] GET /sessions?role=tutor&status=pending', data);
+    } catch (e) {
+      setTutorSessionsPending([]);
+      console.error('[Dashboard] GET /sessions?role=tutor&status=pending', e);
     }
   };
 
@@ -179,7 +276,11 @@ const Dashboard = () => {
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab === 'tutoring') fetchTutoringSessions();
+    if (activeTab === 'tutoring') {
+      fetchTutoringSessions();
+      fetchTutorIncomingRequests();
+      fetchTutorSessionsPending();
+    }
   }, [activeTab]);
 
   useEffect(() => {
@@ -189,26 +290,59 @@ const Dashboard = () => {
     }
   }, [activeTab]);
 
-  const handleAccept = async (id) => {
+  const handleAccept = async (sessionId) => {
     try {
-      await api.post(`/sessions/${id}/accept`);
+      await api.post(`/sessions/${sessionId}/accept`);
+      setProposingSessionId(sessionId);
       await fetchSummary();
       await fetchBadges();
       if (activeTab === 'tutoring') fetchTutoringSessions();
+      // Do NOT refetch incoming/pending here — card stays visible for propose-slots UI
     } catch {
       // error handled by api interceptor or UI
     }
   };
 
-  const handleDecline = async (id) => {
+  const handleDecline = async (sessionId) => {
     try {
-      await api.post(`/sessions/${id}/decline`);
+      await api.post(`/sessions/${sessionId}/decline`);
+      setProposingSessionId(null);
+      setProposedSlots([]);
       await fetchSummary();
       await fetchBadges();
-      if (activeTab === 'tutoring') fetchTutoringSessions();
+      if (activeTab === 'tutoring') {
+        fetchTutoringSessions();
+        fetchTutorIncomingRequests();
+        fetchTutorSessionsPending();
+      }
     } catch {
       // error handled by api interceptor or UI
     }
+  };
+
+  const handleProposeSlots = async (sessionId) => {
+    try {
+      await api.post(`/sessions/${sessionId}/propose-slots`, { proposed_slots: proposedSlots });
+      setProposingSessionId(null);
+      setProposedSlots([]);
+      await fetchSummary();
+      await fetchBadges();
+      if (activeTab === 'tutoring') {
+        fetchTutoringSessions();
+        fetchTutorIncomingRequests();
+        fetchTutorSessionsPending();
+      }
+    } catch {
+      // error handled by api interceptor or UI
+    }
+  };
+
+  const toggleProposedSlot = (slot) => {
+    setProposedSlots((prev) => {
+      const exists = prev.some((s) => JSON.stringify(s) === JSON.stringify(slot));
+      if (exists) return prev.filter((s) => JSON.stringify(s) !== JSON.stringify(slot));
+      return [...prev, slot];
+    });
   };
 
   const handlePay = async (sessionId) => {
@@ -414,7 +548,14 @@ const Dashboard = () => {
   );
 
   // MY TUTORING TAB
-  const TutoringTab = () => (
+  const TutoringTab = () => {
+    const slotsForRequest = (req) => {
+      const raw = req.time_slots || [];
+      if (raw.length === 0) return [];
+      return raw.map((s) => (typeof s === 'object' ? s : { date: s, hour_slot: s }));
+    };
+
+    return (
     <div>
       {/* Tutor Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
@@ -427,7 +568,7 @@ const Dashboard = () => {
       </div>
 
       <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
-        {[{ label: 'Incoming Requests', badge: incomingRequests.length }, { label: 'Upcoming' }, { label: 'Past' }, { label: 'Cancelled' }].map((tab, i) => {
+        {[{ label: 'Incoming Requests', badge: mergedTutorIncoming.length }, { label: 'Upcoming' }, { label: 'Past' }, { label: 'Cancelled' }].map((tab, i) => {
           const sel = i === 0;
           const h = hovered === `tutor-tab-${tab.label}`;
           return (
@@ -440,34 +581,69 @@ const Dashboard = () => {
       </div>
 
       {/* Incoming Requests with Accept/Decline/Message (SRS 2.12.6.3) */}
-      {incomingRequests.map(req => (
-        <div key={req.id} style={{ background: '#fff', borderRadius: '16px', border: '2px solid #f59e0b', padding: '24px', marginBottom: '16px' }}>
+      {mergedTutorIncoming.length === 0 ? (
+        <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', padding: '48px 24px', textAlign: 'center', color: '#57534e' }}>
+          No incoming requests at this time
+        </div>
+      ) : (
+        mergedTutorIncoming.map((req) => (
+        <div key={req.session_id || req.id} style={{ background: '#fff', borderRadius: '16px', border: '2px solid #f59e0b', padding: '24px', marginBottom: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
             <div style={{ display: 'flex', gap: '16px' }}>
               <div style={{ width: '56px', height: '56px', background: '#f59e0b', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '18px' }}>{req.initials}</div>
               <div>
-                <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1c1917', marginBottom: '4px' }}>{req.subject}: {req.topic}</h3>
+                <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1c1917', marginBottom: '4px' }}>{(req.subjects?.length ? req.subjects.join(', ') : req.subject)}: {(req.topics?.length ? req.topics.join(', ') : req.topic)}</h3>
                 <p style={{ fontSize: '14px', color: '#57534e', marginBottom: '4px' }}>from {req.student} • {req.level}</p>
-                <div style={{ display: 'flex', gap: '16px', fontSize: '14px', color: '#57534e' }}>
+                <div style={{ display: 'flex', gap: '16px', fontSize: '14px', color: '#57534e', flexWrap: 'wrap' }}>
                   <span>📅 {req.date}</span>
                   <span>🕐 {req.time}</span>
+                  {req.distance_bucket && req.distance_bucket !== '—' && <span>📍 {req.distance_bucket}</span>}
+                  <span style={{ background: req.urgency === 'Exam Soon' ? '#fef2f2' : '#fef3c7', color: req.urgency === 'Exam Soon' ? '#ef4444' : '#f59e0b', padding: '2px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: '600' }}>🔥 {req.urgency}</span>
                 </div>
+                {(req.time_slots?.length > 0) && (
+                  <div style={{ fontSize: '13px', color: '#57534e', marginTop: '8px' }}>
+                    Preferred slots: {req.time_slots.map((s) => typeof s === 'object' ? `${s.date || s.day_of_week} ${s.hour_slot ?? ''}h` : String(s)).join(', ') || '—'}
+                  </div>
+                )}
               </div>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <span style={{ background: req.urgency === 'Exam Soon' ? '#fef2f2' : '#fef3c7', color: req.urgency === 'Exam Soon' ? '#ef4444' : '#f59e0b', padding: '6px 14px', borderRadius: '8px', fontSize: '13px', fontWeight: '600' }}>🔥 {req.urgency}</span>
-              <div style={{ fontSize: '18px', fontWeight: '700', color: '#1a5f4a', marginTop: '12px' }}>Fee: {req.fee}</div>
+              <div style={{ fontSize: '18px', fontWeight: '700', color: '#1a5f4a', marginTop: '4px' }}>Fee: {req.fee}</div>
             </div>
           </div>
+
+          {proposingSessionId === (req.session_id || req.id) ? (
+            <div style={{ background: '#f0fdf4', borderRadius: '12px', padding: '16px', marginTop: '12px', border: '1px solid #bbf7d0' }}>
+              <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#166534', marginBottom: '12px' }}>Propose time slot(s)</h4>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                {slotsForRequest(req).map((slot, idx) => {
+                  const key = typeof slot === 'object' ? `${slot.date || slot.day_of_week}-${slot.hour_slot}-${idx}` : `slot-${idx}`;
+                  const label = typeof slot === 'object' ? (slot.date ? `${slot.date} ${slot.hour_slot ?? ''}h` : `Day ${slot.day_of_week ?? ''} ${slot.hour_slot ?? ''}h`) : String(slot);
+                  const isSelected = proposedSlots.some((s) => JSON.stringify(s) === JSON.stringify(slot));
+                  return (
+                    <button key={key} onClick={() => toggleProposedSlot(slot)} style={{ padding: '8px 14px', background: isSelected ? '#1a5f4a' : '#fff', color: isSelected ? '#fff' : '#1a5f4a', border: `1px solid ${isSelected ? '#1a5f4a' : '#86efac'}`, borderRadius: '8px', fontSize: '13px', fontWeight: '500', cursor: 'pointer' }}>{label}</button>
+                  );
+                })}
+                {slotsForRequest(req).length === 0 && <span style={{ fontSize: '13px', color: '#57534e' }}>No preferred slots from tutee</span>}
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={() => handleProposeSlots(req.session_id || req.id)} disabled={proposedSlots.length === 0} onMouseEnter={() => setHovered('propose-btn')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 20px', background: proposedSlots.length > 0 ? (hovered === 'propose-btn' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: proposedSlots.length > 0 ? 'pointer' : 'not-allowed', fontSize: '14px' }}>Propose</button>
+                <button onClick={() => { setProposingSessionId(null); setProposedSlots([]); }} style={{ padding: '10px 20px', background: '#fff', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '14px' }}>Cancel</button>
+              </div>
+            </div>
+          ) : (
           <div style={{ display: 'flex', gap: '12px' }}>
-            <button onClick={() => handleAccept(req.id)} onMouseEnter={() => setHovered(`tutor-accept-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ flex: 1, padding: '14px', background: hovered === `tutor-accept-${req.id}` ? '#2d7a61' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>✓ Accept Request</button>
-            <button onClick={() => handleDecline(req.id)} onMouseEnter={() => setHovered(`tutor-decline-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ flex: 1, padding: '14px', background: hovered === `tutor-decline-${req.id}` ? '#fef2f2' : '#fff', color: '#ef4444', border: `1px solid ${hovered === `tutor-decline-${req.id}` ? '#ef4444' : '#fecaca'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>✕ Decline</button>
+            <button onClick={() => handleAccept(req.session_id || req.id)} onMouseEnter={() => setHovered(`tutor-accept-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ flex: 1, padding: '14px', background: hovered === `tutor-accept-${req.id}` ? '#2d7a61' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>✓ Accept Request</button>
+            <button onClick={() => handleDecline(req.session_id || req.id)} onMouseEnter={() => setHovered(`tutor-decline-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ flex: 1, padding: '14px', background: hovered === `tutor-decline-${req.id}` ? '#fef2f2' : '#fff', color: '#ef4444', border: `1px solid ${hovered === `tutor-decline-${req.id}` ? '#ef4444' : '#fecaca'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>✕ Decline</button>
             <button onClick={() => navigate(`/session/${req.session_id || req.id}/chat`)} onMouseEnter={() => setHovered(`tutor-msg-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 24px', background: hovered === `tutor-msg-${req.id}` ? '#eff6ff' : '#fff', color: '#3b82f6', border: `1px solid ${hovered === `tutor-msg-${req.id}` ? '#3b82f6' : '#93c5fd'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>💬 Message</button>
           </div>
+          )}
         </div>
-      ))}
+        ))
+      )}
     </div>
-  );
+    );
+  };
 
   // CHATS TAB (SRS 2.9)
   const ChatsTab = () => {
