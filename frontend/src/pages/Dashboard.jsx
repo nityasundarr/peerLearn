@@ -153,13 +153,13 @@ const Dashboard = () => {
     }
     const pending = tutorSessionsPending.filter((s) => {
       const st = (s.status || s.state || '').toLowerCase().replace(/\s/g, '_');
-      return st === 'pending_tutor_selection' || st === 'pending';
+      return st === 'pending_tutor_selection' || st === 'pending' || st === 'tutor_accepted';
     });
     if (pending.length > 0) return pending.map(mapSessionToIncomingRequest);
     // Fallback: GET /sessions?role=tutor may return pending_tutor_selection
     const fromTutoring = tutoringSessions.filter((s) => {
       const st = (s.state || s.status || '').toUpperCase().replace(/\s/g, '_');
-      return st === 'PENDING_TUTOR_SELECTION' || st === 'PENDING_TUTOR';
+      return st === 'PENDING_TUTOR_SELECTION' || st === 'PENDING_TUTOR' || st === 'TUTOR_ACCEPTED';
     });
     return fromTutoring.map((s) => ({
       ...mapRequestToUi({
@@ -612,7 +612,12 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {proposingSessionId === (req.session_id || req.id) ? (
+          {(() => {
+            const sid = req.session_id || req.id;
+            const st = (req.status || req.state || '').toLowerCase().replace(/\s/g, '_');
+            const needsPropose = st === 'tutor_accepted' || proposingSessionId === sid;
+            if (needsPropose) {
+              return (
             <div style={{ background: '#f0fdf4', borderRadius: '12px', padding: '16px', marginTop: '12px', border: '1px solid #bbf7d0' }}>
               <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#166534', marginBottom: '12px' }}>Propose time slot(s)</h4>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
@@ -627,17 +632,20 @@ const Dashboard = () => {
                 {slotsForRequest(req).length === 0 && <span style={{ fontSize: '13px', color: '#57534e' }}>No preferred slots from tutee</span>}
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={() => handleProposeSlots(req.session_id || req.id)} disabled={proposedSlots.length === 0} onMouseEnter={() => setHovered('propose-btn')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 20px', background: proposedSlots.length > 0 ? (hovered === 'propose-btn' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: proposedSlots.length > 0 ? 'pointer' : 'not-allowed', fontSize: '14px' }}>Propose</button>
+                <button onClick={() => handleProposeSlots(sid)} disabled={proposedSlots.length === 0} onMouseEnter={() => setHovered('propose-btn')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 20px', background: proposedSlots.length > 0 ? (hovered === 'propose-btn' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: proposedSlots.length > 0 ? 'pointer' : 'not-allowed', fontSize: '14px' }}>Propose</button>
                 <button onClick={() => { setProposingSessionId(null); setProposedSlots([]); }} style={{ padding: '10px 20px', background: '#fff', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '14px' }}>Cancel</button>
               </div>
             </div>
-          ) : (
+              );
+            }
+            return (
           <div style={{ display: 'flex', gap: '12px' }}>
-            <button onClick={() => handleAccept(req.session_id || req.id)} onMouseEnter={() => setHovered(`tutor-accept-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ flex: 1, padding: '14px', background: hovered === `tutor-accept-${req.id}` ? '#2d7a61' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>✓ Accept Request</button>
-            <button onClick={() => handleDecline(req.session_id || req.id)} onMouseEnter={() => setHovered(`tutor-decline-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ flex: 1, padding: '14px', background: hovered === `tutor-decline-${req.id}` ? '#fef2f2' : '#fff', color: '#ef4444', border: `1px solid ${hovered === `tutor-decline-${req.id}` ? '#ef4444' : '#fecaca'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>✕ Decline</button>
-            <button onClick={() => navigate(`/session/${req.session_id || req.id}/chat`)} onMouseEnter={() => setHovered(`tutor-msg-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 24px', background: hovered === `tutor-msg-${req.id}` ? '#eff6ff' : '#fff', color: '#3b82f6', border: `1px solid ${hovered === `tutor-msg-${req.id}` ? '#3b82f6' : '#93c5fd'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>💬 Message</button>
+            <button onClick={() => handleAccept(sid)} onMouseEnter={() => setHovered(`tutor-accept-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ flex: 1, padding: '14px', background: hovered === `tutor-accept-${req.id}` ? '#2d7a61' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>✓ Accept Request</button>
+            <button onClick={() => handleDecline(sid)} onMouseEnter={() => setHovered(`tutor-decline-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ flex: 1, padding: '14px', background: hovered === `tutor-decline-${req.id}` ? '#fef2f2' : '#fff', color: '#ef4444', border: `1px solid ${hovered === `tutor-decline-${req.id}` ? '#ef4444' : '#fecaca'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>✕ Decline</button>
+            <button onClick={() => navigate(`/session/${sid}/chat`)} onMouseEnter={() => setHovered(`tutor-msg-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 24px', background: hovered === `tutor-msg-${req.id}` ? '#eff6ff' : '#fff', color: '#3b82f6', border: `1px solid ${hovered === `tutor-msg-${req.id}` ? '#3b82f6' : '#93c5fd'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>💬 Message</button>
           </div>
-          )}
+            );
+          })()}
         </div>
         ))
       )}
