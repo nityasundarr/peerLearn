@@ -12,6 +12,28 @@ import api from '../services/api';
 
 const TRAIT_OPTIONS = ['Patient', 'Clear explanations', 'Well prepared', 'Encouraging', 'Good examples', 'Thorough'];
 
+// Stable component at module level to prevent remount-on-typing (which caused scroll-to-top)
+const FeedbackNavHeader = () => (
+  <header style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #0d3d2e 100%)', padding: '0 32px', height: '72px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
+      <span style={{ color: '#fff', fontSize: '22px', fontWeight: '700' }}>PeerLearn</span>
+    </div>
+    <nav style={{ display: 'flex', gap: '8px' }}>
+      {['🏠 Dashboard', '🎓 Get Help', '💡 Offer Help'].map((item, i) => (
+        <button key={i} style={{ background: 'transparent', border: 'none', padding: '10px 20px', borderRadius: '8px', color: '#fff', fontSize: '15px', fontWeight: '500', cursor: 'pointer' }}>{item}</button>
+      ))}
+    </nav>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+      <button style={{ background: 'rgba(255,255,255,0.1)', border: 'none', width: '44px', height: '44px', borderRadius: '10px', cursor: 'pointer', fontSize: '20px' }}>🔔</button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.2)', padding: '6px 14px 6px 6px', borderRadius: '10px' }}>
+        <div style={{ width: '34px', height: '34px', background: '#f59e0b', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '14px' }}>JD</div>
+        <span style={{ color: '#fff', fontSize: '14px', fontWeight: '500' }}>John Doe</span>
+      </div>
+    </div>
+  </header>
+);
+
 const formatDate = (d) => {
   if (!d) return '';
   const dt = typeof d === 'string' ? new Date(d) : d;
@@ -92,34 +114,13 @@ const FeedbackForm = () => {
   const scheduledAt = session?.scheduled_at || session?.date;
   const level = session?.academic_level || '—';
 
-  const NavHeader = () => (
-    <header style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #0d3d2e 100%)', padding: '0 32px', height: '72px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
-        <span style={{ color: '#fff', fontSize: '22px', fontWeight: '700' }}>PeerLearn</span>
-      </div>
-      <nav style={{ display: 'flex', gap: '8px' }}>
-        {['🏠 Dashboard', '🎓 Get Help', '💡 Offer Help'].map((item, i) => (
-          <button key={i} style={{ background: 'transparent', border: 'none', padding: '10px 20px', borderRadius: '8px', color: '#fff', fontSize: '15px', fontWeight: '500', cursor: 'pointer' }}>{item}</button>
-        ))}
-      </nav>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <button style={{ background: 'rgba(255,255,255,0.1)', border: 'none', width: '44px', height: '44px', borderRadius: '10px', cursor: 'pointer', fontSize: '20px' }}>🔔</button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.2)', padding: '6px 14px 6px 6px', borderRadius: '10px' }}>
-          <div style={{ width: '34px', height: '34px', background: '#f59e0b', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '14px' }}>JD</div>
-          <span style={{ color: '#fff', fontSize: '14px', fontWeight: '500' }}>John Doe</span>
-        </div>
-      </div>
-    </header>
-  );
-
   return (
     <div style={{
       minHeight: '100vh',
       background: '#fafaf9',
       fontFamily: 'system-ui, -apple-system, sans-serif',
     }}>
-      <NavHeader />
+      <FeedbackNavHeader />
       <div style={{
         display: 'flex',
         alignItems: 'center',

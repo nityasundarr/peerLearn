@@ -36,16 +36,17 @@ def _db_error(operation: str, exc: Exception) -> AppError:
 # tutoring_requests
 # ---------------------------------------------------------------------------
 
-def create_request(tutee_id: str, data: dict) -> dict:
+def create_request(tutee_id: str, data: dict) -> dict | None:
     """Insert a new tutoring_request row and return it."""
     try:
         payload = {"tutee_id": tutee_id, **data}
         result = (
             supabase.table("tutoring_requests")
             .insert(payload)
-            .select(_REQUEST_COLS)
             .execute()
         )
+        if result is None or not result.data:
+            return None
         return result.data[0]
     except Exception as exc:
         raise _db_error("create_request", exc) from exc
@@ -60,6 +61,8 @@ def get_request_by_id(request_id: str) -> dict | None:
             .maybe_single()
             .execute()
         )
+        if result is None:
+            return None
         return result.data
     except Exception as exc:
         raise _db_error("get_request_by_id", exc) from exc
@@ -76,6 +79,8 @@ def get_request_by_id_and_tutee(request_id: str, tutee_id: str) -> dict | None:
             .maybe_single()
             .execute()
         )
+        if result is None:
+            return None
         return result.data
     except Exception as exc:
         raise _db_error("get_request_by_id_and_tutee", exc) from exc
@@ -106,7 +111,7 @@ def update_request(request_id: str, tutee_id: str, data: dict) -> dict:
             .select(_REQUEST_COLS)
             .execute()
         )
-        if not result.data:
+        if result is None or not result.data:
             raise NotFoundError("Request not found or access denied.")
         return result.data[0]
     except NotFoundError:
@@ -142,16 +147,17 @@ def cancel_request(request_id: str, tutee_id: str) -> dict:
 # learning_needs
 # ---------------------------------------------------------------------------
 
-def create_learning_need(request_id: str, urgency_level: str) -> dict:
+def create_learning_need(request_id: str, urgency_level: str) -> dict | None:
     try:
         result = (
             supabase.table("learning_needs")
             .insert(
                 {"request_id": request_id, "urgency_level": urgency_level, "unfulfilled_count": 0}
             )
-            .select(_NEED_COLS)
             .execute()
         )
+        if result is None or not result.data:
+            return None
         return result.data[0]
     except Exception as exc:
         raise _db_error("create_learning_need", exc) from exc
@@ -184,7 +190,7 @@ def increment_unfulfilled_count(request_id: str) -> None:
             .maybe_single()
             .execute()
         )
-        if not result.data:
+        if result is None or not result.data:
             return
         current = result.data.get("unfulfilled_count") or 0
         supabase.table("learning_needs").update(
@@ -204,6 +210,8 @@ def count_prior_unfulfilled(tutee_id: str) -> int:
             .eq("status", "cancelled")
             .execute()
         )
+        if result is None:
+            return 0
         return result.count or 0
     except Exception as exc:
         raise _db_error("count_prior_unfulfilled", exc) from exc
@@ -255,6 +263,8 @@ def get_incoming_sessions_for_tutor(tutor_id: str) -> list[dict]:
             .order("created_at", desc=True)
             .execute()
         )
+        if result is None:
+            return []
         return result.data or []
     except Exception as exc:
         raise _db_error("get_incoming_sessions_for_tutor", exc) from exc
@@ -271,6 +281,8 @@ def get_requests_by_ids(request_ids: list[str]) -> list[dict]:
             .in_("id", request_ids)
             .execute()
         )
+        if result is None:
+            return []
         return result.data or []
     except Exception as exc:
         raise _db_error("get_requests_by_ids", exc) from exc

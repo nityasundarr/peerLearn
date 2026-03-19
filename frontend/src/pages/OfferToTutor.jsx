@@ -10,6 +10,37 @@ import api from '../services/api';
 const DAY_TO_DOW = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0 };
 const TIME_TO_HOUR = { '9 AM': 9, '10 AM': 10, '11 AM': 11, '12 PM': 12, '1 PM': 13, '2 PM': 14, '3 PM': 15, '4 PM': 16, '5 PM': 17, '6 PM': 18, '7 PM': 19, '8 PM': 20 };
 
+// Stable components at module level to prevent remount-on-typing (which caused scroll-to-top)
+const OfferFlowHeader = ({ onCancel }) => (
+  <header style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #0d3d2e 100%)', padding: '0 32px', height: '72px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
+      <span style={{ color: '#fff', fontSize: '22px', fontWeight: '700' }}>PeerLearn</span>
+    </div>
+    <button onClick={onCancel} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>✕ Cancel</button>
+  </header>
+);
+
+const OfferStepIndicator = ({ currentStep }) => (
+  <div style={{ background: '#fff', padding: '28px 32px', borderBottom: '1px solid #e7e5e4' }}>
+    <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative' }}>
+        <div style={{ position: 'absolute', top: '20px', left: '80px', right: '80px', height: '4px', background: '#e7e5e4', zIndex: 1 }}>
+          <div style={{ width: `${((currentStep - 1) / 2) * 100}%`, height: '100%', background: '#1a5f4a', transition: 'width 0.3s' }}></div>
+        </div>
+        {[{ num: 1, label: 'Subjects & Topics' }, { num: 2, label: 'Availability' }, { num: 3, label: 'Preferences' }].map(step => (
+          <div key={step.num} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, width: '120px' }}>
+            <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: currentStep >= step.num ? '#1a5f4a' : '#fff', border: `3px solid ${currentStep >= step.num ? '#1a5f4a' : '#e7e5e4'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: currentStep >= step.num ? '#fff' : '#a8a29e', fontWeight: '600', marginBottom: '10px' }}>
+              {currentStep > step.num ? '✓' : step.num}
+            </div>
+            <span style={{ fontSize: '13px', fontWeight: currentStep === step.num ? '600' : '400', color: currentStep >= step.num ? '#1c1917' : '#a8a29e', textAlign: 'center' }}>{step.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
 const OfferToTutorFlow = () => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
@@ -23,6 +54,7 @@ const OfferToTutorFlow = () => {
   const [maxWeeklyHours, setMaxWeeklyHours] = useState(5);
   const [planningAreas, setPlanningAreas] = useState(['Clementi', 'Jurong East']);
   const [otherArea, setOtherArea] = useState('');
+  const [customTopicInput, setCustomTopicInput] = useState('');
   const [accessibilityNotes, setAccessibilityNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -39,12 +71,21 @@ const OfferToTutorFlow = () => {
 
   const buildTutorTopics = () => {
     const topics = [];
+    const predefinedTopics = new Set();
     selectedSubjects.forEach((subj) => {
       const subject = allSubjects.find((s) => s.name === subj);
       if (subject) {
         subject.topics.forEach((t) => {
+          predefinedTopics.add(t);
           if (selectedTopics.includes(t)) topics.push({ subject: subj, topic: t });
         });
+      }
+    });
+    // Include custom topics (in selectedTopics but not predefined) — assign to first selected subject
+    const firstSubject = selectedSubjects[0] || 'Other';
+    selectedTopics.forEach((t) => {
+      if (!predefinedTopics.has(t)) {
+        topics.push({ subject: firstSubject, topic: t });
       }
     });
     return topics;
@@ -93,38 +134,8 @@ const OfferToTutorFlow = () => {
     }
   };
 
-  const FlowHeader = () => (
-    <header style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #0d3d2e 100%)', padding: '0 32px', height: '72px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
-        <span style={{ color: '#fff', fontSize: '22px', fontWeight: '700' }}>PeerLearn</span>
-      </div>
-      <button onClick={() => navigate('/dashboard')} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>✕ Cancel</button>
-    </header>
-  );
-
-  const StepIndicator = () => (
-    <div style={{ background: '#fff', padding: '28px 32px', borderBottom: '1px solid #e7e5e4' }}>
-      <div style={{ maxWidth: '600px', margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative' }}>
-          <div style={{ position: 'absolute', top: '20px', left: '80px', right: '80px', height: '4px', background: '#e7e5e4', zIndex: 1 }}>
-            <div style={{ width: `${((currentStep - 1) / 2) * 100}%`, height: '100%', background: '#1a5f4a', transition: 'width 0.3s' }}></div>
-          </div>
-          {[{ num: 1, label: 'Subjects & Topics' }, { num: 2, label: 'Availability' }, { num: 3, label: 'Preferences' }].map(step => (
-            <div key={step.num} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, width: '120px' }}>
-              <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: currentStep >= step.num ? '#1a5f4a' : '#fff', border: `3px solid ${currentStep >= step.num ? '#1a5f4a' : '#e7e5e4'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: currentStep >= step.num ? '#fff' : '#a8a29e', fontWeight: '600', marginBottom: '10px' }}>
-                {currentStep > step.num ? '✓' : step.num}
-              </div>
-              <span style={{ fontSize: '13px', fontWeight: currentStep === step.num ? '600' : '400', color: currentStep >= step.num ? '#1c1917' : '#a8a29e', textAlign: 'center' }}>{step.label}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-
   // STEP 1: Subjects & Topics (SRS 2.2.2.2-3)
-  const Step1 = () => (
+  const renderStep1 = () => (
     <div style={{ maxWidth: '700px', margin: '0 auto', padding: '48px 24px' }}>
       <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px', color: '#1c1917' }}>What can you teach? 💡</h1>
       <p style={{ color: '#57534e', marginBottom: '36px' }}>Select the subjects and specific topics you're confident teaching.</p>
@@ -200,20 +211,29 @@ const OfferToTutorFlow = () => {
           Add Custom Topic <span style={{ fontWeight: '400', color: '#a8a29e' }}>(optional, 1-100 chars)</span>
         </label>
         <div style={{ display: 'flex', gap: '12px' }}>
-          <input type="text" placeholder="Type a topic..." maxLength={100} style={{ flex: 1, padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px' }} />
-          <button style={{ padding: '14px 24px', background: '#f5f5f4', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '10px', cursor: 'pointer', fontWeight: '500' }}>+ Add</button>
+          <input type="text" placeholder="Type a topic..." maxLength={100} value={customTopicInput} onChange={(e) => setCustomTopicInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); const t = customTopicInput.trim(); if (t) { setSelectedTopics((prev) => [...prev, t]); setCustomTopicInput(''); } } }} style={{ flex: 1, padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', boxSizing: 'border-box' }} />
+          <button type="button" onClick={() => { const t = customTopicInput.trim(); if (t) { setSelectedTopics((prev) => [...prev, t]); setCustomTopicInput(''); } }} style={{ padding: '14px 24px', background: '#f5f5f4', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '10px', cursor: 'pointer', fontWeight: '500' }}>+ Add</button>
         </div>
       </div>
 
-      {/* Selected Summary */}
-      {selectedTopics.length > 0 && (
-        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '16px', marginBottom: '32px' }}>
-          <div style={{ fontSize: '14px', fontWeight: '600', color: '#166534', marginBottom: '8px' }}>✓ You'll teach:</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            {selectedTopics.map(topic => <span key={topic} style={{ background: '#dcfce7', color: '#166534', padding: '6px 12px', borderRadius: '6px', fontSize: '13px', fontWeight: '500' }}>{topic}</span>)}
+      {/* Selected Summary — grouped by subject */}
+      {selectedTopics.length > 0 && (() => {
+        const grouped = buildTutorTopics().reduce((acc, { subject, topic }) => {
+          if (!acc[subject]) acc[subject] = [];
+          acc[subject].push(topic);
+          return acc;
+        }, {});
+        return (
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '16px', marginBottom: '32px' }}>
+            <div style={{ fontSize: '14px', fontWeight: '600', color: '#166534', marginBottom: '12px' }}>For confirmation, you&apos;ll teach:</div>
+            {Object.entries(grouped).map(([subject, topics]) => (
+              <div key={subject} style={{ fontSize: '14px', color: '#166534', marginBottom: '4px' }}>
+                <strong>{subject}</strong>: {topics.join(', ')}
+              </div>
+            ))}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <button onClick={() => setCurrentStep(2)} disabled={selectedTopics.length === 0} style={{ padding: '14px 32px', background: selectedTopics.length > 0 ? '#1a5f4a' : '#e7e5e4', color: selectedTopics.length > 0 ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedTopics.length > 0 ? 'pointer' : 'not-allowed' }}>Continue →</button>
@@ -222,7 +242,7 @@ const OfferToTutorFlow = () => {
   );
 
   // STEP 2: Availability (SRS 2.2.2.4: 1-hour intervals)
-  const Step2 = () => {
+  const renderStep2 = () => {
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const times = ['9 AM', '10 AM', '11 AM', '12 PM', '1 PM', '2 PM', '3 PM', '4 PM', '5 PM', '6 PM', '7 PM', '8 PM'];
 
@@ -281,7 +301,7 @@ const OfferToTutorFlow = () => {
   };
 
   // STEP 3: Preferences (SRS 2.2.2.5-9)
-  const Step3 = () => (
+  const renderStep3 = () => (
     <div style={{ maxWidth: '600px', margin: '0 auto', padding: '48px 24px' }}>
       <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px', color: '#1c1917' }}>Set your preferences ⚙️</h1>
       <p style={{ color: '#57534e', marginBottom: '36px' }}>Configure your tutoring limits and preferences.</p>
@@ -398,11 +418,11 @@ const OfferToTutorFlow = () => {
 
   return (
     <div style={{ minHeight: '100vh', background: '#fafaf9', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-      <FlowHeader />
-      <StepIndicator />
-      {currentStep === 1 && <Step1 />}
-      {currentStep === 2 && <Step2 />}
-      {currentStep === 3 && <Step3 />}
+      <OfferFlowHeader onCancel={() => navigate('/dashboard')} />
+      <OfferStepIndicator currentStep={currentStep} />
+      {currentStep === 1 && renderStep1()}
+      {currentStep === 2 && renderStep2()}
+      {currentStep === 3 && renderStep3()}
     </div>
   );
 };

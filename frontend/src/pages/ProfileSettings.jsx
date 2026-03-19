@@ -16,6 +16,42 @@ import { useAuth } from '../services/AuthContext';
 const PLANNING_AREAS = ['Clementi', 'Jurong East', 'Jurong West', 'Bukit Batok', 'Woodlands', 'Tampines'];
 const SCHOOLS = ['Nanyang Technological University (NTU)', 'National University of Singapore (NUS)', 'Singapore Management University (SMU)', 'Singapore Polytechnic', 'Ngee Ann Polytechnic'];
 
+// Stable components at module level to prevent remount-on-typing (which caused scroll-to-top)
+const ProfileNavHeader = ({ initials, fullName, onNavClick }) => (
+  <header style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #0d3d2e 100%)', padding: '0 32px', height: '72px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
+      <span style={{ color: '#fff', fontSize: '22px', fontWeight: '700' }}>PeerLearn</span>
+    </div>
+    <nav style={{ display: 'flex', gap: '8px' }}>
+      {['🏠 Dashboard', '🎓 Get Help', '💡 Offer Help'].map((item, i) => (
+        <button key={i} onClick={onNavClick} style={{ background: 'transparent', border: 'none', padding: '10px 20px', borderRadius: '8px', color: '#fff', fontSize: '15px', fontWeight: '500', cursor: 'pointer' }}>{item}</button>
+      ))}
+    </nav>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+      <button style={{ background: 'rgba(255,255,255,0.1)', border: 'none', width: '44px', height: '44px', borderRadius: '10px', cursor: 'pointer', fontSize: '20px' }}>🔔</button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.2)', padding: '6px 14px 6px 6px', borderRadius: '10px' }}>
+        <div style={{ width: '34px', height: '34px', background: '#f59e0b', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '14px' }}>{initials}</div>
+        <span style={{ color: '#fff', fontSize: '14px', fontWeight: '500' }}>{fullName}</span>
+      </div>
+    </div>
+  </header>
+);
+
+const ProfilePageHeader = ({ activeTab, onTabChange }) => (
+  <div style={{ background: '#fff', borderBottom: '1px solid #e7e5e4' }}>
+    <div style={{ maxWidth: '900px', margin: '0 auto', padding: '32px 24px 0' }}>
+      <h1 style={{ fontSize: '28px', fontWeight: '700', color: '#1c1917', marginBottom: '8px' }}>Settings</h1>
+      <p style={{ color: '#57534e', marginBottom: '24px' }}>Manage your account and preferences</p>
+      <div style={{ display: 'flex', gap: '0' }}>
+        {[{ id: 'profile', label: '👤 Profile' }, { id: 'tutor', label: '🎓 Tutor Settings' }, { id: 'preferences', label: '⚙️ Preferences' }, { id: 'account', label: '🔐 Account' }].map(tab => (
+          <button key={tab.id} onClick={() => onTabChange(tab.id)} style={{ background: 'transparent', border: 'none', padding: '16px 24px', fontSize: '15px', fontWeight: activeTab === tab.id ? '600' : '500', color: activeTab === tab.id ? '#1a5f4a' : '#57534e', cursor: 'pointer', borderBottom: activeTab === tab.id ? '3px solid #1a5f4a' : '3px solid transparent' }}>{tab.label}</button>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
 const ProfileSettings = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -170,43 +206,8 @@ const ProfileSettings = () => {
     .toUpperCase()
     .slice(0, 2);
 
-  const NavHeader = () => (
-    <header style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #0d3d2e 100%)', padding: '0 32px', height: '72px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
-        <span style={{ color: '#fff', fontSize: '22px', fontWeight: '700' }}>PeerLearn</span>
-      </div>
-      <nav style={{ display: 'flex', gap: '8px' }}>
-        {['🏠 Dashboard', '🎓 Get Help', '💡 Offer Help'].map((item, i) => (
-          <button key={i} onClick={() => navigate('/dashboard')} style={{ background: 'transparent', border: 'none', padding: '10px 20px', borderRadius: '8px', color: '#fff', fontSize: '15px', fontWeight: '500', cursor: 'pointer' }}>{item}</button>
-        ))}
-      </nav>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <button style={{ background: 'rgba(255,255,255,0.1)', border: 'none', width: '44px', height: '44px', borderRadius: '10px', cursor: 'pointer', fontSize: '20px' }}>🔔</button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.2)', padding: '6px 14px 6px 6px', borderRadius: '10px' }}>
-          <div style={{ width: '34px', height: '34px', background: '#f59e0b', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '14px' }}>{getInitials()}</div>
-          <span style={{ color: '#fff', fontSize: '14px', fontWeight: '500' }}>{profile.full_name || user?.full_name || 'User'}</span>
-        </div>
-      </div>
-    </header>
-  );
-
-  const PageHeader = () => (
-    <div style={{ background: '#fff', borderBottom: '1px solid #e7e5e4' }}>
-      <div style={{ maxWidth: '900px', margin: '0 auto', padding: '32px 24px 0' }}>
-        <h1 style={{ fontSize: '28px', fontWeight: '700', color: '#1c1917', marginBottom: '8px' }}>Settings</h1>
-        <p style={{ color: '#57534e', marginBottom: '24px' }}>Manage your account and preferences</p>
-        <div style={{ display: 'flex', gap: '0' }}>
-          {[{ id: 'profile', label: '👤 Profile' }, { id: 'tutor', label: '🎓 Tutor Settings' }, { id: 'preferences', label: '⚙️ Preferences' }, { id: 'account', label: '🔐 Account' }].map(tab => (
-            <button key={tab.id} onClick={() => { setActiveTab(tab.id); setError(null); }} style={{ background: 'transparent', border: 'none', padding: '16px 24px', fontSize: '15px', fontWeight: activeTab === tab.id ? '600' : '500', color: activeTab === tab.id ? '#1a5f4a' : '#57534e', cursor: 'pointer', borderBottom: activeTab === tab.id ? '3px solid #1a5f4a' : '3px solid transparent' }}>{tab.label}</button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-
   // Profile Tab (Updated with language, "Other" options)
-  const ProfileTab = () => (
+  const renderProfileTab = () => (
     <div>
       {error && <p style={{ color: '#ef4444', marginBottom: '16px' }}>{error}</p>}
       {/* Profile Picture */}
@@ -287,7 +288,7 @@ const ProfileSettings = () => {
   );
 
   // Tutor Settings Tab (Updated with Mode toggle, accessibility accommodation)
-  const TutorTab = () => (
+  const renderTutorTab = () => (
     <div>
       {error && <p style={{ color: '#ef4444', marginBottom: '16px' }}>{error}</p>}
       {/* Tutor Mode Toggle (SRS 2.2.2.9) */}
@@ -416,7 +417,7 @@ const ProfileSettings = () => {
   );
 
   // Account Tab
-  const AccountTab = () => (
+  const renderAccountTab = () => (
     <div>
       {error && <p style={{ color: '#ef4444', marginBottom: '16px' }}>{error}</p>}
       <div style={{ marginBottom: '40px' }}>
@@ -474,13 +475,13 @@ const ProfileSettings = () => {
 
   return (
     <div style={{ minHeight: '100vh', background: '#fafaf9', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-      <NavHeader />
-      <PageHeader />
+      <ProfileNavHeader initials={getInitials()} fullName={profile.full_name || user?.full_name || 'User'} onNavClick={() => navigate('/dashboard')} />
+      <ProfilePageHeader activeTab={activeTab} onTabChange={(tabId) => { setActiveTab(tabId); setError(null); }} />
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '40px 24px' }}>
-        {activeTab === 'profile' && <ProfileTab />}
-        {activeTab === 'tutor' && <TutorTab />}
-        {activeTab === 'preferences' && <PreferencesTab />}
-        {activeTab === 'account' && <AccountTab />}
+        {activeTab === 'profile' && renderProfileTab()}
+        {activeTab === 'tutor' && renderTutorTab()}
+        {activeTab === 'preferences' && renderPreferencesTab()}
+        {activeTab === 'account' && renderAccountTab()}
       </div>
     </div>
   );

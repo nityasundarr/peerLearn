@@ -20,12 +20,50 @@ const DURATION_HOURS_MAP = { '1 hour': 1, '2 hours': 2, '4 hours': 4 };
 
 const getInitials = (name) => (name || '').split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '??';
 
+// Stable components at module level to prevent remount-on-typing (which caused scroll-to-top)
+const TuteeFlowHeader = ({ onCancel }) => (
+  <header style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #0d3d2e 100%)', padding: '0 32px', height: '72px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
+      <span style={{ color: '#fff', fontSize: '22px', fontWeight: '700' }}>PeerLearn</span>
+    </div>
+    <button onClick={onCancel} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>✕ Cancel Request</button>
+  </header>
+);
+
+const TuteeStepIndicator = ({ currentStep }) => (
+  <div style={{ background: '#fff', padding: '24px 32px', borderBottom: '1px solid #e7e5e4' }}>
+    <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative' }}>
+        <div style={{ position: 'absolute', top: '18px', left: '40px', right: '40px', height: '4px', background: '#e7e5e4', zIndex: 1 }}>
+          <div style={{ width: `${((currentStep - 1) / 5) * 100}%`, height: '100%', background: '#1a5f4a', transition: 'width 0.3s' }}></div>
+        </div>
+        {[
+          { num: 1, label: 'Details' },
+          { num: 2, label: 'Schedule' },
+          { num: 3, label: 'Tutor' },
+          { num: 4, label: 'Venue' },
+          { num: 5, label: 'Payment' },
+          { num: 6, label: 'Confirm' },
+        ].map(step => (
+          <div key={step.num} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, width: '70px' }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: currentStep >= step.num ? '#1a5f4a' : '#fff', border: `3px solid ${currentStep >= step.num ? '#1a5f4a' : '#e7e5e4'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: currentStep >= step.num ? '#fff' : '#a8a29e', fontWeight: '600', fontSize: '14px', marginBottom: '8px' }}>
+              {currentStep > step.num ? '✓' : step.num}
+            </div>
+            <span style={{ fontSize: '11px', fontWeight: currentStep === step.num ? '600' : '400', color: currentStep >= step.num ? '#1c1917' : '#a8a29e', textAlign: 'center' }}>{step.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
 const RequestHelpFlow = () => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedTutor, setSelectedTutor] = useState(null);
   const [selectedVenue, setSelectedVenue] = useState(null);
-  const [selectedSubject, setSelectedSubject] = useState('Mathematics');
+  const [selectedSubjects, setSelectedSubjects] = useState(['Mathematics']);
   const [showOtherSubject, setShowOtherSubject] = useState(false);
   const [showOtherArea, setShowOtherArea] = useState(false);
   const [selectedTopics, setSelectedTopics] = useState(['Integration']);
@@ -38,6 +76,7 @@ const RequestHelpFlow = () => {
   const [planningAreas, setPlanningAreas] = useState(['Clementi']);
   const [otherArea, setOtherArea] = useState('');
   const [otherSubject, setOtherSubject] = useState('');
+  const [customTopicInput, setCustomTopicInput] = useState('');
   const [accessibilityNotes, setAccessibilityNotes] = useState('');
 
   const [requestId, setRequestId] = useState(null);
@@ -88,23 +127,58 @@ const RequestHelpFlow = () => {
     explanation: v.explanation ?? '',
   });
 
+  const getNextDateForWeekday = (dayName) => {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const targetDow = days.indexOf(dayName);
+    const today = new Date();
+    const currentDow = today.getDay();
+    let diff = targetDow - currentDow;
+    if (diff <= 0) diff += 7;
+    const next = new Date(today);
+    next.setDate(today.getDate() + diff);
+    return next.toISOString().slice(0, 10);
+  };
+
+  const buildTuteeTopicsNeeds = () => {
+    const topics = [];
+    const predefinedTopics = new Set();
+    selectedSubjects.forEach((subj) => {
+      const subject = allSubjects.find((s) => s.name === subj);
+      if (subject) {
+        subject.topics.forEach((t) => {
+          predefinedTopics.add(t);
+          if (selectedTopics.includes(t)) topics.push({ subject: subj, topic: t });
+        });
+      }
+    });
+    const firstSubject = (showOtherSubject && otherSubject) ? otherSubject : (selectedSubjects[0] || 'Other');
+    selectedTopics.forEach((t) => {
+      if (!predefinedTopics.has(t)) {
+        topics.push({ subject: firstSubject, topic: t });
+      }
+    });
+    return topics;
+  };
+
   const buildRequestPayload = () => {
-    const subject = showOtherSubject ? otherSubject : selectedSubject;
+    const subjects = [...selectedSubjects, ...(showOtherSubject && otherSubject ? [otherSubject] : [])];
     const areas = showOtherArea ? (otherArea ? [otherArea] : planningAreas) : planningAreas;
-    const timeSlots = selectedDates.flatMap((d) =>
-      selectedTimeSlots.map((h) => ({ day_of_week: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(d.day), hour_slot: h + 9 }))
-    );
-    return {
+    const timeSlots = selectedDates.flatMap((d) => {
+      const isoDate = getNextDateForWeekday(d.day);
+      return selectedTimeSlots.map((h) => ({ date: isoDate, hour_slot: h + 9 }));
+    });
+    const payload = {
       academic_level: ACADEMIC_LEVEL_MAP[academicLevel] || 'University',
-      subjects: subject ? [subject] : [],
+      subjects: subjects.filter(Boolean),
       topics: selectedTopics,
       planning_areas: areas,
       time_slots: timeSlots,
-      duration_hours: durationHours,
+      duration_hours: Number(durationHours),
       urgency_category: URGENCY_MAP[urgency] || 'general_study',
       accessibility_needs: [],
-      accessibility_notes: accessibilityNotes || null,
+      accessibility_notes: accessibilityNotes?.trim() || '',
     };
+    return payload;
   };
 
   const handleFindTutors = async () => {
@@ -113,6 +187,7 @@ const RequestHelpFlow = () => {
     setRecommendedTutors([]);
     try {
       const payload = buildRequestPayload();
+      console.log('[TuteeRequest] POST /requests payload:', JSON.stringify(payload, null, 2));
       const { data: reqData } = await api.post('/requests', payload);
       const rid = reqData.id ?? reqData.request_id;
       setRequestId(rid);
@@ -185,82 +260,49 @@ const RequestHelpFlow = () => {
     }
   }, [currentStep, sessionId]);
 
-  // Header
-  const FlowHeader = () => (
-    <header style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #0d3d2e 100%)', padding: '0 32px', height: '72px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
-        <span style={{ color: '#fff', fontSize: '22px', fontWeight: '700' }}>PeerLearn</span>
-      </div>
-      <button onClick={() => navigate('/dashboard')} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>✕ Cancel Request</button>
-    </header>
-  );
-
-  // Step Indicator (6 steps with Payment)
-  const StepIndicator = () => (
-    <div style={{ background: '#fff', padding: '24px 32px', borderBottom: '1px solid #e7e5e4' }}>
-      <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative' }}>
-          <div style={{ position: 'absolute', top: '18px', left: '40px', right: '40px', height: '4px', background: '#e7e5e4', zIndex: 1 }}>
-            <div style={{ width: `${((currentStep - 1) / 5) * 100}%`, height: '100%', background: '#1a5f4a', transition: 'width 0.3s' }}></div>
-          </div>
-          {[
-            { num: 1, label: 'Details' },
-            { num: 2, label: 'Schedule' },
-            { num: 3, label: 'Tutor' },
-            { num: 4, label: 'Venue' },
-            { num: 5, label: 'Payment' },
-            { num: 6, label: 'Confirm' },
-          ].map(step => (
-            <div key={step.num} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, width: '70px' }}>
-              <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: currentStep >= step.num ? '#1a5f4a' : '#fff', border: `3px solid ${currentStep >= step.num ? '#1a5f4a' : '#e7e5e4'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: currentStep >= step.num ? '#fff' : '#a8a29e', fontWeight: '600', fontSize: '14px', marginBottom: '8px' }}>
-                {currentStep > step.num ? '✓' : step.num}
-              </div>
-              <span style={{ fontSize: '11px', fontWeight: currentStep === step.num ? '600' : '400', color: currentStep >= step.num ? '#1c1917' : '#a8a29e', textAlign: 'center' }}>{step.label}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-
   // STEP 1: Subject, Academic Level & Topics (UPDATED - matching Tutor UI)
-  const Step1 = () => {
-    const currentSubjectData = allSubjects.find(s => s.name === selectedSubject);
-    
-    return (
+  const renderStep1 = () => (
     <div style={{ maxWidth: '700px', margin: '0 auto', padding: '48px 24px' }}>
       <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px', color: '#1c1917' }}>What do you need help with? 🎓</h1>
       <p style={{ color: '#57534e', marginBottom: '36px' }}>Tell us about the subject and topics you're struggling with.</p>
 
-      {/* Academic Level (SRS 2.2.3.3) */}
-      <div style={{ marginBottom: '28px' }}>
-        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#1c1917' }}>
-          Academic Level <span style={{ color: '#ef4444' }}>*</span>
-        </label>
-        <select value={academicLevel} onChange={(e) => setAcademicLevel(e.target.value)} style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', background: '#fff' }}>
-          <option value="">Select your academic level</option>
-          <option value="primary">Primary School</option>
-          <option value="secondary">Secondary School</option>
-          <option value="jc">Junior College</option>
-          <option value="poly">Polytechnic</option>
-          <option value="ite">Institute of Technical Education (ITE)</option>
-          <option value="uni">University</option>
-        </select>
-      </div>
-
-      {/* Subject Selection - Matching Tutor UI (predefined buttons + Other) */}
+      {/* Academic Level (SRS 2.2.3.3) — pill/chip buttons matching OfferToTutor */}
       <div style={{ marginBottom: '28px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>
-          Select Subject <span style={{ color: '#ef4444' }}>*</span>
+          Academic Level <span style={{ color: '#ef4444' }}>*</span>
+        </label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+          {[
+            { value: 'primary', label: 'Primary' },
+            { value: 'secondary', label: 'Secondary' },
+            { value: 'jc', label: 'Junior College' },
+            { value: 'poly', label: 'Polytechnic' },
+            { value: 'ite', label: 'ITE' },
+            { value: 'uni', label: 'University' },
+          ].map(({ value, label }) => {
+            const isSelected = academicLevel === value;
+            return (
+              <button key={value} onClick={() => setAcademicLevel(value)} style={{ padding: '12px 20px', background: isSelected ? '#1a5f4a' : '#fff', color: isSelected ? '#fff' : '#57534e', border: `2px solid ${isSelected ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}>
+                {isSelected && '✓ '}{label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Subject Selection - multi-select matching OfferToTutor */}
+      <div style={{ marginBottom: '28px' }}>
+        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>
+          Select Subjects <span style={{ color: '#ef4444' }}>*</span>
+          <span style={{ fontWeight: '400', color: '#a8a29e', marginLeft: '8px' }}>(select one or more)</span>
         </label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
           {allSubjects.map(subject => (
-            <button key={subject.name} onClick={() => { setSelectedSubject(subject.name); setShowOtherSubject(false); setSelectedTopics([]); }} style={{ padding: '12px 20px', background: selectedSubject === subject.name && !showOtherSubject ? '#1a5f4a' : '#fff', color: selectedSubject === subject.name && !showOtherSubject ? '#fff' : '#57534e', border: `2px solid ${selectedSubject === subject.name && !showOtherSubject ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}>
-              {selectedSubject === subject.name && !showOtherSubject && '✓ '}{subject.name}
+            <button key={subject.name} onClick={() => selectedSubjects.includes(subject.name) ? setSelectedSubjects(selectedSubjects.filter(s => s !== subject.name)) : setSelectedSubjects([...selectedSubjects, subject.name])} style={{ padding: '12px 20px', background: selectedSubjects.includes(subject.name) ? '#1a5f4a' : '#fff', color: selectedSubjects.includes(subject.name) ? '#fff' : '#57534e', border: `2px solid ${selectedSubjects.includes(subject.name) ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}>
+              {selectedSubjects.includes(subject.name) && '✓ '}{subject.name}
             </button>
           ))}
-          <button onClick={() => { setShowOtherSubject(true); setSelectedSubject(''); setSelectedTopics([]); }} style={{ padding: '12px 20px', background: showOtherSubject ? '#1a5f4a' : '#fff', color: showOtherSubject ? '#fff' : '#57534e', border: `2px solid ${showOtherSubject ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}>
+          <button onClick={() => setShowOtherSubject(!showOtherSubject)} style={{ padding: '12px 20px', background: showOtherSubject ? '#1a5f4a' : '#fff', color: showOtherSubject ? '#fff' : '#57534e', border: `2px solid ${showOtherSubject ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}>
             {showOtherSubject && '✓ '}Other
           </button>
         </div>
@@ -274,40 +316,35 @@ const RequestHelpFlow = () => {
         )}
       </div>
 
-      {/* Topic Selection - Matching Tutor UI (predefined buttons based on subject) */}
-      {(selectedSubject || showOtherSubject) && (
+      {/* Topic Selection - one section per selected subject (matching OfferToTutor) */}
+      {(selectedSubjects.length > 0 || showOtherSubject) && (
         <div style={{ marginBottom: '28px' }}>
           <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>
             Select Topics <span style={{ color: '#ef4444' }}>*</span>
             <span style={{ fontWeight: '400', color: '#a8a29e', marginLeft: '8px' }}>(select one or more)</span>
           </label>
 
-          {/* Show predefined topics if a predefined subject is selected */}
-          {currentSubjectData && !showOtherSubject && (
-            <div style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
-              <div style={{ fontWeight: '600', color: '#1c1917', marginBottom: '12px' }}>📚 {selectedSubject} Topics</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {currentSubjectData.topics.map(topic => (
-                  <button key={topic} onClick={() => selectedTopics.includes(topic) ? setSelectedTopics(selectedTopics.filter(t => t !== topic)) : setSelectedTopics([...selectedTopics, topic])} style={{ padding: '10px 16px', background: selectedTopics.includes(topic) ? '#1a5f4a' : '#fff', color: selectedTopics.includes(topic) ? '#fff' : '#57534e', border: `1px solid ${selectedTopics.includes(topic) ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px' }}>
-                    {selectedTopics.includes(topic) && '✓ '}{topic}
-                  </button>
-                ))}
+          {selectedSubjects.map(subjectName => {
+            const subject = allSubjects.find(s => s.name === subjectName);
+            if (!subject) return null;
+            return (
+              <div key={subjectName} style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px', marginBottom: '12px' }}>
+                <div style={{ fontWeight: '600', color: '#1c1917', marginBottom: '12px' }}>📚 {subjectName} Topics</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {subject.topics.map(topic => (
+                    <button key={topic} onClick={() => selectedTopics.includes(topic) ? setSelectedTopics(selectedTopics.filter(t => t !== topic)) : setSelectedTopics([...selectedTopics, topic])} style={{ padding: '10px 16px', background: selectedTopics.includes(topic) ? '#1a5f4a' : '#fff', color: selectedTopics.includes(topic) ? '#fff' : '#57534e', border: `1px solid ${selectedTopics.includes(topic) ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px' }}>
+                      {selectedTopics.includes(topic) && '✓ '}{topic}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })}
 
-          {/* Selected Topics Display */}
-          {selectedTopics.length > 0 && (
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ fontSize: '13px', color: '#57534e', marginBottom: '8px' }}>Selected topics:</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {selectedTopics.map(topic => (
-                  <span key={topic} style={{ background: '#dcfce7', color: '#166534', padding: '6px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    {topic}
-                    <button onClick={() => setSelectedTopics(selectedTopics.filter(t => t !== topic))} style={{ background: 'rgba(22, 101, 52, 0.2)', border: 'none', borderRadius: '50%', width: '18px', height: '18px', cursor: 'pointer', color: '#166534', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-                  </span>
-                ))}
-              </div>
+          {showOtherSubject && (
+            <div style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px', marginBottom: '12px' }}>
+              <div style={{ fontWeight: '600', color: '#1c1917', marginBottom: '12px' }}>📚 {otherSubject || 'Other'} Topics</div>
+              <p style={{ fontSize: '13px', color: '#57534e', marginBottom: '8px' }}>Add custom topics below.</p>
             </div>
           )}
 
@@ -315,8 +352,8 @@ const RequestHelpFlow = () => {
           <div>
             <div style={{ fontSize: '13px', color: '#57534e', marginBottom: '8px' }}>Add custom topic:</div>
             <div style={{ display: 'flex', gap: '10px' }}>
-              <input type="text" placeholder="Type a topic (1-100 characters)" maxLength={100} style={{ flex: 1, padding: '12px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '14px', boxSizing: 'border-box' }} />
-              <button style={{ padding: '12px 20px', background: '#f5f5f4', border: '1px solid #e7e5e4', borderRadius: '10px', cursor: 'pointer', fontWeight: '500', color: '#1a5f4a', fontSize: '14px' }}>+ Add</button>
+              <input type="text" placeholder="Type a topic (1-100 characters)" maxLength={100} value={customTopicInput} onChange={(e) => setCustomTopicInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); const t = customTopicInput.trim(); if (t) { setSelectedTopics((prev) => [...prev, t]); setCustomTopicInput(''); } } }} style={{ flex: 1, padding: '12px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '14px', boxSizing: 'border-box' }} />
+              <button type="button" onClick={() => { const t = customTopicInput.trim(); if (t) { setSelectedTopics((prev) => [...prev, t]); setCustomTopicInput(''); } }} style={{ padding: '12px 20px', background: '#f5f5f4', border: '1px solid #e7e5e4', borderRadius: '10px', cursor: 'pointer', fontWeight: '500', color: '#1a5f4a', fontSize: '14px' }}>+ Add</button>
             </div>
           </div>
         </div>
@@ -331,7 +368,7 @@ const RequestHelpFlow = () => {
       </div>
 
       {/* Urgency (SRS 2.2.3.9) */}
-      <div style={{ marginBottom: '40px' }}>
+      <div style={{ marginBottom: '28px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>
           How urgent is this? <span style={{ color: '#ef4444' }}>*</span>
         </label>
@@ -351,15 +388,33 @@ const RequestHelpFlow = () => {
         </div>
       </div>
 
+      {/* Confirmation Summary — grouped by subject (matching OfferToTutor style) */}
+      {selectedTopics.length > 0 && (() => {
+        const grouped = buildTuteeTopicsNeeds().reduce((acc, { subject, topic }) => {
+          if (!acc[subject]) acc[subject] = [];
+          acc[subject].push(topic);
+          return acc;
+        }, {});
+        return (
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '16px', marginBottom: '32px' }}>
+            <div style={{ fontSize: '14px', fontWeight: '600', color: '#166534', marginBottom: '12px' }}>For confirmation, you need help with:</div>
+            {Object.entries(grouped).map(([subject, topics]) => (
+              <div key={subject} style={{ fontSize: '14px', color: '#166534', marginBottom: '4px' }}>
+                <strong>{subject}</strong>: {topics.join(', ')}
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <button onClick={() => setCurrentStep(2)} disabled={selectedTopics.length === 0} style={{ padding: '14px 32px', background: selectedTopics.length > 0 ? '#1a5f4a' : '#e7e5e4', color: selectedTopics.length > 0 ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedTopics.length > 0 ? 'pointer' : 'not-allowed', fontSize: '15px' }}>Continue →</button>
       </div>
     </div>
-    );
-  };
+  );
 
   // STEP 2: Schedule & Location
-  const Step2 = () => (
+  const renderStep2 = () => (
     <div style={{ maxWidth: '700px', margin: '0 auto', padding: '48px 24px' }}>
       <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px', color: '#1c1917' }}>When and where works for you? 📅</h1>
       <p style={{ color: '#57534e', marginBottom: '36px' }}>Select your preferred time slots and location.</p>
@@ -411,7 +466,7 @@ const RequestHelpFlow = () => {
           Preferred Area <span style={{ color: '#ef4444' }}>*</span>
         </label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
-          {['Clementi', 'Jurong East', 'Jurong West', 'Bukit Batok', 'Queenstown', 'Woodlands', 'Tampines', 'Bedok'].map((area) => {
+          {['Ang Mo Kio', 'Bedok', 'Bishan', 'Boon Lay', 'Bukit Batok', 'Bukit Merah', 'Bukit Panjang', 'Bukit Timah', 'Central Area', 'Choa Chu Kang', 'Clementi', 'Geylang', 'Hougang', 'Jurong East', 'Jurong West', 'Kallang', 'Marine Parade', 'Novena', 'Pasir Ris', 'Punggol', 'Queenstown', 'Sembawang', 'Sengkang', 'Serangoon', 'Tampines', 'Toa Payoh', 'Woodlands', 'Yishun'].map((area) => {
             const isSelected = !showOtherArea && planningAreas.includes(area);
             return (
               <button key={area} onClick={() => { setShowOtherArea(false); setPlanningAreas([area]); }} style={{ padding: '10px 16px', background: isSelected ? '#1a5f4a' : '#fff', color: isSelected ? '#fff' : '#57534e', border: `1px solid ${isSelected ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>{isSelected && '✓ '}{area}</button>
@@ -491,7 +546,7 @@ const RequestHelpFlow = () => {
   );
 
   // STEP 3: Choose Tutor
-  const Step3 = () => (
+  const renderStep3 = () => (
     <div style={{ maxWidth: '900px', margin: '0 auto', padding: '48px 24px' }}>
       <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px', color: '#1c1917' }}>Choose your tutor 🎓</h1>
       <p style={{ color: '#57534e', marginBottom: '24px' }}>We found {recommendedTutors.length} tutors matching your request.</p>
@@ -561,7 +616,7 @@ const RequestHelpFlow = () => {
   );
 
   // STEP 4: Choose Venue
-  const Step4 = () => (
+  const renderStep4 = () => (
     <div style={{ maxWidth: '900px', margin: '0 auto', padding: '48px 24px' }}>
       <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px', color: '#1c1917' }}>Choose a meeting venue 📍</h1>
       <p style={{ color: '#57534e', marginBottom: '24px' }}>Safe public venues near both you and your tutor.</p>
@@ -626,7 +681,7 @@ const RequestHelpFlow = () => {
   );
 
   // STEP 5: Payment (NEW per SRS 2.8)
-  const Step5 = () => (
+  const renderStep5 = () => (
     <div style={{ maxWidth: '600px', margin: '0 auto', padding: '48px 24px' }}>
       <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px', color: '#1c1917' }}>Payment 💳</h1>
       <p style={{ color: '#57534e', marginBottom: '32px' }}>Complete payment to confirm your session.</p>
@@ -702,7 +757,7 @@ const RequestHelpFlow = () => {
   );
 
   // STEP 6: Confirmation (SRS 2.7.4)
-  const Step6 = () => (
+  const renderStep6 = () => (
     <div style={{ maxWidth: '600px', margin: '0 auto', padding: '48px 24px' }}>
       <div style={{ textAlign: 'center', marginBottom: '32px' }}>
         <div style={{ width: '80px', height: '80px', background: '#dcfce7', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', fontSize: '40px' }}>✓</div>
@@ -761,14 +816,14 @@ const RequestHelpFlow = () => {
 
   return (
     <div style={{ minHeight: '100vh', background: '#fafaf9', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-      <FlowHeader />
-      <StepIndicator />
-      {currentStep === 1 && <Step1 />}
-      {currentStep === 2 && <Step2 />}
-      {currentStep === 3 && <Step3 />}
-      {currentStep === 4 && <Step4 />}
-      {currentStep === 5 && <Step5 />}
-      {currentStep === 6 && <Step6 />}
+      <TuteeFlowHeader onCancel={() => navigate('/dashboard')} />
+      <TuteeStepIndicator currentStep={currentStep} />
+      {currentStep === 1 && renderStep1()}
+      {currentStep === 2 && renderStep2()}
+      {currentStep === 3 && renderStep3()}
+      {currentStep === 4 && renderStep4()}
+      {currentStep === 5 && renderStep5()}
+      {currentStep === 6 && renderStep6()}
     </div>
   );
 };
