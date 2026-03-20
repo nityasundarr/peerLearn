@@ -1156,11 +1156,11 @@ const Dashboard = () => {
     const pendingCount = learningSessions.filter((s) =>
       s.status === 'pending_tutor_selection',
     ).length + openTuteeRequests.length;
-    const homeUpcomingSessions = learningSessions.filter((s) =>
-      ['confirmed', 'tutor_accepted', 'pending_confirmation', 'pending_confirm'].includes(normalizeSessionStatus(s)),
+    const upcomingSessions = learningSessions.filter((s) =>
+      ['confirmed', 'tutor_accepted', 'pending_confirmation'].includes(s.status),
     ).slice(0, 3);
     const statItems = [
-      { label: 'Upcoming', value: String(stats.upcoming ?? upcomingSessions.length ?? 0), icon: '📅' },
+      { label: 'Upcoming', value: String(stats.upcoming ?? (summary?.upcoming_sessions || []).length ?? 0), icon: '📅' },
       { label: 'Pending', value: String(pendingCount), icon: '⏳' },
       { label: 'Hours Learned', value: String(stats.hours_learned ?? 0), icon: '📚' },
       { label: 'Hours Taught', value: String(stats.hours_taught ?? 0), icon: '🎓' },
@@ -1269,7 +1269,7 @@ const Dashboard = () => {
         {/* Upcoming Sessions */}
         <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', padding: '24px' }}>
           <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px', color: '#1c1917' }}>📅 Upcoming Sessions</h3>
-          {homeUpcomingSessions.map((s, index) => {
+          {upcomingSessions.map((s, index) => {
             const subj = s.subject
               || (Array.isArray(s.subjects) ? s.subjects[0] : null)
               || '—';
