@@ -99,6 +99,7 @@ const RequestHelpFlow = () => {
   const [recommendedVenues, setRecommendedVenues] = useState([]);
   const [sessionFee, setSessionFee] = useState(null);
   const [awaitingTutorAccept, setAwaitingTutorAccept] = useState(false);
+  const [showWaitlistSuccess, setShowWaitlistSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [hovered, setHovered] = useState(null);
@@ -287,6 +288,8 @@ const RequestHelpFlow = () => {
     setError(null);
     setLoading(true);
     setRecommendedTutors([]);
+    setShowWaitlistSuccess(false);
+    setSelectedTutor(null);
     try {
       const payload = buildRequestPayload();
       console.log('[TuteeRequest] POST /requests payload:', JSON.stringify(payload, null, 2));
@@ -303,6 +306,15 @@ const RequestHelpFlow = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSubmitRequestAndWait = () => {
+    setShowWaitlistSuccess(true);
+  };
+
+  const handleModifyRequestFromNoTutors = () => {
+    setShowWaitlistSuccess(false);
+    setCurrentStep(1);
   };
 
   const normalizeSessionStatus = (raw) =>
@@ -751,6 +763,65 @@ const RequestHelpFlow = () => {
         </div>
       );
     }
+
+    if (showWaitlistSuccess) {
+      return (
+        <div style={{ maxWidth: '560px', margin: '0 auto', padding: '48px 24px', textAlign: 'center' }}>
+          <div style={{ fontSize: '56px', marginBottom: '20px' }}>✓</div>
+          <h1 style={{ fontSize: '26px', fontWeight: '700', color: '#166534', marginBottom: '16px' }}>Your request has been submitted!</h1>
+          <p style={{ color: '#57534e', marginBottom: '12px', fontSize: '16px', lineHeight: 1.6 }}>
+            We&apos;ll send you a notification when a matching tutor accepts your request.
+          </p>
+          <p style={{ color: '#57534e', marginBottom: '32px', fontSize: '15px', lineHeight: 1.6 }}>
+            You can track your request in <strong>My Learning → Pending</strong>.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard')}
+            style={{ padding: '14px 32px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '16px' }}
+          >
+            Go to Dashboard
+          </button>
+        </div>
+      );
+    }
+
+    if (recommendedTutors.length === 0) {
+      return (
+        <div style={{ maxWidth: '640px', margin: '0 auto', padding: '48px 24px' }}>
+          <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '12px', color: '#1c1917' }}>Choose your tutor 🎓</h1>
+          <p style={{ color: '#57534e', marginBottom: '28px', fontSize: '16px', lineHeight: 1.6 }}>
+            No tutors are currently available for your request.
+          </p>
+          <div style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px 20px', marginBottom: '28px', fontSize: '14px', color: '#1c1917' }}>
+            <div><strong>Level:</strong> {ACADEMIC_LEVEL_MAP[academicLevel] ?? academicLevel}</div>
+            <div style={{ marginTop: '8px' }}><strong>Topics:</strong> {getAllTopics().join(', ') || '—'}</div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div>
+              <button
+                type="button"
+                onClick={handleSubmitRequestAndWait}
+                style={{ width: '100%', padding: '16px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', fontSize: '16px' }}
+              >
+                📬 Submit Request &amp; Wait for a Tutor
+              </button>
+              <p style={{ fontSize: '13px', color: '#78716c', marginTop: '10px', textAlign: 'center' }}>
+                We&apos;ll notify you when a matching tutor becomes available
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleModifyRequestFromNoTutors}
+              style={{ width: '100%', padding: '14px', background: '#fff', color: '#1a5f4a', border: '2px solid #1a5f4a', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', fontSize: '15px' }}
+            >
+              ← Modify my request
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
     <div style={{ maxWidth: '900px', margin: '0 auto', padding: '48px 24px' }}>
       <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px', color: '#1c1917' }}>Choose your tutor 🎓</h1>
