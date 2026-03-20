@@ -80,10 +80,10 @@ const RequestHelpFlow = () => {
 
   const [academicLevel, setAcademicLevel] = useState('uni');
   const [urgency, setUrgency] = useState('exam');
-  const [selectedDates, setSelectedDates] = useState([{ day: 'Tue', date: '14' }, { day: 'Thu', date: '16' }]);
-  const [selectedTimeSlots, setSelectedTimeSlots] = useState([6, 7]);
+  const [selectedDates, setSelectedDates] = useState([]);
+  const [selectedTimeSlots, setSelectedTimeSlots] = useState([]);
   const [durationHours, setDurationHours] = useState(1);
-  const [planningAreas, setPlanningAreas] = useState(['Clementi']);
+  const [selectedAreas, setSelectedAreas] = useState([]);
   const [otherArea, setOtherArea] = useState('');
   const [otherSubject, setOtherSubject] = useState('');
   const [customTopicInput, setCustomTopicInput] = useState('');
@@ -231,9 +231,39 @@ const RequestHelpFlow = () => {
     }
   };
 
+  const togglePlanningArea = (area) => {
+    setShowOtherArea(false);
+    setSelectedAreas((prev) => {
+      const current = Array.isArray(prev) ? [...prev] : [];
+      const index = current.indexOf(area);
+      if (index === -1) {
+        return [...current, area];
+      } else {
+        return current.filter((a) => a !== area);
+      }
+    });
+  };
+
+  const toggleDate = (day, date) => {
+    setSelectedDates((prev) => {
+      const has = prev.some((s) => s.day === day && s.date === date);
+      if (has) return prev.filter((s) => !(s.day === day && s.date === date));
+      return [...prev, { day, date }];
+    });
+  };
+
+  const toggleTimeSlot = (slotIndex) => {
+    setSelectedTimeSlots((prev) => {
+      const current = Array.isArray(prev) ? [...prev] : [];
+      const idx = current.indexOf(slotIndex);
+      if (idx === -1) return [...current, slotIndex].sort((a, b) => a - b);
+      return current.filter((x) => x !== slotIndex);
+    });
+  };
+
   const buildRequestPayload = () => {
     const subjects = [...selectedSubjects, ...(showOtherSubject && otherSubject ? [otherSubject] : [])].filter(Boolean);
-    const areas = showOtherArea ? (otherArea ? [otherArea] : planningAreas) : planningAreas;
+    const areas = showOtherArea ? (otherArea ? [otherArea] : selectedAreas) : selectedAreas;
     const timeSlots = selectedDates.flatMap((d) => {
       const isoDate = getNextDateForWeekday(d.day);
       return selectedTimeSlots.map((h) => ({ date: isoDate, hour_slot: h + 9 }));
@@ -537,10 +567,12 @@ const RequestHelpFlow = () => {
           Preferred Dates <span style={{ color: '#ef4444' }}>*</span> <span style={{ fontWeight: '400', color: '#a8a29e' }}>(select multiple)</span>
         </label>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          {[{ day: 'Mon', date: '13', selected: false }, { day: 'Tue', date: '14', selected: true }, { day: 'Wed', date: '15', selected: false }, { day: 'Thu', date: '16', selected: true }, { day: 'Fri', date: '17', selected: false }, { day: 'Sat', date: '18', selected: false }, { day: 'Sun', date: '19', selected: false }].map((d, i) => {
-            const h = hovered === `date-${i}`;
+          {[{ day: 'Mon', date: '13' }, { day: 'Tue', date: '14' }, { day: 'Wed', date: '15' }, { day: 'Thu', date: '16' }, { day: 'Fri', date: '17' }, { day: 'Sat', date: '18' }, { day: 'Sun', date: '19' }].map((d) => {
+            const dateKey = `${d.day}-${d.date}`;
+            const isSelected = selectedDates.some((s) => s.day === d.day && s.date === d.date);
+            const h = hovered === `date-${dateKey}`;
             return (
-              <button key={i} onMouseEnter={() => setHovered(`date-${i}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 16px', background: h ? (d.selected ? '#145040' : '#f0faf5') : (d.selected ? '#1a5f4a' : '#fff'), color: d.selected ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `2px solid ${h ? '#1a5f4a' : (d.selected ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '10px', cursor: 'pointer', minWidth: '70px', textAlign: 'center', transition: 'all 0.15s ease' }}>
+              <button key={dateKey} type="button" onClick={() => toggleDate(d.day, d.date)} onMouseEnter={() => setHovered(`date-${dateKey}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 16px', background: h ? (isSelected ? '#145040' : '#f0faf5') : (isSelected ? '#1a5f4a' : '#fff'), color: isSelected ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `2px solid ${h ? '#1a5f4a' : (isSelected ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '10px', cursor: 'pointer', minWidth: '70px', textAlign: 'center', transition: 'all 0.15s ease' }}>
                 <div style={{ fontSize: '12px', opacity: 0.8 }}>{d.day}</div>
                 <div style={{ fontSize: '18px', fontWeight: '600' }}>{d.date}</div>
               </button>
@@ -556,10 +588,10 @@ const RequestHelpFlow = () => {
         </label>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
           {['9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM'].map((time, i) => {
-            const sel = [6, 7].includes(i);
-            const h = hovered === `time-${i}`;
+            const sel = selectedTimeSlots.includes(i);
+            const h = hovered === `time-${time}`;
             return (
-              <button key={i} onMouseEnter={() => setHovered(`time-${i}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', cursor: 'pointer', fontSize: '14px', transition: 'all 0.15s ease' }}>{time}</button>
+              <button key={time} type="button" onClick={() => toggleTimeSlot(i)} onMouseEnter={() => setHovered(`time-${time}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', cursor: 'pointer', fontSize: '14px', transition: 'all 0.15s ease' }}>{time}</button>
             );
           })}
         </div>
@@ -588,13 +620,13 @@ const RequestHelpFlow = () => {
         </label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
           {PLANNING_AREAS_FULL.map((area) => {
-            const isSelected = !showOtherArea && planningAreas.includes(area);
+            const isSelected = !showOtherArea && selectedAreas.includes(area);
             const h = hovered === `area-${area}`;
             return (
-              <button key={area} onClick={() => { setShowOtherArea(false); setPlanningAreas((prev) => prev.includes(area) ? prev.filter((a) => a !== area) : [...prev, area]); }} onMouseEnter={() => setHovered(`area-${area}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: h ? (isSelected ? '#145040' : '#f0faf5') : (isSelected ? '#1a5f4a' : '#fff'), color: isSelected ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (isSelected ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>{isSelected && '✓ '}{area}</button>
+              <button key={area} type="button" onClick={() => togglePlanningArea(area)} onMouseEnter={() => setHovered(`area-${area}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: h ? (isSelected ? '#145040' : '#f0faf5') : (isSelected ? '#1a5f4a' : '#fff'), color: isSelected ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (isSelected ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>{isSelected && '✓ '}{area}</button>
             );
           })}
-          <button onClick={() => { setShowOtherArea(true); setPlanningAreas([]); }} onMouseEnter={() => setHovered('area-other')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === 'area-other' ? (showOtherArea ? '#145040' : '#f0faf5') : (showOtherArea ? '#1a5f4a' : '#fff'), color: showOtherArea ? '#fff' : (hovered === 'area-other' ? '#1a5f4a' : '#57534e'), border: `1px solid ${hovered === 'area-other' ? '#1a5f4a' : (showOtherArea ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>{showOtherArea && '✓ '}Other</button>
+          <button type="button" onClick={() => { setShowOtherArea(true); setSelectedAreas([]); }} onMouseEnter={() => setHovered('area-other')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === 'area-other' ? (showOtherArea ? '#145040' : '#f0faf5') : (showOtherArea ? '#1a5f4a' : '#fff'), color: showOtherArea ? '#fff' : (hovered === 'area-other' ? '#1a5f4a' : '#57534e'), border: `1px solid ${hovered === 'area-other' ? '#1a5f4a' : (showOtherArea ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>{showOtherArea && '✓ '}Other</button>
         </div>
         {showOtherArea && (
           <input type="text" placeholder="Enter planning area (1-100 characters)" maxLength={100} value={otherArea} onChange={(e) => setOtherArea(e.target.value)} style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', boxSizing: 'border-box' }} />
@@ -629,7 +661,7 @@ const RequestHelpFlow = () => {
           <div><span style={{ color: '#78716c', marginRight: '8px' }}>What you need help with:</span><strong style={{ color: '#166534' }}>{accessibilityNotes.trim() || 'None'}</strong></div>
           <div><span style={{ color: '#78716c', marginRight: '8px' }}>Urgency:</span><strong style={{ color: '#166534' }}>{urgency === 'exam' ? 'Exam Soon' : urgency === 'assignment' ? 'Assignment Due' : 'General Study'}</strong></div>
           <div><span style={{ color: '#78716c', marginRight: '8px' }}>Preferred times:</span><strong style={{ color: '#166534' }}>{selectedDates.length > 0 && selectedTimeSlots.length > 0 ? (() => { const times = ['9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM']; const fmt = (t) => (t || '').replace(':00 ', '').toLowerCase(); const sel = [...selectedTimeSlots].sort((a, b) => a - b); const start = fmt(times[sel[0]]); const end = fmt(times[Math.min(sel[sel.length - 1] + 1, 11)] || times[11]); return selectedDates.map((d) => `${d.day} ${d.date} Jan ${start}-${end}`).join(', '); })() : '—'}</strong></div>
-          <div><span style={{ color: '#78716c', marginRight: '8px' }}>Preferred areas:</span><strong style={{ color: '#166534' }}>{(showOtherArea && otherArea ? [otherArea] : planningAreas).join(', ') || '—'}</strong></div>
+          <div><span style={{ color: '#78716c', marginRight: '8px' }}>Preferred areas:</span><strong style={{ color: '#166534' }}>{(showOtherArea && otherArea ? [otherArea] : selectedAreas).join(', ') || '—'}</strong></div>
           <div><span style={{ color: '#78716c', marginRight: '8px' }}>Accessibility needs:</span><strong style={{ color: '#166534' }}>{accessibilityNeeds.length > 0 ? accessibilityNeeds.map((a) => ({ 'Wheelchair accessible venue required': 'Wheelchair access', 'Ground floor / lift access required': 'Ground floor / lift access', 'Hearing assistance / quiet environment needed': 'Hearing assistance', 'Visual aids / good lighting required': 'Visual aids' }[a] || a)).join(', ') : 'None specified'}</strong></div>
           <div><span style={{ color: '#78716c', marginRight: '8px' }}>Session duration:</span><strong style={{ color: '#166534' }}>{durationHours} hour{durationHours > 1 ? 's' : ''}</strong></div>
         </div>

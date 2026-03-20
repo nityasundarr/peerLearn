@@ -723,7 +723,6 @@ const Dashboard = () => {
       </div>
 
       {learningSessions.map((tuteeSession) => {
-        console.log('[MyLearning session]', JSON.stringify(tuteeSession, null, 2));
         const sched = learningScheduleDisplay(tuteeSession);
         const venueLine = venueDisplayForLearning(tuteeSession);
         const st = normalizeSessionStatus(tuteeSession);
