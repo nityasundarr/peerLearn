@@ -19,20 +19,40 @@ class CreateSessionBody(BaseModel):
     tutor_id: str
 
 
+class TimeSlotInput(BaseModel):
+    """One proposed time slot — POST /sessions/{id}/propose-slots body item."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    date: str
+    hour_slot: int
+
+    @field_validator("hour_slot")
+    @classmethod
+    def _hour(cls, v: int) -> int:
+        if not 0 <= v <= 23:
+            raise ValueError("hour_slot must be between 0 and 23.")
+        return v
+
+
 class ProposeSlotsBody(BaseModel):
     """POST /sessions/{id}/propose-slots — tutor proposes slots (UC-4.7)."""
 
-    slots: list[dict]  # [{date: "YYYY-MM-DD", hour_slot: 0-23}]
+    model_config = ConfigDict(extra="ignore")
 
-    @field_validator("slots")
+    proposed_slots: list[TimeSlotInput]
+
+    @field_validator("proposed_slots")
     @classmethod
-    def _slots(cls, v: list[dict]) -> list[dict]:
+    def _proposed_slots(cls, v: list[TimeSlotInput]) -> list[TimeSlotInput]:
         if not v:
             raise ValueError("At least one slot must be proposed.")
-        for s in v:
-            if "date" not in s or "hour_slot" not in s:
-                raise ValueError("Each slot must have 'date' and 'hour_slot'.")
         return v
+
+    @property
+    def slots(self) -> list[dict]:
+        """Alias for session_service / DB layer (expects list[dict])."""
+        return [s.model_dump() for s in self.proposed_slots]
 
 
 class ConfirmSlotBody(BaseModel):
