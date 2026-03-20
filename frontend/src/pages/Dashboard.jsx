@@ -1141,7 +1141,6 @@ const Dashboard = () => {
     const homeUpcomingSessions = learningSessions.filter((s) =>
       ['confirmed', 'tutor_accepted', 'pending_confirmation', 'pending_confirm'].includes(normalizeSessionStatus(s)),
     ).slice(0, 3);
-    console.log('[HomeTab] upcomingSessions raw:', JSON.stringify(homeUpcomingSessions?.[0], null, 2));
     const statItems = [
       { label: 'Upcoming', value: String(stats.upcoming ?? upcomingSessions.length ?? 0), icon: '📅' },
       { label: 'Pending', value: String(pendingCount), icon: '⏳' },
@@ -1214,6 +1213,21 @@ const Dashboard = () => {
                 'en-SG', { hour: 'numeric', minute: '2-digit', hour12: true },
               ) : '—');
             const badgeState = s.state || s.status;
+            const sessionSt = normalizeSessionStatus(s);
+            let homeFeeLine = null;
+            if (sessionSt === 'confirmed') {
+              homeFeeLine = (
+                <div style={{ fontSize: '14px', fontWeight: '600', color: '#16a34a', marginTop: '8px' }}>✓ Paid</div>
+              );
+            } else if (sessionSt === 'pending_confirmation' || sessionSt === 'pending_confirm') {
+              homeFeeLine = (
+                <div style={{ fontSize: '14px', fontWeight: '600', color: '#d97706', marginTop: '8px' }}>Payment pending</div>
+              );
+            } else if (sessionSt === 'tutor_accepted') {
+              homeFeeLine = (
+                <div style={{ fontSize: '14px', fontWeight: '600', color: '#1a5f4a', marginTop: '8px' }}>Awaiting confirmation</div>
+              );
+            }
             return (
             <div key={s.id || index} onClick={() => { setSelectedSession(s); setShowDetailPanel(true); }} onMouseEnter={() => setHovered(`session-${s.id || index}`)} onMouseLeave={() => setHovered(null)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: '#f5f5f4', borderRadius: '12px', marginBottom: '12px', cursor: 'pointer', boxShadow: hovered === `session-${s.id || index}` ? '0 4px 16px rgba(0,0,0,0.12)' : '0 2px 8px rgba(0,0,0,0.08)', transform: hovered === `session-${s.id || index}` ? 'translateY(-2px)' : 'none', transition: 'all 0.2s ease' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -1225,7 +1239,7 @@ const Dashboard = () => {
               </div>
               <div style={{ textAlign: 'right' }}>
                 <StatusBadge state={badgeState} />
-                <div style={{ fontSize: '14px', fontWeight: '600', color: '#1a5f4a', marginTop: '8px' }}>{s.fee || '—'}</div>
+                {homeFeeLine}
               </div>
             </div>
             );
