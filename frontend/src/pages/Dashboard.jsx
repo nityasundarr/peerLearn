@@ -4,6 +4,19 @@ import DashboardLayout from '../components/DashboardLayout';
 import api from '../services/api';
 import { useAuth } from '../services/AuthContext';
 
+const getUrgency = (s) => {
+  const val = s.urgency_category || s.urgency_level || s.urgency;
+  const map = {
+    'exam_soon': '🔥 Exam Soon',
+    'assignment_due': '⚡ Assignment Due',
+    'general_study': '📚 General Study',
+    'very_urgent': '🔥 Very Urgent',
+    'urgent': '⚡ Urgent',
+    'normal': '📚 Normal'
+  };
+  return map[val] || val || '—';
+};
+
 // ============================================================
 // SECTION 2: USER DASHBOARD (UPDATED)
 // Changes per SRS:
@@ -627,9 +640,9 @@ const Dashboard = () => {
                     return subjectDisplay || '—';
                   })()}
                 </h3>
-                <p style={{ fontSize: '14px', color: '#57534e', marginBottom: '4px' }}>from {req.student} • {req.level}</p>
+                <p style={{ fontSize: '14px', color: '#57534e', marginBottom: '4px' }}>{req.student || req.tutee_full_name || req.tutee_name || 'Student'} • {req.level || req.academic_level || '—'}</p>
                 <div style={{ display: 'flex', gap: '16px', fontSize: '14px', color: '#57534e', flexWrap: 'wrap' }}>
-                  <span>📅 Requested: {req.date || '—'} at {(req.time || '—').toUpperCase()} | {urgencyLabel[req.urgency] || urgencyLabel[req.urgency_level] || urgencyLabel[req.urgency_category] || req.urgency || '—'}</span>
+                  <span>📅 Requested: {req.date || (req.created_at ? new Date(req.created_at).toLocaleDateString('en-SG', {weekday:'short', day:'numeric', month:'short'}) : '—')} at {req.time || (req.created_at ? new Date(req.created_at).toLocaleTimeString('en-SG', {hour:'numeric', minute:'2-digit', hour12:true}) : '—')} | {urgencyLabel[req.urgency] || urgencyLabel[req.urgency_level] || urgencyLabel[req.urgency_category] || req.urgency || '—'}</span>
                   {req.distance_bucket && req.distance_bucket !== '—' && <span>📍 {req.distance_bucket}</span>}
                 </div>
                 {(req.time_slots?.length > 0) && (
