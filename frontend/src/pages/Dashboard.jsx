@@ -56,20 +56,74 @@ const formatRelativeTime = (d) => {
   return formatDate(dt);
 };
 
-const mapSessionToUi = (s) => ({
-  id: s.id,
-  subject: s.subject || s.subjects?.[0] || '—',
-  topic: s.topic || s.topics?.[0] || '—',
-  tutor: s.tutor_name || s.tutor?.full_name || 'Tutor',
-  tutee: s.tutee_name || s.tutee?.full_name || 'Student',
-  initials: getInitials(s.tutor_name || s.tutee_name || s.tutor?.full_name || s.tutee?.full_name),
-  date: formatDate(s.scheduled_at || s.date),
-  time: formatTime(s.scheduled_at || s.date),
-  venue: s.venue_name || s.venue_manual || s.venue || '—',
-  state: (s.status || s.state || '').toUpperCase().replace(/\s/g, '_'),
-  fee: s.fee ? `$${typeof s.fee === 'number' ? s.fee.toFixed(2) : s.fee}` : '—',
-  ...s,
-});
+const mapSessionToUi = (s) => {
+  const tutorDisplay =
+    s.tutor_name ||
+    s.tutor_full_name ||
+    (s.tutor && typeof s.tutor === 'object' ? s.tutor.full_name : null) ||
+    (typeof s.tutor === 'string' ? s.tutor : null) ||
+    'Tutor';
+  let state = (s.status || s.state || '').toUpperCase().replace(/\s/g, '_');
+  if (state === 'PENDING_CONFIRMATION') state = 'PENDING_CONFIRM';
+  if (state === 'COMPLETED_ATTENDED' || state === 'COMPLETED_NO_SHOW') state = 'COMPLETED';
+  return {
+    ...s,
+    id: s.id,
+    subject: s.subject || s.subjects?.[0] || '—',
+    topic: s.topic || s.topics?.[0] || '—',
+    tutor: tutorDisplay,
+    tutee: s.tutee_name || s.tutee?.full_name || 'Student',
+    initials: getInitials(
+      s.tutor_name ||
+        s.tutor_full_name ||
+        (s.tutor && typeof s.tutor === 'object' ? s.tutor.full_name : null) ||
+        s.tutee_name ||
+        s.tutee?.full_name
+    ),
+    date: formatDate(s.scheduled_at || s.date),
+    time: formatTime(s.scheduled_at || s.date),
+    venue: s.venue_name || s.venue_manual || s.venue || '—',
+    state,
+    fee: s.fee ? `$${typeof s.fee === 'number' ? s.fee.toFixed(2) : s.fee}` : '—',
+  };
+};
+
+const normalizeSessionStatus = (s) =>
+  String(s.status || s.state || '')
+    .toLowerCase()
+    .replace(/\s/g, '_');
+
+const learningScheduleDisplay = (s) => {
+  const st = normalizeSessionStatus(s);
+  if (st === 'tutor_accepted' && !s.scheduled_at) {
+    return { date: 'Pending slot confirmation', time: '' };
+  }
+  if (s.scheduled_at) {
+    return { date: formatDate(s.scheduled_at), time: formatTime(s.scheduled_at) };
+  }
+  return { date: s.date || '—', time: s.time || '—' };
+};
+
+const venueDisplayForLearning = (s) => {
+  const v = s.venue_name || s.venue_manual || s.venue;
+  if (v && v !== '—') return v;
+  return 'Pending venue selection';
+};
+
+const paymentStatusLabel = (s) => {
+  const st = normalizeSessionStatus(s);
+  const map = {
+    pending_tutor_selection: 'Not started',
+    tutor_accepted: 'Pending slot confirmation',
+    pending_confirmation: 'Pending payment',
+    confirmed: 'Paid',
+    completed: 'Paid',
+    completed_attended: 'Paid',
+    completed_no_show: 'Paid',
+    cancelled: 'Cancelled',
+  };
+  return map[st] || '—';
+};
 
 const mapRequestToUi = (r) => ({
   id: r.session_id || r.id,
@@ -165,6 +219,7 @@ const Dashboard = () => {
   const [proposingSessionId, setProposingSessionId] = useState(null);
   const [proposedSlots, setProposedSlots] = useState([]);
   const [slotsProposedSessionId, setSlotsProposedSessionId] = useState(null);
+  const [tuteeSlotPick, setTuteeSlotPick] = useState({});
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [hovered, setHovered] = useState(null);
@@ -397,6 +452,34 @@ const Dashboard = () => {
     }
   };
 
+  const handleConfirmTuteeSlot = async (sessionId, slot) => {
+    if (!slot?.date || slot.hour_slot == null) return;
+    try {
+      await api.post(`/sessions/${sessionId}/confirm-slot`, {
+        date: slot.date,
+        hour_slot: Number(slot.hour_slot),
+      });
+      await fetchSummary();
+      await fetchBadges();
+      if (activeTab === 'learning') await fetchLearningSessions();
+      setTuteeSlotPick((prev) => {
+        const next = { ...prev };
+        delete next[sessionId];
+        return next;
+      });
+      if (selectedSession?.id === sessionId) {
+        try {
+          const { data } = await api.get(`/sessions/${sessionId}`);
+          setSelectedSession(mapSessionToUi(data));
+        } catch {
+          // keep panel open with list data
+        }
+      }
+    } catch {
+      // error handled by api interceptor or UI
+    }
+  };
+
   const handleMarkOutcome = async (sessionId, outcome) => {
     try {
       await api.patch(`/sessions/${sessionId}/outcome`, { outcome });
@@ -431,7 +514,11 @@ const Dashboard = () => {
   };
 
   const StatusBadge = ({ state }) => {
-    const s = sessionStates[state];
+    const s = sessionStates[state] || {
+      label: String(state || 'Unknown').replace(/_/g, ' '),
+      bg: '#f3f4f6',
+      color: '#57534e',
+    };
     return <span style={{ background: s.bg, color: s.color, padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>{s.label}</span>;
   };
 
@@ -555,35 +642,93 @@ const Dashboard = () => {
           );
         })}
       </div>
-      
-      {learningSessions.map(session => (
-        <div key={session.id} style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', padding: '24px', marginBottom: '16px' }}>
+
+      {learningSessions.map((tuteeSession) => {
+        console.log('[MyLearning session]', JSON.stringify(tuteeSession, null, 2));
+        const sched = learningScheduleDisplay(tuteeSession);
+        const venueLine = venueDisplayForLearning(tuteeSession);
+        const st = normalizeSessionStatus(tuteeSession);
+        const proposed = (tuteeSession.proposed_slots || []).map((sl) => slotToProposedPayload(sl)).filter(Boolean);
+        const showProposeUi = st === 'tutor_accepted' && proposed.length > 0;
+        const pick = tuteeSlotPick[tuteeSession.id];
+        return (
+        <div key={tuteeSession.id} style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', padding: '24px', marginBottom: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div style={{ display: 'flex', gap: '16px' }}>
-              <div style={{ width: '56px', height: '56px', background: '#f59e0b', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '18px' }}>{session.initials}</div>
+              <div style={{ width: '56px', height: '56px', background: '#f59e0b', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '18px' }}>{tuteeSession.initials}</div>
               <div>
-                <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1c1917', marginBottom: '4px' }}>{session.subject}: {session.topic}</h3>
-                <p style={{ fontSize: '14px', color: '#57534e', marginBottom: '8px' }}>with {session.tutor}</p>
-                <div style={{ display: 'flex', gap: '16px', fontSize: '14px', color: '#57534e' }}>
-                  <span>📅 {session.date}</span>
-                  <span>🕐 {session.time}</span>
-                  <span>📍 {session.venue}</span>
+                <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1c1917', marginBottom: '4px' }}>{tuteeSession.subject}: {tuteeSession.topic}</h3>
+                <p style={{ fontSize: '14px', color: '#57534e', marginBottom: '8px' }}>with {tuteeSession.tutor}</p>
+                <div style={{ display: 'flex', gap: '16px', fontSize: '14px', color: '#57534e', flexWrap: 'wrap' }}>
+                  <span>📅 {sched.date}</span>
+                  {sched.time ? <span>🕐 {sched.time}</span> : null}
+                  <span>📍 {venueLine}</span>
                 </div>
               </div>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <StatusBadge state={session.state} />
-              <div style={{ fontSize: '18px', fontWeight: '700', color: '#1a5f4a', marginTop: '12px' }}>{session.fee}</div>
+              <StatusBadge state={tuteeSession.state} />
+              <div style={{ fontSize: '13px', fontWeight: '600', color: '#57534e', marginTop: '8px' }}>{paymentStatusLabel(tuteeSession)}</div>
+              <div style={{ fontSize: '18px', fontWeight: '700', color: '#1a5f4a', marginTop: '4px' }}>{tuteeSession.fee}</div>
             </div>
           </div>
+          {showProposeUi && (
+            <div style={{ marginTop: '16px', padding: '16px', background: '#f0fdf4', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
+              <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#166534', marginBottom: '12px' }}>Your tutor proposed these times — please confirm one:</h4>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                {proposed.map((slot, idx) => {
+                  const key = `${slot.date}-${slot.hour_slot}-${idx}`;
+                  const label = formatSlot(slot);
+                  const selected = pick && pick.date === slot.date && Number(pick.hour_slot) === Number(slot.hour_slot);
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setTuteeSlotPick((prev) => ({ ...prev, [tuteeSession.id]: slot }))}
+                      style={{
+                        padding: '8px 14px',
+                        background: selected ? '#22c55e' : '#fff',
+                        color: selected ? '#fff' : '#166534',
+                        border: `1px solid ${selected ? '#16a34a' : '#86efac'}`,
+                        borderRadius: '8px',
+                        fontSize: '13px',
+                        fontWeight: '500',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                disabled={!pick}
+                onClick={() => handleConfirmTuteeSlot(tuteeSession.id, pick)}
+                style={{
+                  padding: '10px 20px',
+                  background: pick ? '#1a5f4a' : '#e7e5e4',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: '600',
+                  cursor: pick ? 'pointer' : 'not-allowed',
+                  fontSize: '14px',
+                }}
+              >
+                Confirm
+              </button>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: '12px', marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #e7e5e4' }}>
-            <button onClick={() => { setSelectedSession(session); setShowDetailPanel(true); }} style={{ padding: '10px 20px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>View Details</button>
-            <button onClick={() => navigate(`/session/${session.id}/chat`)} style={{ padding: '10px 20px', background: '#fff', color: '#3b82f6', border: '1px solid #93c5fd', borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>💬 Message Tutor</button>
-            {session.state === 'PENDING_CONFIRM' && <button onClick={() => handlePay(session.id)} style={{ padding: '10px 20px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>💳 Pay Now</button>}
+            <button onClick={() => { setSelectedSession(tuteeSession); setShowDetailPanel(true); }} style={{ padding: '10px 20px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>View Details</button>
+            <button onClick={() => navigate(`/session/${tuteeSession.id}/chat`)} style={{ padding: '10px 20px', background: '#fff', color: '#3b82f6', border: '1px solid #93c5fd', borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>💬 Message Tutor</button>
+            {tuteeSession.state === 'PENDING_CONFIRM' && <button onClick={() => handlePay(tuteeSession.id)} style={{ padding: '10px 20px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>💳 Pay Now</button>}
             <button style={{ padding: '10px 20px', background: '#fff', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', marginLeft: 'auto' }}>Cancel</button>
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 
@@ -906,8 +1051,14 @@ const Dashboard = () => {
   // SESSION DETAIL PANEL (SRS 2.9: Messaging Channel)
   const DetailPanel = () => {
     const s = selectedSession || {};
+    const sched = learningScheduleDisplay(s);
+    const venueLine = venueDisplayForLearning(s);
+    const st = normalizeSessionStatus(s);
+    const proposed = (s.proposed_slots || []).map((sl) => slotToProposedPayload(sl)).filter(Boolean);
+    const showTuteeProposeUi = activeTab === 'learning' && st === 'tutor_accepted' && proposed.length > 0;
+    const pick = s.id ? tuteeSlotPick[s.id] : null;
     return (
-    <div style={{ position: 'fixed', top: 0, right: 0, width: '500px', height: '100vh', background: '#fff', boxShadow: '-10px 0 40px rgba(0,0,0,0.1)', zIndex: 1000, overflowY: 'auto' }}>
+    <div style={{ position: 'fixed', top: 0, right: 0, width: '400px', height: '100vh', overflowY: 'auto', zIndex: 1000, background: '#fff', boxShadow: '-4px 0 20px rgba(0,0,0,0.15)' }}>
       <div style={{ padding: '24px', borderBottom: '1px solid #e7e5e4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#1c1917' }}>Session Details</h2>
         <button onClick={() => { setShowDetailPanel(false); setSelectedSession(null); }} style={{ background: '#f5f5f4', border: 'none', width: '36px', height: '36px', borderRadius: '8px', cursor: 'pointer', fontSize: '16px' }}>✕</button>
@@ -930,20 +1081,69 @@ const Dashboard = () => {
 
         <div style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px', marginBottom: '20px' }}>
           <div style={{ fontSize: '12px', color: '#a8a29e', textTransform: 'uppercase', fontWeight: '600', marginBottom: '8px' }}>Date & Time</div>
-          <div style={{ fontWeight: '600', color: '#1c1917' }}>📅 {s.date || '—'}</div>
-          <div style={{ color: '#57534e' }}>🕐 {s.time || '—'}</div>
+          <div style={{ fontWeight: '600', color: '#1c1917' }}>📅 {sched.date || '—'}</div>
+          {sched.time ? <div style={{ color: '#57534e' }}>🕐 {sched.time}</div> : null}
         </div>
 
         <div style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px', marginBottom: '20px' }}>
           <div style={{ fontSize: '12px', color: '#a8a29e', textTransform: 'uppercase', fontWeight: '600', marginBottom: '8px' }}>Venue</div>
-          <div style={{ fontWeight: '600', color: '#1c1917' }}>📍 {s.venue || '—'}</div>
+          <div style={{ fontWeight: '600', color: '#1c1917' }}>📍 {venueLine}</div>
           <div style={{ background: '#e7e5e4', height: '120px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a8a29e', marginTop: '12px' }}>🗺️ OneMap</div>
         </div>
 
+        {showTuteeProposeUi && (
+          <div style={{ marginBottom: '20px', padding: '16px', background: '#f0fdf4', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
+            <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#166534', marginBottom: '12px' }}>Your tutor proposed these times — please confirm one:</h4>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+              {proposed.map((slot, idx) => {
+                const key = `${slot.date}-${slot.hour_slot}-${idx}`;
+                const label = formatSlot(slot);
+                const selected = pick && pick.date === slot.date && Number(pick.hour_slot) === Number(slot.hour_slot);
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => s.id && setTuteeSlotPick((prev) => ({ ...prev, [s.id]: slot }))}
+                    style={{
+                      padding: '8px 14px',
+                      background: selected ? '#22c55e' : '#fff',
+                      color: selected ? '#fff' : '#166534',
+                      border: `1px solid ${selected ? '#16a34a' : '#86efac'}`,
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      fontWeight: '500',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              disabled={!pick}
+              onClick={() => s.id && pick && handleConfirmTuteeSlot(s.id, pick)}
+              style={{
+                padding: '10px 20px',
+                background: pick ? '#1a5f4a' : '#e7e5e4',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                fontWeight: '600',
+                cursor: pick ? 'pointer' : 'not-allowed',
+                fontSize: '14px',
+              }}
+            >
+              Confirm
+            </button>
+          </div>
+        )}
+
         <div style={{ background: '#f0fdf4', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
-          <div style={{ fontSize: '12px', color: '#a8a29e', textTransform: 'uppercase', fontWeight: '600', marginBottom: '8px' }}>Session Fee</div>
+          <div style={{ fontSize: '12px', color: '#a8a29e', textTransform: 'uppercase', fontWeight: '600', marginBottom: '8px' }}>Payment</div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: '#57534e' }}>Paid</span>
+            <span style={{ color: '#57534e' }}>{paymentStatusLabel(s)}</span>
             <span style={{ fontSize: '20px', fontWeight: '700', color: '#1a5f4a' }}>{s.fee || '—'}</span>
           </div>
         </div>
@@ -971,8 +1171,8 @@ return (
         {activeTab === 'chats' && <ChatsTab />}
         {activeTab === 'notifications' && <NotificationsTab />}
       </DashboardLayout>
-      {showDetailPanel && <DetailPanel />}
       {showDetailPanel && <div onClick={() => { setShowDetailPanel(false); setSelectedSession(null); }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 999 }}></div>}
+      {showDetailPanel && <DetailPanel />}
       {showMessaging && <MessagingPanel />}
       {showMessaging && <div onClick={() => setShowMessaging(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 1000 }}></div>}
     </>
