@@ -250,16 +250,11 @@ def set_cancel_reason(session_id: str, reason: str | None) -> None:
 def set_proposed_slots(session_id: str, slots: list[dict]) -> dict:
     """Overwrite the proposed_slots JSONB array."""
     try:
-        result = (
-            supabase.table("tutoring_sessions")
-            .update({"proposed_slots": slots})
-            .eq("id", session_id)
-            .select(_SESSION_COLS)
-            .execute()
-        )
-        if result is None or not result.data or len(result.data) == 0:
+        supabase.table("tutoring_sessions").update({"proposed_slots": slots}).eq("id", session_id).execute()
+        row = get_session(session_id)
+        if not row:
             raise NotFoundError("Session not found.")
-        return result.data[0]
+        return row
     except NotFoundError:
         raise
     except Exception as exc:
@@ -305,16 +300,11 @@ def set_outcome_field(session_id: str, field: str, value: str) -> dict:
 def finalize_outcome(session_id: str, new_status: str) -> dict:
     """Set status to a terminal outcome state (completed_attended | completed_no_show)."""
     try:
-        result = (
-            supabase.table("tutoring_sessions")
-            .update({"status": new_status})
-            .eq("id", session_id)
-            .select(_SESSION_COLS)
-            .execute()
-        )
-        if result is None or not result.data or len(result.data) == 0:
+        supabase.table("tutoring_sessions").update({"status": new_status}).eq("id", session_id).execute()
+        row = get_session(session_id)
+        if not row:
             raise NotFoundError("Session not found.")
-        return result.data[0]
+        return row
     except NotFoundError:
         raise
     except Exception as exc:
