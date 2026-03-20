@@ -557,6 +557,7 @@ const Dashboard = () => {
   const [summary, setSummary] = useState(null);
   const [badges, setBadges] = useState({ notifications: 0, chats: 0 });
   const [learningSessions, setLearningSessions] = useState([]);
+  const [openTuteeRequests, setOpenTuteeRequests] = useState([]);
   const [tutoringSessions, setTutoringSessions] = useState([]);
   const [tutorIncomingRequests, setTutorIncomingRequests] = useState([]);
   const [tutorSessionsPending, setTutorSessionsPending] = useState([]);
@@ -702,6 +703,18 @@ const Dashboard = () => {
     }
   };
 
+  const fetchOpenTuteeRequests = async () => {
+    try {
+      const reqRes = await api.get('/requests');
+      const pendingRequests = Array.isArray(reqRes.data) ? reqRes.data
+        : Array.isArray(reqRes.data?.requests) ? reqRes.data.requests : [];
+      const openRequests = pendingRequests.filter((r) => r.status === 'open');
+      setOpenTuteeRequests(openRequests);
+    } catch {
+      setOpenTuteeRequests([]);
+    }
+  };
+
   const fetchTutoringSessions = async () => {
     try {
       const { data } = await api.get('/sessions', { params: { role: 'tutor' } });
@@ -766,6 +779,7 @@ const Dashboard = () => {
         fetchSummary(),
         fetchBadges(),
         fetchLearningSessions(),
+        fetchOpenTuteeRequests(),
         fetchTutoringSessions(),
         fetchTutorIncomingRequests(),
         fetchNotifications(),
@@ -1137,7 +1151,11 @@ const Dashboard = () => {
   // HOME TAB
   const HomeTab = () => {
     const stats = summary?.stats || {};
-    const pendingCount = learningSessions.filter((s) => normalizeSessionStatus(s) === 'pending_tutor_selection').length;
+    console.log('[HomeTab] openRequests:', openTuteeRequests);
+    console.log('[HomeTab] learningSessions:', learningSessions.map((s) => s.status));
+    const pendingCount = learningSessions.filter((s) =>
+      s.status === 'pending_tutor_selection',
+    ).length + openTuteeRequests.length;
     const homeUpcomingSessions = learningSessions.filter((s) =>
       ['confirmed', 'tutor_accepted', 'pending_confirmation', 'pending_confirm'].includes(normalizeSessionStatus(s)),
     ).slice(0, 3);
@@ -1147,14 +1165,73 @@ const Dashboard = () => {
       { label: 'Hours Learned', value: String(stats.hours_learned ?? 0), icon: '📚' },
       { label: 'Hours Taught', value: String(stats.hours_taught ?? 0), icon: '🎓' },
     ];
-    const handlePendingAction = (a) => {
-      if (a.type === 'payment' && a.session_id) handlePay(a.session_id);
-      else if (a.type === 'request') setActiveTab('tutoring');
-      else if (a.type === 'feedback' && a.session_id) navigate(`/feedback/${a.session_id}`);
+
+    const tuteeNeedsSlotConfirm = hasTuteeRole && learningSessions.some((s) => {
+      const st = normalizeSessionStatus(s);
+      const ps = s.proposed_slots;
+      return st === 'tutor_accepted' && Array.isArray(ps) && ps.length > 0;
+    });
+    const tuteeNeedsPayment = hasTuteeRole && learningSessions.some((s) =>
+      ['pending_confirmation', 'pending_confirm'].includes(normalizeSessionStatus(s)),
+    );
+    const tutorHasIncomingHome = hasTutorRole && mergedTutorIncoming.length > 0;
+
+    const homePendingBlocks = [];
+    if (hasTuteeRole && openTuteeRequests.length > 0) {
+      homePendingBlocks.push(
+        <div key="home-pa-open-tutee" style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '12px', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: '15px', fontWeight: '600', color: '#92400e' }}>📬 {openTuteeRequests.length} request(s) waiting for a tutor</div>
+            <div style={{ fontSize: '13px', color: '#a16207', marginTop: '4px' }}>Your request is open — we&apos;ll notify you when a tutor accepts</div>
+          </div>
+          <button type="button" onClick={() => setActiveTab('learning')} onMouseEnter={() => setHovered('home-pa-open-learn')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === 'home-pa-open-learn' ? '#f59e0b' : '#fbbf24', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '14px', whiteSpace: 'nowrap' }}>View in My Learning →</button>
+        </div>,
+      );
+    }
+    if (tuteeNeedsSlotConfirm) {
+      homePendingBlocks.push(
+        <div key="home-pa-slots" style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '12px', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: '15px', fontWeight: '600', color: '#92400e' }}>📅 Your tutor proposed time slots</div>
+            <div style={{ fontSize: '13px', color: '#a16207', marginTop: '4px' }}>Confirm a time slot to proceed to payment</div>
+          </div>
+          <button type="button" onClick={() => setActiveTab('learning')} onMouseEnter={() => setHovered('home-pa-confirm')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === 'home-pa-confirm' ? '#f59e0b' : '#fbbf24', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '14px', whiteSpace: 'nowrap' }}>Confirm Now →</button>
+        </div>,
+      );
+    }
+    if (tuteeNeedsPayment) {
+      homePendingBlocks.push(
+        <div key="home-pa-pay" style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '12px', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: '15px', fontWeight: '600', color: '#92400e' }}>💳 Payment required</div>
+            <div style={{ fontSize: '13px', color: '#a16207', marginTop: '4px' }}>Complete payment to confirm your session</div>
+          </div>
+          <button type="button" onClick={() => setActiveTab('learning')} onMouseEnter={() => setHovered('home-pa-paybtn')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === 'home-pa-paybtn' ? '#f59e0b' : '#fbbf24', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '14px', whiteSpace: 'nowrap' }}>Pay Now →</button>
+        </div>,
+      );
+    }
+    if (tutorHasIncomingHome) {
+      homePendingBlocks.push(
+        <div key="home-pa-tutor-req" style={{ background: '#ecfdf5', border: '1px solid #86efac', borderRadius: '12px', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: '15px', fontWeight: '600', color: '#166534' }}>📩 {mergedTutorIncoming.length} incoming request(s)</div>
+            <div style={{ fontSize: '13px', color: '#15803d', marginTop: '4px' }}>Students are waiting for your response</div>
+          </div>
+          <button type="button" onClick={() => setActiveTab('tutoring')} onMouseEnter={() => setHovered('home-pa-tutor')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === 'home-pa-tutor' ? '#16a34a' : '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '14px', whiteSpace: 'nowrap' }}>View Requests →</button>
+        </div>,
+      );
+    }
+
+    const showIncomingBox = hasTutorRole && mergedTutorIncoming.length > 0;
+    const homeIncomingPreviews = showIncomingBox ? mergedTutorIncoming.slice(0, 3) : [];
+
+    const homeUrgencyBadge = (req) => {
+      const k = String(req.urgency_category || req.urgency_level || req.urgency || '').toLowerCase().replace(/\s/g, '_');
+      if (k && urgencyLabel[k]) return urgencyLabel[k];
+      return getUrgency(req) || req.urgency || '—';
     };
-    const homeIncomingPreviews = hasTutorRole ? mergedTutorIncoming.slice(0, 3) : [];
     return (
-    <div style={{ display: 'grid', gridTemplateColumns: homeIncomingPreviews.length > 0 ? '2fr 1fr' : '1fr', gap: '24px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: showIncomingBox ? '2fr 1fr' : '1fr', gap: '24px' }}>
       <div>
         {/* Welcome */}
         <div style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #2d8a6e 100%)', borderRadius: '20px', padding: '32px', color: '#fff', marginBottom: '24px' }}>
@@ -1166,17 +1243,16 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Pending Actions (SRS 2.12.4.2) */}
-        <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '16px', padding: '20px', marginBottom: '24px' }}>
-          <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#92400e', marginBottom: '16px' }}>⚡ Pending Actions</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {pendingActions.map(a => (
-              <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '12px 16px', borderRadius: '10px' }}>
-                <span style={{ fontSize: '14px', color: '#1c1917' }}>{a.text}</span>
-                <button onClick={() => handlePendingAction(a)} onMouseEnter={() => setHovered(`pending-${a.id}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '8px 16px', background: a.urgent ? (hovered === `pending-${a.id}` ? '#dc2626' : '#ef4444') : (hovered === `pending-${a.id}` ? '#2d7a61' : '#1a5f4a'), color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '13px', transition: 'all 0.2s ease' }}>{a.action}</button>
-              </div>
-            ))}
-          </div>
+        {/* Pending Actions (SRS 2.12.4.2 / UC-8.1) */}
+        <div style={{ marginBottom: '24px' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#92400e', marginBottom: '12px' }}>⚡ Pending Actions</h3>
+          {homePendingBlocks.length === 0 ? (
+            <p style={{ fontSize: '14px', color: '#78716c', margin: 0 }}>✓ You&apos;re all caught up! No pending actions.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {homePendingBlocks}
+            </div>
+          )}
         </div>
 
         {/* Stats */}
@@ -1248,7 +1324,7 @@ const Dashboard = () => {
       </div>
 
       {/* Sidebar — tutor incoming request previews (UC-4.4) */}
-      {homeIncomingPreviews.length > 0 && (
+      {showIncomingBox && (
       <div>
         <div style={{ background: '#fff', borderRadius: '16px', border: '2px solid #f59e0b', padding: '24px' }}>
           <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px', color: '#1c1917', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1258,18 +1334,21 @@ const Dashboard = () => {
           {homeIncomingPreviews.map((req) => {
             const subjR = req.subject || req.subjects?.[0] || '—';
             const topicR = req.topic || req.topics?.[0] || '—';
-            const studentName = req.student || req.tutee_name || req.tutee_full_name || 'Student';
-            const urgLabel = getUrgency(req) || req.urgency || '—';
+            const studentName = req.student || req.tutee_full_name || req.tutee_name || 'Student';
+            const urgText = homeUrgencyBadge(req);
             const rid = req.id ?? req.session_id;
             return (
               <div key={rid} style={{ padding: '16px', background: '#fef3c7', borderRadius: '12px', marginBottom: '12px' }}>
-                <div style={{ fontSize: '14px', color: '#1c1917', fontWeight: '600', marginBottom: '8px' }}>{subjR}: {topicR}</div>
-                <div style={{ fontSize: '13px', color: '#57534e', marginBottom: '6px' }}>Student: {studentName}</div>
-                <div style={{ fontSize: '12px', color: '#92400e', fontWeight: '600', marginBottom: '8px' }}>{urgLabel}</div>
+                <div style={{ fontSize: '14px', color: '#1c1917', fontWeight: '600', marginBottom: '8px' }}>{subjR} • {topicR}</div>
+                <div style={{ fontSize: '13px', color: '#57534e', marginBottom: '8px' }}>{studentName}</div>
+                <span style={{ display: 'inline-block', fontSize: '11px', fontWeight: '600', padding: '4px 10px', borderRadius: '8px', background: '#fff7ed', color: '#c2410c', marginBottom: '10px' }}>{urgText}</span>
+                <div>
+                  <button type="button" onClick={() => setActiveTab('tutoring')} onMouseEnter={() => setHovered(`home-incoming-acc-${rid}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '8px 14px', background: hovered === `home-incoming-acc-${rid}` ? '#2d7a61' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}>Accept →</button>
+                </div>
               </div>
             );
           })}
-          <button type="button" onClick={() => setActiveTab('tutoring')} onMouseEnter={() => setHovered('home-tutoring-link')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', marginTop: '8px', padding: '12px', background: hovered === 'home-tutoring-link' ? '#f0fdf4' : '#fff', color: '#1a5f4a', border: '1px solid #1a5f4a', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '14px' }}>View in My Tutoring →</button>
+          <button type="button" onClick={() => setActiveTab('tutoring')} onMouseEnter={() => setHovered('home-tutoring-link')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', marginTop: '8px', padding: '12px', background: hovered === 'home-tutoring-link' ? '#f0fdf4' : '#fff', color: '#1a5f4a', border: '1px solid #1a5f4a', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '14px' }}>View all in My Tutoring →</button>
         </div>
       </div>
       )}
