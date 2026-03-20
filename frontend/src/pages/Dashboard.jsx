@@ -251,6 +251,11 @@ const Dashboard = () => {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [hovered, setHovered] = useState(null);
+  const [chatSessions, setChatSessions] = useState([]);
+  const [selectedChatSessionId, setSelectedChatSessionId] = useState(null);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatPollingRef, setChatPollingRef] = useState(null);
 
   const sessionStates = {
     PENDING_TUTOR: { label: 'Pending Tutor Selection', color: '#f59e0b', bg: '#fef3c7' },
@@ -453,6 +458,67 @@ const Dashboard = () => {
       fetchBadges();
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'chats') return;
+    const load = async () => {
+      try {
+        const [tuteeRes, tutorRes] = await Promise.all([
+          api.get('/sessions', { params: { role: 'tutee' } }),
+          api.get('/sessions', { params: { role: 'tutor' } }),
+        ]);
+        const rawTutee = tuteeRes.data;
+        const rawTutor = tutorRes.data;
+        const tutee = Array.isArray(rawTutee) ? rawTutee : (rawTutee?.sessions ?? rawTutee?.items ?? []);
+        const tutor = Array.isArray(rawTutor) ? rawTutor : (rawTutor?.sessions ?? rawTutor?.items ?? []);
+        const combined = [...tutee, ...tutor];
+        const seen = new Set();
+        const unique = combined.filter((s) => {
+          const id = s.id ?? s.session_id;
+          if (!id || seen.has(id)) return false;
+          seen.add(id);
+          return true;
+        });
+        const chatworthy = unique.filter((s) => {
+          const st = String(s.status || s.state || '').toLowerCase().replace(/\s/g, '_');
+          return !['pending_tutor_selection', 'cancelled'].includes(st);
+        });
+        console.log('[Chats] sessions:', chatworthy);
+        setChatSessions(chatworthy);
+        setSelectedChatSessionId((prev) => {
+          if (prev && chatworthy.some((x) => (x.id ?? x.session_id) === prev)) return prev;
+          return chatworthy[0]?.id ?? chatworthy[0]?.session_id ?? null;
+        });
+      } catch (err) {
+        console.error('[Chats] load error:', err);
+      }
+    };
+    load();
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (!selectedChatSessionId) return;
+    const fetchMessages = async () => {
+      try {
+        const res = await api.get(`/sessions/${selectedChatSessionId}/messages`);
+        const data = res.data;
+        const msgs = Array.isArray(data) ? data
+          : Array.isArray(data?.messages) ? data.messages
+            : Array.isArray(data?.data) ? data.data : [];
+        console.log('[Chats] messages:', msgs);
+        setChatMessages(msgs);
+      } catch (err) {
+        console.error('[Chats] message fetch error:', err);
+      }
+    };
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 3000);
+    setChatPollingRef(interval);
+    return () => {
+      clearInterval(interval);
+      setChatPollingRef(null);
+    };
+  }, [selectedChatSessionId]);
 
   useEffect(() => {
     learningSessions.forEach((sess) => {
@@ -663,6 +729,30 @@ const Dashboard = () => {
       fetchBadges();
     } catch {
       // error handled by api interceptor or UI
+    }
+  };
+
+  const handleChatSend = async () => {
+    if (!chatInput.trim() || !selectedChatSessionId) return;
+    const text = chatInput.trim();
+    setChatInput('');
+    try {
+      const res = await api.post(
+        `/sessions/${selectedChatSessionId}/messages`,
+        { content: text },
+      );
+      console.log('[Chats] sent:', res.data);
+      const updated = await api.get(
+        `/sessions/${selectedChatSessionId}/messages`,
+      );
+      const data = updated.data;
+      const msgs = Array.isArray(data) ? data
+        : Array.isArray(data?.messages) ? data.messages
+          : Array.isArray(data?.data) ? data.data : [];
+      setChatMessages(msgs);
+    } catch (err) {
+      console.error('[Chats] send error:', err.response?.data);
+      setChatInput(text);
     }
   };
 
@@ -1050,98 +1140,291 @@ const Dashboard = () => {
     );
   };
 
-  // CHATS TAB (SRS 2.9)
+  // CHATS TAB (SRS 2.9) — UC-5.1, messaging tied to sessions
   const ChatsTab = () => {
-    const [selectedChat, setSelectedChat] = useState(1);
-    
-    const chatList = [
-      { id: 1, name: 'Sarah Tan', initials: 'ST', lastMessage: 'Perfect! See you then! 📚', time: '10 min', unread: 2, session: 'Calculus • Tue 3 PM', status: 'confirmed' },
-      { id: 2, name: 'James Lim', initials: 'JL', lastMessage: 'Thanks for confirming!', time: '2 hours', unread: 0, session: 'Physics • Thu 4 PM', status: 'confirmed' },
-      { id: 3, name: 'Alice Wong', initials: 'AW', lastMessage: 'Looking forward to it', time: '1 day', unread: 0, session: 'Data Structures • Wed 2 PM', status: 'pending' },
-    ];
+    const [chatInputFocus, setChatInputFocus] = useState(false);
+    const currentUserId = user?.id || user?.user_id;
+    const selectedSession = chatSessions.find(
+      (s) => (s.id ?? s.session_id) === selectedChatSessionId,
+    );
 
-    const messages = [
-      { id: 1, sender: 'them', text: 'Hi! Looking forward to our session. Should we meet at the library entrance?', time: '10:30 AM' },
-      { id: 2, sender: 'me', text: "Sounds good! I'll be there 5 mins early.", time: '10:35 AM' },
-      { id: 3, sender: 'them', text: 'Perfect! Also, please bring your lecture notes if you have them 📚', time: '10:36 AM' },
-      { id: 4, sender: 'me', text: 'Will do! See you then!', time: '10:38 AM' },
-    ];
+    const getOtherPersonName = (s) => {
+      if (!s) return 'Unknown';
+      const uid = String(currentUserId ?? '');
+      if (String(s.tutee_id) === uid) {
+        return s.tutor_name || s.tutor_full_name || (typeof s.tutor === 'string' ? s.tutor : s.tutor?.full_name) || 'Tutor';
+      }
+      return s.tutee_name || s.tutee_full_name || (typeof s.tutee === 'string' ? s.tutee : s.tutee?.full_name) || 'Student';
+    };
 
-    const currentChat = chatList.find(c => c.id === selectedChat);
+    const formatMsgTime = (ts) => {
+      if (!ts) return '';
+      const d = new Date(ts);
+      return d.toLocaleTimeString('en-SG', {
+        hour: 'numeric', minute: '2-digit', hour12: true,
+      });
+    };
+
+    if (chatSessions.length === 0) {
+      return (
+        <div style={{
+          background: '#fff', borderRadius: '16px',
+          border: '1px solid #e7e5e4', padding: '48px 24px',
+          textAlign: 'center', color: '#57534e',
+        }}
+        >
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>💬</div>
+          <h3 style={{ fontWeight: '600', marginBottom: '8px' }}>
+            No active sessions yet
+          </h3>
+          <p>Start a tutoring session to begin messaging.</p>
+        </div>
+      );
+    }
 
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '0', height: 'calc(100vh - 200px)', background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', overflow: 'hidden' }}>
-        {/* Chat List */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: '320px 1fr',
+        height: 'calc(100vh - 200px)', background: '#fff',
+        borderRadius: '16px', border: '1px solid #e7e5e4', overflow: 'hidden',
+      }}
+      >
         <div style={{ borderRight: '1px solid #e7e5e4', overflowY: 'auto' }}>
           <div style={{ padding: '20px', borderBottom: '1px solid #e7e5e4' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1c1917', marginBottom: '12px' }}>Messages</h3>
-            <input type="text" placeholder="Search conversations..." style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #e7e5e4', fontSize: '14px', boxSizing: 'border-box' }} />
+            <h3 style={{
+              fontSize: '18px', fontWeight: '600',
+              color: '#1c1917', marginBottom: '0',
+            }}
+            >Messages
+            </h3>
           </div>
-          {chatList.map(chat => (
-            <div key={chat.id} onClick={() => setSelectedChat(chat.id)} onMouseEnter={() => setHovered(`chat-${chat.id}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '16px 20px', borderBottom: '1px solid #f5f5f4', cursor: 'pointer', background: selectedChat === chat.id ? '#f0fdf4' : (hovered === `chat-${chat.id}` ? '#f0fdf4' : '#fff'), borderLeft: selectedChat === chat.id ? '3px solid #1a5f4a' : (hovered === `chat-${chat.id}` ? '3px solid #1a5f4a' : '3px solid transparent'), transition: 'all 0.15s ease' }}>
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                <div style={{ width: '48px', height: '48px', background: '#f59e0b', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', flexShrink: 0 }}>{chat.initials}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                    <span style={{ fontWeight: '600', color: '#1c1917', fontSize: '14px' }}>{chat.name}</span>
-                    <span style={{ fontSize: '12px', color: '#a8a29e' }}>{chat.time}</span>
+          {chatSessions.map((s) => {
+            const sid = s.id ?? s.session_id;
+            const isSelected = selectedChatSessionId === sid;
+            const otherName = getOtherPersonName(s);
+            const initials = otherName.slice(0, 2).toUpperCase();
+            const subj = Array.isArray(s.subjects) ? s.subjects[0] : s.subject;
+            const sched = s.scheduled_at || s.date || s.created_at;
+            return (
+              <div
+                key={sid}
+                onClick={() => setSelectedChatSessionId(sid)}
+                onMouseEnter={() => setHovered(`chat-${sid}`)}
+                onMouseLeave={() => setHovered(null)}
+                style={{
+                  padding: '16px 20px',
+                  borderBottom: '1px solid #f5f5f4',
+                  cursor: 'pointer',
+                  background: isSelected ? '#f0fdf4'
+                    : hovered === `chat-${sid}` ? '#f0fdf4' : '#fff',
+                  borderLeft: isSelected ? '3px solid #1a5f4a'
+                    : hovered === `chat-${sid}` ? '3px solid #1a5f4a'
+                      : '3px solid transparent',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <div style={{
+                    width: '48px', height: '48px',
+                    background: '#f59e0b', borderRadius: '12px',
+                    display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', color: '#fff',
+                    fontWeight: 'bold', flexShrink: 0,
+                  }}
+                  >{initials}
                   </div>
-                  <div style={{ fontSize: '13px', color: '#57534e', marginBottom: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chat.lastMessage}</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '11px', color: '#a8a29e' }}>{chat.session}</span>
-                    {chat.unread > 0 && <span style={{ background: '#1a5f4a', color: '#fff', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: '600' }}>{chat.unread}</span>}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontWeight: '600', color: '#1c1917',
+                      fontSize: '14px', marginBottom: '4px',
+                    }}
+                    >{otherName}
+                    </div>
+                    <div style={{
+                      fontSize: '12px', color: '#a8a29e',
+                      whiteSpace: 'nowrap', overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                    >
+                      {subj || s.academic_level || '—'} •{' '}
+                      {sched ? formatDate(sched) : 'TBD'}
+                    </div>
+                    <div style={{
+                      fontSize: '11px', marginTop: '4px',
+                      padding: '2px 8px', borderRadius: '8px', display: 'inline-block',
+                      background: normalizeSessionStatus(s) === 'confirmed' ? '#dcfce7' : '#fef3c7',
+                      color: normalizeSessionStatus(s) === 'confirmed' ? '#166534' : '#92400e',
+                    }}
+                    >
+                      {(s.status || s.state || '—').replace(/_/g, ' ')}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
-        {/* Chat Window */}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {/* Chat Header */}
-          <div style={{ padding: '16px 24px', borderBottom: '1px solid #e7e5e4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ width: '44px', height: '44px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold' }}>{currentChat?.initials}</div>
-              <div>
-                <div style={{ fontWeight: '600', color: '#1c1917' }}>{currentChat?.name}</div>
-                <div style={{ fontSize: '13px', color: '#57534e' }}>{currentChat?.session}</div>
-              </div>
+          <div style={{
+            padding: '16px 24px', borderBottom: '1px solid #e7e5e4',
+            display: 'flex', alignItems: 'center', gap: '12px',
+          }}
+          >
+            <div style={{
+              width: '44px', height: '44px', background: '#f59e0b',
+              borderRadius: '10px', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', color: '#fff', fontWeight: 'bold',
+            }}
+            >
+              {getOtherPersonName(selectedSession).slice(0, 2).toUpperCase()}
             </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <span style={{ background: currentChat?.status === 'confirmed' ? '#dcfce7' : '#fef3c7', color: currentChat?.status === 'confirmed' ? '#166534' : '#92400e', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: '500' }}>{currentChat?.status === 'confirmed' ? '✓ Confirmed' : '⏳ Pending'}</span>
-              <button onMouseEnter={() => setHovered('view-sess')} onMouseLeave={() => setHovered(null)} style={{ padding: '8px 16px', background: hovered === 'view-sess' ? '#f0faf5' : '#f5f5f4', border: `1px solid ${hovered === 'view-sess' ? '#1a5f4a' : 'transparent'}`, borderRadius: '8px', cursor: 'pointer', fontSize: '13px', color: hovered === 'view-sess' ? '#1a5f4a' : '#57534e', transition: 'all 0.15s ease' }}>View Session</button>
+            <div>
+              <div style={{ fontWeight: '600', color: '#1c1917' }}>
+                {getOtherPersonName(selectedSession)}
+              </div>
+              <div style={{ fontSize: '13px', color: '#57534e' }}>
+                {(Array.isArray(selectedSession?.subjects) ? selectedSession.subjects[0] : selectedSession?.subject) || '—'} •{' '}
+                {(Array.isArray(selectedSession?.topics) ? selectedSession.topics[0] : selectedSession?.topic) || '—'}
+              </div>
             </div>
           </div>
 
-          {/* Messages Area */}
-          <div style={{ flex: 1, padding: '24px', overflowY: 'auto', background: '#fafaf9' }}>
-            {/* System Message */}
-            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-              <span style={{ background: '#e7e5e4', padding: '6px 14px', borderRadius: '12px', fontSize: '12px', color: '#57534e' }}>Session confirmed • Messages are for coordination only</span>
-            </div>
-
-            {messages.map(msg => (
-              <div key={msg.id} style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexDirection: msg.sender === 'me' ? 'row-reverse' : 'row' }}>
-                <div style={{ width: '32px', height: '32px', background: msg.sender === 'me' ? '#1a5f4a' : '#f59e0b', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '11px', flexShrink: 0 }}>{msg.sender === 'me' ? 'JD' : currentChat?.initials}</div>
-                <div style={{ textAlign: msg.sender === 'me' ? 'right' : 'left' }}>
-                  <div style={{ background: msg.sender === 'me' ? '#1a5f4a' : '#fff', padding: '12px 16px', borderRadius: msg.sender === 'me' ? '12px 12px 4px 12px' : '12px 12px 12px 4px', maxWidth: '320px', display: 'inline-block', boxShadow: msg.sender === 'me' ? 'none' : '0 1px 2px rgba(0,0,0,0.05)' }}>
-                    <p style={{ fontSize: '14px', color: msg.sender === 'me' ? '#fff' : '#1c1917', margin: 0 }}>{msg.text}</p>
+          <div style={{
+            flex: 1, padding: '24px', overflowY: 'auto',
+            background: '#fafaf9',
+          }}
+          >
+            {chatMessages.length === 0 && (
+              <div style={{
+                textAlign: 'center', color: '#a8a29e',
+                marginTop: '48px',
+              }}
+              >
+                No messages yet. Say hello! 👋
+              </div>
+            )}
+            {chatMessages.map((msg, idx) => {
+              const isOwn = String(msg.sender_id) === String(currentUserId);
+              const msgId = msg.id || msg.message_id || idx;
+              return (
+                <div
+                  key={msgId}
+                  style={{
+                    display: 'flex', gap: '10px',
+                    marginBottom: '16px',
+                    flexDirection: isOwn ? 'row-reverse' : 'row',
+                    alignItems: 'flex-end',
+                  }}
+                >
+                  <div style={{
+                    width: '32px', height: '32px',
+                    background: isOwn ? '#1a5f4a' : '#f59e0b',
+                    borderRadius: '8px', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center',
+                    color: '#fff', fontWeight: 'bold', fontSize: '11px',
+                    flexShrink: 0,
+                  }}
+                  >
+                    {isOwn ? 'Me'
+                      : getOtherPersonName(selectedSession).slice(0, 2).toUpperCase()}
                   </div>
-                  <div style={{ fontSize: '11px', color: '#a8a29e', marginTop: '4px' }}>{msg.time}{msg.sender === 'me' && ' ✓'}</div>
+                  <div style={{
+                    textAlign: isOwn ? 'right' : 'left',
+                    maxWidth: '320px',
+                  }}
+                  >
+                    <div style={{ fontSize: '11px', color: '#a8a29e', marginBottom: '4px' }}>
+                      {isOwn ? 'You' : getOtherPersonName(selectedSession)}
+                      {' · '}
+                      {formatMsgTime(msg.sent_at || msg.created_at)}
+                    </div>
+                    <div style={{
+                      background: isOwn ? '#1a5f4a' : '#fff',
+                      padding: '12px 16px',
+                      borderRadius: isOwn ? '12px 12px 4px 12px'
+                        : '12px 12px 12px 4px',
+                      display: 'inline-block',
+                      boxShadow: isOwn ? 'none'
+                        : '0 1px 4px rgba(0,0,0,0.08)',
+                    }}
+                    >
+                      <p style={{
+                        fontSize: '14px', margin: 0,
+                        color: isOwn ? '#fff' : '#1c1917',
+                      }}
+                      >
+                        {msg.content}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
-          {/* Input Area */}
-          <div style={{ padding: '16px 24px', borderTop: '1px solid #e7e5e4', background: '#fff' }}>
+          <div style={{
+            padding: '16px 24px', borderTop: '1px solid #e7e5e4',
+            background: '#fff',
+          }}
+          >
             <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
-              <div style={{ flex: 1, background: '#f5f5f4', borderRadius: '12px', padding: '12px 16px' }}>
-                <textarea rows={1} placeholder="Type a message..." style={{ width: '100%', border: 'none', background: 'transparent', fontSize: '14px', resize: 'none', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+              <div style={{
+                flex: 1, background: '#f5f5f4',
+                borderRadius: '12px', padding: '12px 16px',
+                border: chatInputFocus ? '1px solid #1a5f4a' : '1px solid transparent',
+                transition: 'border 0.15s ease',
+              }}
+              >
+                <textarea
+                  rows={1}
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onFocus={() => setChatInputFocus(true)}
+                  onBlur={() => setChatInputFocus(false)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleChatSend();
+                    }
+                  }}
+                  placeholder="Type a message... (Enter to send)"
+                  style={{
+                    width: '100%', border: 'none',
+                    background: 'transparent', fontSize: '14px',
+                    resize: 'none', outline: 'none',
+                    fontFamily: 'inherit', boxSizing: 'border-box',
+                  }}
+                />
               </div>
-              <button style={{ width: '48px', height: '48px', background: '#1a5f4a', border: 'none', borderRadius: '12px', cursor: 'pointer', color: '#fff', fontSize: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>➤</button>
+              <button
+                type="button"
+                onClick={handleChatSend}
+                disabled={!chatInput.trim()}
+                onMouseEnter={() => setHovered('chat-send')}
+                onMouseLeave={() => setHovered(null)}
+                style={{
+                  width: '48px', height: '48px',
+                  background: !chatInput.trim() ? '#e7e5e4'
+                    : hovered === 'chat-send' ? '#145040' : '#1a5f4a',
+                  border: 'none', borderRadius: '12px',
+                  cursor: chatInput.trim() ? 'pointer' : 'not-allowed',
+                  color: '#fff', fontSize: '20px',
+                  display: 'flex', alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                ➤
+              </button>
             </div>
+            <p style={{
+              fontSize: '11px', color: '#a8a29e',
+              marginTop: '8px', textAlign: 'center',
+            }}
+            >
+              Messages are for session coordination only
+            </p>
           </div>
         </div>
       </div>
