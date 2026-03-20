@@ -125,6 +125,27 @@ const paymentStatusLabel = (s) => {
   return map[st] || '—';
 };
 
+/** My Learning sub-tab routing (tutee sessions). */
+const learningTuteeBucket = (s) => {
+  const st = normalizeSessionStatus(s);
+  if (st === 'cancelled') return 'cancelled';
+  if (st === 'pending_tutor_selection') return 'pending';
+  if (st === 'completed' || st === 'completed_attended' || st === 'completed_no_show') return 'past';
+  return 'upcoming';
+};
+
+/** Payment / status line for tutee — distinguishes decline vs self-cancel. */
+const learningTuteeStatusLabel = (s) => {
+  const st = normalizeSessionStatus(s);
+  if (st === 'cancelled') {
+    const r = String(s.cancel_reason ?? '').toLowerCase();
+    if (r.includes('tutor') || r.includes('declined')) return 'Declined by tutor';
+    if (r.includes('tutee') || r.includes('student')) return 'Cancelled by you';
+    return 'Cancelled';
+  }
+  return paymentStatusLabel(s);
+};
+
 const mapRequestToUi = (r) => ({
   id: r.session_id || r.id,
   session_id: r.session_id || r.id,
@@ -710,19 +731,34 @@ const Dashboard = () => {
   };
 
   // MY LEARNING TAB
-  const LearningTab = () => (
+  const LearningTab = () => {
+    const [learningFilterTab, setLearningFilterTab] = useState('upcoming');
+    const learningTabKeys = [
+      { key: 'upcoming', label: 'Upcoming' },
+      { key: 'pending', label: 'Pending' },
+      { key: 'past', label: 'Past' },
+      { key: 'cancelled', label: 'Cancelled' },
+    ];
+    const filteredLearningSessions = learningSessions.filter((s) => learningTuteeBucket(s) === learningFilterTab);
+    return (
     <div>
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
-        {['Upcoming', 'Pending', 'Past', 'Cancelled'].map((tab, i) => {
-          const sel = i === 0;
-          const h = hovered === `learn-tab-${tab}`;
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
+        {learningTabKeys.map(({ key, label }) => {
+          const sel = learningFilterTab === key;
+          const h = hovered === `learn-tab-${key}`;
           return (
-            <button key={tab} onMouseEnter={() => setHovered(`learn-tab-${tab}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 20px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.15s ease' }}>{tab}</button>
+            <button key={key} type="button" onClick={() => setLearningFilterTab(key)} onMouseEnter={() => setHovered(`learn-tab-${key}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 20px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.15s ease' }}>{label}</button>
           );
         })}
       </div>
 
-      {learningSessions.map((tuteeSession) => {
+      {filteredLearningSessions.length === 0 && (
+        <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', padding: '40px 24px', textAlign: 'center', color: '#57534e', marginBottom: '16px' }}>
+          No sessions in this section.
+        </div>
+      )}
+
+      {filteredLearningSessions.map((tuteeSession) => {
         const sched = learningScheduleDisplay(tuteeSession);
         const venueLine = venueDisplayForLearning(tuteeSession);
         const st = normalizeSessionStatus(tuteeSession);
@@ -746,7 +782,7 @@ const Dashboard = () => {
             </div>
             <div style={{ textAlign: 'right' }}>
               <StatusBadge state={tuteeSession.state} />
-              <div style={{ fontSize: '13px', fontWeight: '600', color: '#57534e', marginTop: '8px' }}>{paymentStatusLabel(tuteeSession)}</div>
+              <div style={{ fontSize: '13px', fontWeight: '600', color: '#57534e', marginTop: '8px' }}>{learningTuteeStatusLabel(tuteeSession)}</div>
               <div style={{ fontSize: '18px', fontWeight: '700', color: '#1a5f4a', marginTop: '4px' }}>{tuteeSession.fee}</div>
             </div>
           </div>
@@ -842,7 +878,8 @@ const Dashboard = () => {
         );
       })}
     </div>
-  );
+    );
+  };
 
   // MY TUTORING TAB
   const TutoringTab = () => {
@@ -1255,7 +1292,7 @@ const Dashboard = () => {
         <div style={{ background: '#f0fdf4', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
           <div style={{ fontSize: '12px', color: '#a8a29e', textTransform: 'uppercase', fontWeight: '600', marginBottom: '8px' }}>Payment</div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: '#57534e' }}>{paymentStatusLabel(s)}</span>
+            <span style={{ color: '#57534e' }}>{activeTab === 'learning' ? learningTuteeStatusLabel(s) : paymentStatusLabel(s)}</span>
             <span style={{ fontSize: '20px', fontWeight: '700', color: '#1a5f4a' }}>{s.fee || '—'}</span>
           </div>
         </div>

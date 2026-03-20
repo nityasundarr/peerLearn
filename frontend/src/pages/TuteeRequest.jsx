@@ -98,6 +98,7 @@ const RequestHelpFlow = () => {
   const [recommendedTutors, setRecommendedTutors] = useState([]);
   const [recommendedVenues, setRecommendedVenues] = useState([]);
   const [sessionFee, setSessionFee] = useState(null);
+  const [awaitingTutorAccept, setAwaitingTutorAccept] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [hovered, setHovered] = useState(null);
@@ -304,17 +305,32 @@ const RequestHelpFlow = () => {
     }
   };
 
+  const normalizeSessionStatus = (raw) =>
+    String(raw || '')
+      .toLowerCase()
+      .replace(/\s/g, '_');
+
   const handleSelectTutorAndProceed = async () => {
     if (!selectedTutor || !requestId) return;
     setError(null);
     setLoading(true);
     setRecommendedVenues([]);
+    setAwaitingTutorAccept(false);
     try {
       const tutorId = typeof selectedTutor === 'object' ? selectedTutor.id : selectedTutor;
       const { data } = await api.post('/sessions', { request_id: requestId, tutor_id: tutorId });
       const sid = data.id ?? data.session_id;
       setSessionId(sid);
-      setCurrentStep(4);
+      const st = normalizeSessionStatus(data.status ?? data.state);
+      if (st === 'pending_tutor_selection') {
+        setAwaitingTutorAccept(true);
+        return;
+      }
+      if (st === 'tutor_accepted' || st === 'pending_confirmation') {
+        setCurrentStep(4);
+        return;
+      }
+      setError('Venue selection is only available after your tutor accepts the request. Please check your dashboard for updates.');
     } catch (err) {
       setError(err.response?.data?.detail ?? err.message ?? 'Failed to create session');
     } finally {
@@ -716,7 +732,26 @@ const RequestHelpFlow = () => {
   );
 
   // STEP 3: Choose Tutor
-  const renderStep3 = () => (
+  const renderStep3 = () => {
+    if (awaitingTutorAccept) {
+      return (
+        <div style={{ maxWidth: '560px', margin: '0 auto', padding: '48px 24px', textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>⏳</div>
+          <h1 style={{ fontSize: '24px', fontWeight: '700', color: '#1c1917', marginBottom: '12px' }}>Waiting for tutor to accept your request...</h1>
+          <p style={{ color: '#57534e', marginBottom: '28px', fontSize: '15px', lineHeight: 1.6 }}>
+            You&apos;ll be able to choose a venue once your tutor accepts. Check your dashboard for updates.
+          </p>
+          <button
+            type="button"
+            onClick={() => setAwaitingTutorAccept(false)}
+            style={{ padding: '14px 28px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px' }}
+          >
+            ← Back
+          </button>
+        </div>
+      );
+    }
+    return (
     <div style={{ maxWidth: '900px', margin: '0 auto', padding: '48px 24px' }}>
       <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px', color: '#1c1917' }}>Choose your tutor 🎓</h1>
       <p style={{ color: '#57534e', marginBottom: '24px' }}>We found {recommendedTutors.length} tutors matching your request.</p>
@@ -787,7 +822,8 @@ const RequestHelpFlow = () => {
         <button onClick={handleSelectTutorAndProceed} disabled={!selectedTutor || loading} onMouseEnter={() => selectedTutor && !loading && setHovered('venue')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: selectedTutor && !loading ? (hovered === 'venue' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: selectedTutor && !loading ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedTutor && !loading ? 'pointer' : 'not-allowed', transition: 'all 0.2s ease' }}>{loading ? 'Creating...' : 'Choose Venue →'}</button>
       </div>
     </div>
-  );
+    );
+  };
 
   // STEP 4: Choose Venue
   const renderStep4 = () => (
