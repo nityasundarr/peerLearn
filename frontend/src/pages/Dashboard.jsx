@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
 import api from '../services/api';
@@ -220,6 +220,13 @@ const Dashboard = () => {
   const [proposedSlots, setProposedSlots] = useState([]);
   const [slotsProposedSessionId, setSlotsProposedSessionId] = useState(null);
   const [tuteeSlotPick, setTuteeSlotPick] = useState({});
+  const [sessionFees, setSessionFees] = useState({});
+  const [paymentModalSession, setPaymentModalSession] = useState(null);
+  const [paymentTab, setPaymentTab] = useState('paynow');
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [paymentError, setPaymentError] = useState(null);
+  const pendingFeeFetchedRef = useRef(new Set());
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [hovered, setHovered] = useState(null);
@@ -333,6 +340,16 @@ const Dashboard = () => {
     }
   };
 
+  const fetchFeeAndStore = async (sessionId) => {
+    try {
+      const { data } = await api.get('/payments/fee', { params: { session_id: sessionId } });
+      const fee = data?.fee;
+      if (fee != null) setSessionFees((prev) => ({ ...prev, [sessionId]: Number(fee) }));
+    } catch {
+      // optional: fee unavailable
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -362,6 +379,15 @@ const Dashboard = () => {
       fetchBadges();
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    learningSessions.forEach((sess) => {
+      if (normalizeSessionStatus(sess) === 'pending_confirmation' && sess.id && !pendingFeeFetchedRef.current.has(sess.id)) {
+        pendingFeeFetchedRef.current.add(sess.id);
+        fetchFeeAndStore(sess.id);
+      }
+    });
+  }, [learningSessions]);
 
   const handleAccept = async (sessionId) => {
     try {
@@ -440,6 +466,58 @@ const Dashboard = () => {
     });
   };
 
+  const openPaymentModal = (session) => {
+    if (!session?.id) return;
+    setPaymentModalSession(session);
+    setPaymentTab('paynow');
+    setPaymentLoading(false);
+    setPaymentSuccess(false);
+    setPaymentError(null);
+    if (normalizeSessionStatus(session) === 'pending_confirmation') {
+      fetchFeeAndStore(session.id);
+    }
+  };
+
+  const closePaymentModal = () => {
+    setPaymentModalSession(null);
+    setPaymentTab('paynow');
+    setPaymentLoading(false);
+    setPaymentSuccess(false);
+    setPaymentError(null);
+  };
+
+  const handlePaymentModalConfirm = async () => {
+    const sid = paymentModalSession?.id;
+    if (!sid) return;
+    setPaymentLoading(true);
+    setPaymentError(null);
+    await new Promise((r) => setTimeout(r, 1500));
+    try {
+      await api.post('/payments/initiate', { session_id: sid });
+      setPaymentLoading(false);
+      setPaymentSuccess(true);
+      setLearningSessions((prev) => prev.map((x) => (x.id === sid ? { ...x, state: 'CONFIRMED', status: 'confirmed' } : x)));
+      if (selectedSession?.id === sid) {
+        setSelectedSession((prev) => (prev && prev.id === sid ? { ...prev, state: 'CONFIRMED', status: 'confirmed' } : prev));
+      }
+      await fetchSummary();
+      await fetchBadges();
+      if (activeTab === 'learning') await fetchLearningSessions();
+      setTimeout(() => {
+        closePaymentModal();
+      }, 2000);
+    } catch (err) {
+      const d = err?.response?.data?.detail;
+      let msg = 'Payment failed';
+      if (typeof d === 'string') msg = d;
+      else if (Array.isArray(d)) msg = d.map((x) => (x.msg != null ? x.msg : String(x))).join(', ');
+      else if (d && typeof d === 'object' && d.msg) msg = String(d.msg);
+      else if (err?.message) msg = err.message;
+      setPaymentError(msg);
+      setPaymentLoading(false);
+    }
+  };
+
   const handlePay = async (sessionId) => {
     try {
       await api.post('/payments/initiate', { session_id: sessionId });
@@ -475,6 +553,7 @@ const Dashboard = () => {
           // keep panel open with list data
         }
       }
+      await fetchFeeAndStore(sessionId);
     } catch {
       // error handled by api interceptor or UI
     }
@@ -720,10 +799,44 @@ const Dashboard = () => {
               </button>
             </div>
           )}
-          <div style={{ display: 'flex', gap: '12px', marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #e7e5e4' }}>
+          {st === 'pending_confirmation' && (
+            <div style={{ marginTop: '16px', padding: '16px', background: '#ecfdf5', borderRadius: '12px', border: '1px solid #6ee7b7' }}>
+              <p style={{ fontSize: '14px', color: '#166534', fontWeight: '600', marginBottom: '8px' }}>✓ Slot confirmed! Complete payment to confirm your session.</p>
+              <p style={{ fontSize: '14px', color: '#1c1917', marginBottom: '12px' }}>
+                Session Fee:{' '}
+                {sessionFees[tuteeSession.id] != null
+                  ? `$${Number(sessionFees[tuteeSession.id]).toFixed(2)}`
+                  : (tuteeSession.fee && tuteeSession.fee !== '—' ? tuteeSession.fee : '—')}
+              </p>
+              <button
+                type="button"
+                onClick={() => openPaymentModal(tuteeSession)}
+                style={{ padding: '10px 20px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '14px' }}
+              >
+                💳 Pay Now
+              </button>
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: '12px', marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #e7e5e4', flexWrap: 'wrap', alignItems: 'center' }}>
             <button onClick={() => { setSelectedSession(tuteeSession); setShowDetailPanel(true); }} style={{ padding: '10px 20px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>View Details</button>
             <button onClick={() => navigate(`/session/${tuteeSession.id}/chat`)} style={{ padding: '10px 20px', background: '#fff', color: '#3b82f6', border: '1px solid #93c5fd', borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>💬 Message Tutor</button>
-            {tuteeSession.state === 'PENDING_CONFIRM' && <button onClick={() => handlePay(tuteeSession.id)} style={{ padding: '10px 20px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}>💳 Pay Now</button>}
+            {tuteeSession.state === 'CONFIRMED' && (
+              <span style={{ color: '#16a34a', fontWeight: '700', fontSize: '15px' }}>
+                ✓ Paid{' '}
+                {sessionFees[tuteeSession.id] != null
+                  ? `$${Number(sessionFees[tuteeSession.id]).toFixed(2)}`
+                  : (tuteeSession.fee && tuteeSession.fee !== '—' ? tuteeSession.fee : '—')}
+              </span>
+            )}
+            {tuteeSession.state === 'CONFIRMED' && tuteeSession.scheduled_at && new Date() > new Date(tuteeSession.scheduled_at) && (
+              <button
+                type="button"
+                onClick={() => navigate(`/feedback/${tuteeSession.id}`)}
+                style={{ padding: '10px 20px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}
+              >
+                ⭐ Leave Feedback
+              </button>
+            )}
             <button style={{ padding: '10px 20px', background: '#fff', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', marginLeft: 'auto' }}>Cancel</button>
           </div>
         </div>
@@ -1151,9 +1264,11 @@ const Dashboard = () => {
         {/* Action Buttons with Messaging (SRS 2.9) */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <button onClick={() => setShowMessaging(true)} onMouseEnter={() => setHovered('detail-msg')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-msg' ? '#2563eb' : '#3b82f6', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>💬 Message Tutor</button>
-          {s.state === 'PENDING_CONFIRM' && <button onClick={() => handlePay(s.id)} onMouseEnter={() => setHovered('detail-pay')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-pay' ? '#16a34a' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>💳 Pay Now</button>}
+          {activeTab === 'learning' && s.state === 'PENDING_CONFIRM' && <button onClick={() => openPaymentModal(s)} onMouseEnter={() => setHovered('detail-pay')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-pay' ? '#16a34a' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>💳 Pay Now</button>}
           {(s.state === 'CONFIRMED' || s.state === 'COMPLETED') && <button onClick={() => handleMarkOutcome(s.id, 'attended')} onMouseEnter={() => setHovered('detail-done')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-done' ? '#16a34a' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>✓ Mark as Completed</button>}
+          {(activeTab !== 'learning' || s.state !== 'CONFIRMED' || (s.scheduled_at && new Date() > new Date(s.scheduled_at))) && (
           <button onClick={() => s.id && navigate(`/feedback/${s.id}`)} onMouseEnter={() => setHovered('detail-fb')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-fb' ? '#d97706' : '#f59e0b', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>⭐ Leave Feedback</button>
+          )}
           <button onMouseEnter={() => setHovered('detail-res')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-res' ? '#f0faf5' : '#fff', color: '#1c1917', border: `1px solid ${hovered === 'detail-res' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>📅 Reschedule</button>
           <button onMouseEnter={() => setHovered('detail-cancel')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-cancel' ? '#fef2f2' : '#fff', color: '#ef4444', border: `1px solid ${hovered === 'detail-cancel' ? '#ef4444' : '#fecaca'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>Cancel Session</button>
         </div>
@@ -1173,6 +1288,147 @@ return (
       </DashboardLayout>
       {showDetailPanel && <div onClick={() => { setShowDetailPanel(false); setSelectedSession(null); }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 999 }}></div>}
       {showDetailPanel && <DetailPanel />}
+      {paymentModalSession && (() => {
+        const ps = paymentModalSession;
+        const modalFeeNum = ps?.id != null && sessionFees[ps.id] != null ? sessionFees[ps.id] : null;
+        const modalFeeStr = modalFeeNum != null ? `$${Number(modalFeeNum).toFixed(2)}` : '—';
+        const schedM = learningScheduleDisplay(ps);
+        const dtLine = [schedM.date, schedM.time].filter(Boolean).join(', ');
+        const dur = ps.duration_hours ?? ps.duration ?? 1;
+        const bankRef = ps.id ? String(ps.id).slice(0, 8).toUpperCase() : '—';
+        const subjTopic = `${ps.subject || '—'} • ${ps.topic || '—'}`;
+        return (
+          <div
+            role="presentation"
+            onClick={(e) => { if (e.target === e.currentTarget && !paymentLoading) closePaymentModal(); }}
+            style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', zIndex: 10050, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{ position: 'relative', background: '#fff', borderRadius: '24px', maxWidth: '480px', width: '100%', padding: '32px', boxShadow: '0 24px 48px rgba(0,0,0,0.2)' }}
+            >
+              {!paymentSuccess && (
+                <button
+                  type="button"
+                  disabled={paymentLoading}
+                  onClick={() => !paymentLoading && closePaymentModal()}
+                  style={{ position: 'absolute', top: '16px', right: '16px', background: '#f5f5f4', border: 'none', width: '36px', height: '36px', borderRadius: '8px', cursor: paymentLoading ? 'not-allowed' : 'pointer', fontSize: '16px' }}
+                >
+                  ✕
+                </button>
+              )}
+              {paymentSuccess ? (
+                <div style={{ textAlign: 'center', padding: '24px 8px' }}>
+                  <div style={{ fontSize: '56px', marginBottom: '16px' }}>✓</div>
+                  <h2 style={{ fontSize: '22px', fontWeight: '700', color: '#166534', marginBottom: '8px' }}>Payment Successful! 🎉</h2>
+                  <p style={{ color: '#57534e', fontSize: '15px' }}>Your session is confirmed. Good luck with your studies!</p>
+                </div>
+              ) : paymentError ? (
+                <div style={{ textAlign: 'center', padding: '16px 8px' }}>
+                  <div style={{ fontSize: '48px', marginBottom: '12px', color: '#ef4444' }}>✗</div>
+                  <p style={{ color: '#b91c1c', marginBottom: '20px', fontSize: '15px' }}>{paymentError}</p>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentError(null)}
+                    style={{ padding: '12px 24px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer' }}
+                  >
+                    Try Again
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <h2 style={{ fontSize: '22px', fontWeight: '700', color: '#1c1917', marginBottom: '8px', paddingRight: '40px' }}>💳 Complete Payment</h2>
+                  <p style={{ color: '#57534e', marginBottom: '20px', fontSize: '14px' }}>Secure payment for your tutoring session</p>
+                  <div style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px', marginBottom: '20px', fontSize: '14px', color: '#1c1917' }}>
+                    <div style={{ marginBottom: '8px', fontWeight: '600' }}>{subjTopic}</div>
+                    <div style={{ marginBottom: '4px' }}>Tutor: {ps.tutor || '—'}</div>
+                    <div style={{ marginBottom: '4px' }}>Date &amp; time: {dtLine || '—'}</div>
+                    <div style={{ marginBottom: '4px' }}>Duration: {dur} hour(s)</div>
+                    <div style={{ fontWeight: '700', color: '#1a5f4a' }}>Amount: {modalFeeStr}</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', borderBottom: '1px solid #e7e5e4', paddingBottom: '8px' }}>
+                    {[
+                      { id: 'paynow', label: 'PayNow QR' },
+                      { id: 'card', label: 'Credit/Debit Card' },
+                      { id: 'bank', label: 'Bank Transfer' },
+                    ].map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setPaymentTab(t.id)}
+                        style={{
+                          flex: 1,
+                          padding: '8px 6px',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          border: 'none',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          background: paymentTab === t.id ? '#1a5f4a' : '#f5f5f4',
+                          color: paymentTab === t.id ? '#fff' : '#57534e',
+                        }}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                  {paymentTab === 'paynow' && (
+                    <div>
+                      <div style={{ width: '200px', height: '200px', margin: '0 auto 12px', background: '#e7e5e4', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '64px' }}>📱</div>
+                      <p style={{ textAlign: 'center', color: '#57534e', marginBottom: '12px', fontSize: '14px' }}>Scan with your banking app</p>
+                      <p style={{ textAlign: 'center', marginBottom: '4px', fontSize: '14px' }}>UEN: <strong>PEERLEARN2024UEN</strong></p>
+                      <p style={{ textAlign: 'center', marginBottom: '16px', fontSize: '14px' }}>Amount: <strong>{modalFeeStr}</strong></p>
+                      <button
+                        type="button"
+                        disabled={paymentLoading}
+                        onClick={handlePaymentModalConfirm}
+                        style={{ width: '100%', padding: '14px', background: paymentLoading ? '#86efac' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: paymentLoading ? 'wait' : 'pointer' }}
+                      >
+                        {paymentLoading ? '⏳ Processing...' : '✓ I have completed payment'}
+                      </button>
+                    </div>
+                  )}
+                  {paymentTab === 'card' && (
+                    <div>
+                      <input placeholder="1234 5678 9012 3456" style={{ width: '100%', padding: '12px', marginBottom: '12px', borderRadius: '8px', border: '1px solid #e7e5e4', fontSize: '14px' }} />
+                      <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                        <input placeholder="MM/YY" style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #e7e5e4', fontSize: '14px' }} />
+                        <input placeholder="CVV" style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #e7e5e4', fontSize: '14px' }} />
+                      </div>
+                      <input placeholder="Cardholder name" style={{ width: '100%', padding: '12px', marginBottom: '8px', borderRadius: '8px', border: '1px solid #e7e5e4', fontSize: '14px' }} />
+                      <p style={{ fontSize: '12px', color: '#a8a29e', marginBottom: '12px' }}>(Demo only — no real charge)</p>
+                      <button
+                        type="button"
+                        disabled={paymentLoading}
+                        onClick={handlePaymentModalConfirm}
+                        style={{ width: '100%', padding: '14px', background: paymentLoading ? '#86efac' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: paymentLoading ? 'wait' : 'pointer' }}
+                      >
+                        {paymentLoading ? '⏳ Processing...' : `Pay ${modalFeeStr}`}
+                      </button>
+                    </div>
+                  )}
+                  {paymentTab === 'bank' && (
+                    <div style={{ fontSize: '14px', color: '#1c1917' }}>
+                      <p style={{ marginBottom: '8px' }}>Bank: <strong>DBS Bank</strong></p>
+                      <p style={{ marginBottom: '8px' }}>Account No: <strong>123-456789-0</strong></p>
+                      <p style={{ marginBottom: '8px' }}>Reference: <strong>{bankRef}</strong></p>
+                      <p style={{ marginBottom: '16px', color: '#57534e', fontSize: '13px' }}>Transfer within 24 hours to secure your slot</p>
+                      <button
+                        type="button"
+                        disabled={paymentLoading}
+                        onClick={handlePaymentModalConfirm}
+                        style={{ width: '100%', padding: '14px', background: paymentLoading ? '#86efac' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: paymentLoading ? 'wait' : 'pointer' }}
+                      >
+                        {paymentLoading ? 'Processing...' : '✓ I have transferred the payment'}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
       {showMessaging && <MessagingPanel />}
       {showMessaging && <div onClick={() => setShowMessaging(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 1000 }}></div>}
     </>
