@@ -192,13 +192,13 @@ const mapSessionToIncomingRequest = (s) => {
 };
 
 const mapNotificationToUi = (n) => ({
-  id: n.id,
+  ...n,
+  id: n.id ?? n.notification_id,
   icon: n.icon || '📩',
   title: n.title || n.type || 'Notification',
   message: n.message || n.body || n.content || '',
   time: formatRelativeTime(n.created_at || n.sent_at),
   unread: !n.is_read && !n.read,
-  ...n,
 });
 
 const urgencyLabel = {
@@ -654,11 +654,20 @@ const Dashboard = () => {
   const learningBadge = hasTuteeRole ? learningSessionActionCount + tuteeUnreadNotifCount : 0;
   const tutoringBadge = hasTutorRole ? tutoringPendingSelectionCount + tutorUnreadNotifCount : 0;
 
+  const currentUserIdForBadges = user?.id || user?.user_id;
+  const chatsUnreadFromOthers = chatMessages.filter(
+    (m) => m && m.is_read === false && String(m.sender_id) !== String(currentUserIdForBadges),
+  ).length;
+  const chatsBadge = Math.max(
+    badges.chats ?? 0,
+    chatSessions.length > 0 && chatsUnreadFromOthers > 0 ? Math.max(1, chatsUnreadFromOthers) : 0,
+  );
+
   const tabBadges = {
     home: 0,
     learning: learningBadge,
     tutoring: tutoringBadge,
-    chats: badges.chats,
+    chats: chatsBadge,
     notifications: badges.notifications,
   };
 
@@ -1041,13 +1050,21 @@ const Dashboard = () => {
     }
   };
 
-  const handleMarkNotificationRead = async (id) => {
+  const handleMarkNotificationRead = async (notif) => {
+    const id = notif?.id || notif?.notification_id;
+    if (!id || id === 'undefined') {
+      console.warn('[notif] missing id:', notif);
+      return;
+    }
     try {
-      await api.patch(`/notifications/${id}`);
-      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, unread: false } : n)));
+      await api.patch(`/notifications/${id}`, {});
+      const res = await api.get('/notifications');
+      const data = res.data;
+      const raw = Array.isArray(data) ? data : (data?.notifications || data?.items || []);
+      setNotifications(raw.map(mapNotificationToUi));
       fetchBadges();
-    } catch {
-      // error handled by api interceptor or UI
+    } catch (err) {
+      console.error('[notif] mark read error:', err);
     }
   };
 
@@ -1058,6 +1075,53 @@ const Dashboard = () => {
       fetchBadges();
     } catch {
       // error handled by api interceptor or UI
+    }
+  };
+
+  const getNotificationActionLabel = (notif) => {
+    const t = String(notif?.type || notif?.notification_type || '').toLowerCase();
+    if (t === 'slot_proposed') return 'Confirm your slot →';
+    if (t === 'session_accepted') return 'View session →';
+    if (t === 'payment_received') return 'View session →';
+    if (t === 'new_message') return 'View chat →';
+    if (t === 'request_matched') return 'View in My Tutoring →';
+    return 'View →';
+  };
+
+  const handleNotificationClick = async (notif) => {
+    const id = notif?.id || notif?.notification_id;
+    if (id && id !== 'undefined') {
+      try {
+        await api.patch(`/notifications/${id}`, {});
+      } catch {
+        // optional: still navigate
+      }
+      setNotifications((prev) => prev.map((n) => (
+        (String(n.id) === String(id) || String(n.notification_id) === String(id))
+          ? { ...n, is_read: true, unread: false }
+          : n
+      )));
+      fetchBadges();
+    }
+    const type = String(notif?.type || notif?.notification_type || '').toLowerCase();
+    const sessionId = notif?.session_id || notif?.data?.session_id;
+
+    if (type.includes('message') || type.includes('chat')) {
+      setActiveTab('chats');
+      if (sessionId) setSelectedChatSessionId(sessionId);
+    } else if (type.includes('slot') || type.includes('proposed')
+      || type.includes('confirm')) {
+      setActiveTab('learning');
+    } else if (type.includes('accept') || type.includes('tutor')) {
+      setActiveTab('learning');
+    } else if (type.includes('request') || type.includes('incoming')) {
+      setActiveTab('tutoring');
+    } else if (type.includes('payment') || type.includes('paid')) {
+      setActiveTab('learning');
+    } else if (type.includes('complaint') || type.includes('appeal')) {
+      // stay on notifications
+    } else {
+      setActiveTab('home');
     }
   };
 
@@ -1074,6 +1138,10 @@ const Dashboard = () => {
   const HomeTab = () => {
     const stats = summary?.stats || {};
     const pendingCount = learningSessions.filter((s) => normalizeSessionStatus(s) === 'pending_tutor_selection').length;
+    const homeUpcomingSessions = learningSessions.filter((s) =>
+      ['confirmed', 'tutor_accepted', 'pending_confirmation', 'pending_confirm'].includes(normalizeSessionStatus(s)),
+    ).slice(0, 3);
+    console.log('[HomeTab] upcomingSessions raw:', JSON.stringify(homeUpcomingSessions?.[0], null, 2));
     const statItems = [
       { label: 'Upcoming', value: String(stats.upcoming ?? upcomingSessions.length ?? 0), icon: '📅' },
       { label: 'Pending', value: String(pendingCount), icon: '⏳' },
@@ -1085,8 +1153,9 @@ const Dashboard = () => {
       else if (a.type === 'request') setActiveTab('tutoring');
       else if (a.type === 'feedback' && a.session_id) navigate(`/feedback/${a.session_id}`);
     };
+    const homeIncomingPreviews = hasTutorRole ? mergedTutorIncoming.slice(0, 3) : [];
     return (
-    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: homeIncomingPreviews.length > 0 ? '2fr 1fr' : '1fr', gap: '24px' }}>
       <div>
         {/* Welcome */}
         <div style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #2d8a6e 100%)', borderRadius: '20px', padding: '32px', color: '#fff', marginBottom: '24px' }}>
@@ -1125,56 +1194,71 @@ const Dashboard = () => {
         {/* Upcoming Sessions */}
         <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', padding: '24px' }}>
           <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px', color: '#1c1917' }}>📅 Upcoming Sessions</h3>
-          {upcomingSessions.map((session, index) => (
-            <div key={session.id || index} onClick={() => { setSelectedSession(session); setShowDetailPanel(true); }} onMouseEnter={() => setHovered(`session-${session.id || index}`)} onMouseLeave={() => setHovered(null)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: '#f5f5f4', borderRadius: '12px', marginBottom: '12px', cursor: 'pointer', boxShadow: hovered === `session-${session.id || index}` ? '0 4px 16px rgba(0,0,0,0.12)' : '0 2px 8px rgba(0,0,0,0.08)', transform: hovered === `session-${session.id || index}` ? 'translateY(-2px)' : 'none', transition: 'all 0.2s ease' }}>
+          {homeUpcomingSessions.map((s, index) => {
+            const subj = s.subject
+              || (Array.isArray(s.subjects) ? s.subjects[0] : null)
+              || '—';
+            const top = s.topic
+              || (Array.isArray(s.topics) ? s.topics[0] : null)
+              || '—';
+            const tutorName = s.tutor || s.tutor_name
+              || s.tutor_full_name || 'Tutor';
+            const sessionInitials = s.initials
+              || tutorName.slice(0, 2).toUpperCase();
+            const sessionDate = s.date
+              || (s.scheduled_at ? new Date(s.scheduled_at).toLocaleDateString(
+                'en-SG', { weekday: 'short', day: 'numeric', month: 'short' },
+              ) : '—');
+            const sessionTime = s.time
+              || (s.scheduled_at ? new Date(s.scheduled_at).toLocaleTimeString(
+                'en-SG', { hour: 'numeric', minute: '2-digit', hour12: true },
+              ) : '—');
+            const badgeState = s.state || s.status;
+            return (
+            <div key={s.id || index} onClick={() => { setSelectedSession(s); setShowDetailPanel(true); }} onMouseEnter={() => setHovered(`session-${s.id || index}`)} onMouseLeave={() => setHovered(null)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: '#f5f5f4', borderRadius: '12px', marginBottom: '12px', cursor: 'pointer', boxShadow: hovered === `session-${s.id || index}` ? '0 4px 16px rgba(0,0,0,0.12)' : '0 2px 8px rgba(0,0,0,0.08)', transform: hovered === `session-${s.id || index}` ? 'translateY(-2px)' : 'none', transition: 'all 0.2s ease' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <div style={{ width: '48px', height: '48px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold' }}>{session.initials}</div>
+                <div style={{ width: '48px', height: '48px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold' }}>{sessionInitials}</div>
                 <div>
-                  <div style={{ fontWeight: '600', color: '#1c1917', marginBottom: '4px' }}>{session.subject}: {session.topic}</div>
-                  <div style={{ fontSize: '13px', color: '#57534e' }}>with {session.tutor} • {session.date}, {session.time}</div>
+                  <div style={{ fontWeight: '600', color: '#1c1917', marginBottom: '4px' }}>{subj}: {top}</div>
+                  <div style={{ fontSize: '13px', color: '#57534e' }}>with {tutorName} • {sessionDate}, {sessionTime}</div>
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <StatusBadge state={session.state} />
-                <div style={{ fontSize: '14px', fontWeight: '600', color: '#1a5f4a', marginTop: '8px' }}>{session.fee}</div>
+                <StatusBadge state={badgeState} />
+                <div style={{ fontSize: '14px', fontWeight: '600', color: '#1a5f4a', marginTop: '8px' }}>{s.fee || '—'}</div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
-      {/* Sidebar - Incoming Requests */}
+      {/* Sidebar — tutor incoming request previews (UC-4.4) */}
+      {homeIncomingPreviews.length > 0 && (
       <div>
         <div style={{ background: '#fff', borderRadius: '16px', border: '2px solid #f59e0b', padding: '24px' }}>
           <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px', color: '#1c1917', display: 'flex', alignItems: 'center', gap: '8px' }}>
             📩 Incoming Requests
-            {incomingRequests.length > 0 && (
-              <span style={{ background: '#ef4444', color: '#fff', padding: '2px 10px', borderRadius: '10px', fontSize: '13px' }}>{incomingRequests.length}</span>
-            )}
+            <span style={{ background: '#ef4444', color: '#fff', padding: '2px 10px', borderRadius: '10px', fontSize: '13px' }}>{mergedTutorIncoming.length}</span>
           </h3>
-          {incomingRequests.map(req => (
-            <div key={req.id} style={{ padding: '16px', background: '#fef3c7', borderRadius: '12px', marginBottom: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '14px' }}>{req.initials}</div>
-                <div>
-                  <div style={{ fontWeight: '600', color: '#1c1917', fontSize: '14px' }}>{req.student}</div>
-                  <div style={{ fontSize: '12px', color: '#57534e' }}>{req.level}</div>
-                </div>
-                <span style={{ marginLeft: 'auto', background: req.urgency === 'Exam Soon' ? '#fef2f2' : '#fef3c7', color: req.urgency === 'Exam Soon' ? '#ef4444' : '#f59e0b', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '600' }}>{req.urgency}</span>
+          {homeIncomingPreviews.map((req) => {
+            const subjR = req.subject || req.subjects?.[0] || '—';
+            const topicR = req.topic || req.topics?.[0] || '—';
+            const studentName = req.student || req.tutee_name || req.tutee_full_name || 'Student';
+            const urgLabel = getUrgency(req) || req.urgency || '—';
+            const rid = req.id ?? req.session_id;
+            return (
+              <div key={rid} style={{ padding: '16px', background: '#fef3c7', borderRadius: '12px', marginBottom: '12px' }}>
+                <div style={{ fontSize: '14px', color: '#1c1917', fontWeight: '600', marginBottom: '8px' }}>{subjR}: {topicR}</div>
+                <div style={{ fontSize: '13px', color: '#57534e', marginBottom: '6px' }}>Student: {studentName}</div>
+                <div style={{ fontSize: '12px', color: '#92400e', fontWeight: '600', marginBottom: '8px' }}>{urgLabel}</div>
               </div>
-              <div style={{ fontSize: '14px', color: '#1c1917', fontWeight: '500', marginBottom: '4px' }}>{req.subject}: {req.topic}</div>
-              <div style={{ fontSize: '13px', color: '#57534e', marginBottom: '8px' }}>{req.date}, {req.time}</div>
-              <div style={{ fontSize: '14px', color: '#1a5f4a', fontWeight: '600', marginBottom: '12px' }}>Fee: {req.fee}</div>
-              {/* Accept/Decline/Message (SRS 2.12.6.3) */}
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={() => handleAccept(req.id)} onMouseEnter={() => setHovered(`accept-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ flex: 1, padding: '10px', background: hovered === `accept-${req.id}` ? '#2d7a61' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '13px', transition: 'all 0.2s ease' }}>✓ Accept</button>
-                <button onClick={() => handleDecline(req.id)} onMouseEnter={() => setHovered(`decline-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ flex: 1, padding: '10px', background: hovered === `decline-${req.id}` ? '#fef2f2' : '#fff', color: '#ef4444', border: `1px solid ${hovered === `decline-${req.id}` ? '#ef4444' : '#fecaca'}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '13px', transition: 'all 0.2s ease' }}>✕ Decline</button>
-                <button onClick={() => navigate(`/session/${req.session_id || req.id}/chat`)} onMouseEnter={() => setHovered(`msg-${req.id}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 14px', background: hovered === `msg-${req.id}` ? '#eff6ff' : '#fff', color: '#3b82f6', border: `1px solid ${hovered === `msg-${req.id}` ? '#3b82f6' : '#93c5fd'}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '13px', transition: 'all 0.2s ease' }}>💬</button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
+          <button type="button" onClick={() => setActiveTab('tutoring')} onMouseEnter={() => setHovered('home-tutoring-link')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', marginTop: '8px', padding: '12px', background: hovered === 'home-tutoring-link' ? '#f0fdf4' : '#fff', color: '#1a5f4a', border: '1px solid #1a5f4a', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '14px' }}>View in My Tutoring →</button>
         </div>
       </div>
+      )}
     </div>
     );
   };
@@ -1463,19 +1547,56 @@ const Dashboard = () => {
         )}
       </div>
 
-      {notifications.map((notif) => (
-        <div key={notif.id} onClick={() => notif.unread && handleMarkNotificationRead(notif.id)} style={{ background: '#fff', borderRadius: '12px', border: `1px solid ${notif.unread ? '#bbf7d0' : '#e7e5e4'}`, padding: '20px', marginBottom: '12px', display: 'flex', gap: '16px', alignItems: 'flex-start', borderLeft: notif.unread ? '4px solid #22c55e' : 'none', cursor: notif.unread ? 'pointer' : 'default' }}>
-          <div style={{ width: '48px', height: '48px', background: notif.unread ? '#dcfce7' : '#f5f5f4', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' }}>{notif.icon}</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
-              <h4 style={{ fontWeight: '600', color: '#1c1917' }}>{notif.title}</h4>
-              {notif.unread && <span style={{ width: '10px', height: '10px', background: '#22c55e', borderRadius: '50%' }}></span>}
+      {notifications.map((notif) => {
+        const nid = notif.id ?? notif.notification_id;
+        const rowHover = hovered === `notif-card-${nid}`;
+        return (
+          <div
+            key={nid}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleNotificationClick(notif); } }}
+            onClick={() => handleNotificationClick(notif)}
+            onMouseEnter={() => setHovered(`notif-card-${nid}`)}
+            onMouseLeave={() => setHovered(null)}
+            style={{
+              background: rowHover ? '#f0faf5' : '#fff',
+              borderRadius: '12px',
+              border: `1px solid ${notif.unread ? '#bbf7d0' : '#e7e5e4'}`,
+              padding: '20px',
+              marginBottom: '12px',
+              display: 'flex',
+              gap: '16px',
+              alignItems: 'stretch',
+              borderLeft: notif.unread ? '4px solid #22c55e' : 'none',
+              cursor: 'pointer',
+              transition: 'background 0.15s ease',
+            }}
+          >
+            <div style={{ width: '48px', height: '48px', background: notif.unread ? '#dcfce7' : '#f5f5f4', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', flexShrink: 0 }}>{notif.icon}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px', gap: '8px' }}>
+                <h4 style={{ fontWeight: '600', color: '#1c1917', margin: 0 }}>{notif.title}</h4>
+                {notif.unread && <span style={{ width: '10px', height: '10px', background: '#22c55e', borderRadius: '50%', flexShrink: 0, marginTop: '6px' }}></span>}
+              </div>
+              <p style={{ fontSize: '14px', color: '#57534e', marginBottom: '8px' }}>{notif.message}</p>
+              <span style={{ fontSize: '13px', color: '#a8a29e' }}>{notif.time}</span>
             </div>
-            <p style={{ fontSize: '14px', color: '#57534e', marginBottom: '8px' }}>{notif.message}</p>
-            <span style={{ fontSize: '13px', color: '#a8a29e' }}>{notif.time}</span>
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-end',
+              justifyContent: 'center',
+              flexShrink: 0,
+              gap: '4px',
+            }}
+            >
+              <span style={{ fontSize: '13px', fontWeight: '600', color: '#1a5f4a', whiteSpace: 'nowrap' }}>{getNotificationActionLabel(notif)}</span>
+              <span style={{ fontSize: '18px', color: '#1a5f4a', lineHeight: 1 }}>→</span>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 
@@ -1666,7 +1787,7 @@ const Dashboard = () => {
 
 return (
     <>
-      <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab} badges={badges}>
+      <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab} badges={tabBadges}>
         {activeTab === 'home' && <HomeTab />}
         {activeTab === 'learning' && <LearningTab />}
         {activeTab === 'tutoring' && <TutoringTab />}
