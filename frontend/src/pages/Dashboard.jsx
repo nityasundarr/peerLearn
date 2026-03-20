@@ -45,8 +45,8 @@ const formatRelativeTime = (d) => {
 
 const mapSessionToUi = (s) => ({
   id: s.id,
-  subject: s.subject || s.academic_level || '—',
-  topic: s.topic || s.subjects?.[0] || '—',
+  subject: s.subject || s.subjects?.[0] || '—',
+  topic: s.topic || s.topics?.[0] || '—',
   tutor: s.tutor_name || s.tutor?.full_name || 'Tutor',
   tutee: s.tutee_name || s.tutee?.full_name || 'Student',
   initials: getInitials(s.tutor_name || s.tutee_name || s.tutor?.full_name || s.tutee?.full_name),
@@ -69,8 +69,8 @@ const mapRequestToUi = (r) => ({
   initials: getInitials(r.tutee_full_name || r.tutee_name || r.tutee?.full_name),
   date: formatDate(r.proposed_at || r.created_at || r.date),
   time: formatTime(r.proposed_at || r.created_at || r.date),
-  urgency: r.urgency_level || r.urgency_category || r.urgency || '—',
-  level: r.academic_level || '—',
+  urgency: r.urgency_category || r.urgency_level || r.urgency || '—',
+  level: r.academic_level || r.level || '—',
   time_slots: r.time_slots || [],
   planning_areas: r.planning_areas || [],
   distance_bucket: r.distance_bucket || '—',
@@ -136,9 +136,8 @@ const Dashboard = () => {
       'exam_soon': '🔥 Exam Soon',
       'assignment_due': '⚡ Assignment Due',
       'general_study': '📚 General Study',
-      'very_urgent': '🔥 Very Urgent',
-      'urgent': '⚡ Urgent',
-      'normal': '📚 Normal'
+      'urgent': '🔥 Exam Soon',
+      'normal': '📚 General Study'
     };
     return map[val] || val || '—';
   };
@@ -646,9 +645,10 @@ const Dashboard = () => {
               <div>
                 <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1c1917', marginBottom: '4px' }}>
                   {(() => {
-                    const subjectDisplay = Array.isArray(req.subjects) ? req.subjects.join(', ') : req.academic_level || '—';
-                    const topicsDisplay = Array.isArray(req.topics) && req.topics.length > 0 ? req.topics.join(', ') : null;
-                    return `${subjectDisplay}${topicsDisplay ? ` • ${topicsDisplay}` : ''}`;
+                    const subjectDisplay = req.subject || req.subjects?.[0];
+                    const topicDisplay = req.topic || req.topics?.[0];
+                    if (topicDisplay) return `${subjectDisplay || '—'} • ${topicDisplay}`;
+                    return subjectDisplay || '—';
                   })()}
                 </h3>
                 <p style={{ fontSize: '14px', color: '#57534e', marginBottom: '4px' }}>from {req.student} • {req.level}</p>
