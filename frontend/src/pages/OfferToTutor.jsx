@@ -12,12 +12,13 @@ const DOW_TO_DAY = { 0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri',
 const TIME_TO_HOUR = { '9 AM': 9, '10 AM': 10, '11 AM': 11, '12 PM': 12, '1 PM': 13, '2 PM': 14, '3 PM': 15, '4 PM': 16, '5 PM': 17, '6 PM': 18, '7 PM': 19, '8 PM': 20 };
 const HOUR_TO_TIME = Object.fromEntries(Object.entries(TIME_TO_HOUR).map(([label, h]) => [h, label]));
 
-const PLANNING_AREAS_FULL = [
-  'Ang Mo Kio', 'Bedok', 'Bishan', 'Boon Lay', 'Bukit Batok', 'Bukit Merah',
-  'Bukit Panjang', 'Bukit Timah', 'Central Area', 'Choa Chu Kang', 'Clementi',
-  'Geylang', 'Hougang', 'Jurong East', 'Jurong West', 'Kallang', 'Marine Parade',
-  'Novena', 'Pasir Ris', 'Punggol', 'Queenstown', 'Sembawang', 'Sengkang',
-  'Serangoon', 'Tampines', 'Toa Payoh', 'Woodlands', 'Yishun',
+const SINGAPORE_AREAS = [
+  'Ang Mo Kio', 'Bedok', 'Bishan', 'Boon Lay', 'Bukit Batok',
+  'Bukit Merah', 'Bukit Panjang', 'Bukit Timah', 'Central Area',
+  'Choa Chu Kang', 'Clementi', 'Geylang', 'Hougang', 'Jurong East',
+  'Jurong West', 'Kallang', 'Marine Parade', 'Novena', 'Pasir Ris',
+  'Punggol', 'Queenstown', 'Sembawang', 'Sengkang', 'Serangoon',
+  'Tampines', 'Toa Payoh', 'Woodlands', 'Yishun',
 ];
 
 // Stable components at module level to prevent remount-on-typing (which caused scroll-to-top)
@@ -66,7 +67,7 @@ const OfferToTutorFlow = () => {
   const [selectedSlots, setSelectedSlots] = useState(['Tue-3 PM', 'Tue-4 PM', 'Thu-3 PM', 'Thu-4 PM', 'Sat-10 AM']);
 
   const [maxWeeklyHours, setMaxWeeklyHours] = useState(5);
-  const [planningAreas, setPlanningAreas] = useState(['Clementi', 'Jurong East']);
+  const [selectedAreas, setSelectedAreas] = useState([]);
   const [otherArea, setOtherArea] = useState('');
   const [customTopicInput, setCustomTopicInput] = useState('');
   const [customTopicWarning, setCustomTopicWarning] = useState('');
@@ -76,6 +77,7 @@ const OfferToTutorFlow = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [hovered, setHovered] = useState(null);
+  const [planningAreasHover, setPlanningAreasHover] = useState(null);
   const [existingProfile, setExistingProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
 
@@ -125,15 +127,15 @@ const OfferToTutorFlow = () => {
     }
 
     const areas = profile.planning_areas || [];
-    const inStd = areas.filter((a) => PLANNING_AREAS_FULL.includes(a));
-    const custom = areas.filter((a) => !PLANNING_AREAS_FULL.includes(a));
+    const inStd = areas.filter((a) => SINGAPORE_AREAS.includes(a));
+    const custom = areas.filter((a) => !SINGAPORE_AREAS.includes(a));
     if (custom.length > 0) {
       setShowOtherArea(true);
-      setPlanningAreas([]);
+      setSelectedAreas([]);
       setOtherArea(custom.join(', '));
     } else {
       setShowOtherArea(false);
-      setPlanningAreas(inStd.length ? inStd : []);
+      setSelectedAreas(inStd.length ? [...inStd] : []);
       setOtherArea('');
     }
 
@@ -188,6 +190,16 @@ const OfferToTutorFlow = () => {
 
   const getAllTopics = () => Object.values(topicsBySubject).flat();
   const hasAnyTopics = () => getAllTopics().length > 0;
+
+  const togglePlanningArea = (area) => {
+    setShowOtherArea(false);
+    setSelectedAreas((prev) => {
+      const arr = Array.isArray(prev) ? prev : [];
+      return arr.includes(area)
+        ? arr.filter((a) => a !== area)
+        : [...arr, area];
+    });
+  };
 
   const toggleTopic = (subjectKey, topic) => {
     setCustomTopicTargetSubject(subjectKey);
@@ -320,7 +332,7 @@ const OfferToTutorFlow = () => {
     setError(null);
     setLoading(true);
     try {
-      const areas = showOtherArea && otherArea ? [otherArea] : planningAreas;
+      const areas = showOtherArea && otherArea ? [otherArea] : selectedAreas;
       const subjects = [...selectedSubjects, ...(showOtherSubject && (topicsBySubject['Other']?.length ?? 0) > 0 ? ['Other'] : [])];
       const payload = {
         academic_levels: selectedAcademicLevels,
@@ -504,7 +516,7 @@ const OfferToTutorFlow = () => {
       )}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button onClick={() => setCurrentStep(2)} disabled={!hasAnyTopics() || selectedAcademicLevels.length === 0} onMouseEnter={() => hasAnyTopics() && selectedAcademicLevels.length > 0 && setHovered('cont1')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: hasAnyTopics() && selectedAcademicLevels.length > 0 ? (hovered === 'cont1' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: hasAnyTopics() && selectedAcademicLevels.length > 0 ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: hasAnyTopics() && selectedAcademicLevels.length > 0 ? 'pointer' : 'not-allowed', transition: 'all 0.2s ease' }}>Continue →</button>
+        <button onClick={() => setCurrentStep(2)} disabled={!hasAnyTopics() || selectedAcademicLevels.length === 0} onMouseEnter={() => hasAnyTopics() && selectedAcademicLevels.length > 0 && setHovered('cont1')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: hasAnyTopics() && selectedAcademicLevels.length > 0 ? (hovered === 'cont1' ? '#14583e' : '#1a5f4a') : '#e7e5e4', color: hasAnyTopics() && selectedAcademicLevels.length > 0 ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: hasAnyTopics() && selectedAcademicLevels.length > 0 ? 'pointer' : 'not-allowed', boxShadow: hasAnyTopics() && selectedAcademicLevels.length > 0 && hovered === 'cont1' ? '0 4px 14px rgba(26, 95, 74, 0.35)' : 'none', transition: 'all 0.2s ease' }}>Continue →</button>
       </div>
     </div>
   );
@@ -605,17 +617,21 @@ const OfferToTutorFlow = () => {
         </div>
       </div>
 
-      {/* Preferred Areas with "Other" (SRS 2.2.2.5) */}
+      {/* Preferred Areas with buttons + "Other" (matching TuteeRequest.jsx) */}
       <div style={{ marginBottom: '28px' }}>
-        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>Preferred tutoring areas</label>
+        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>
+          Preferred Areas <span style={{ color: '#ef4444' }}>*</span>
+          <span style={{ fontWeight: '400', color: '#a8a29e', marginLeft: '8px' }}>(select one or more)</span>
+        </label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
-          {PLANNING_AREAS_FULL.map((area) => {
-            const isSelected = !showOtherArea && planningAreas.includes(area);
+          {SINGAPORE_AREAS.map((area) => {
+            const isSelected = Array.isArray(selectedAreas) && !showOtherArea && selectedAreas.includes(area);
+            const h = planningAreasHover === `area-${area}`;
             return (
-              <button key={area} onClick={() => { setShowOtherArea(false); setPlanningAreas(planningAreas.includes(area) ? planningAreas.filter((a) => a !== area) : [...planningAreas.filter((a) => !PLANNING_AREAS_FULL.includes(a)), area]); }} style={{ padding: '10px 16px', background: isSelected ? '#1a5f4a' : '#fff', color: isSelected ? '#fff' : '#57534e', border: `1px solid ${isSelected ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>{isSelected && '✓ '}{area}</button>
+              <button key={area} type="button" onClick={() => togglePlanningArea(area)} onMouseEnter={() => setPlanningAreasHover(`area-${area}`)} onMouseLeave={() => setPlanningAreasHover(null)} style={{ padding: '10px 16px', background: h ? (isSelected ? '#145040' : '#f0faf5') : (isSelected ? '#1a5f4a' : '#fff'), color: isSelected ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (isSelected ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>{isSelected && '✓ '}{area}</button>
             );
           })}
-          <button onClick={() => { setShowOtherArea(true); setPlanningAreas([]); }} style={{ padding: '10px 16px', background: showOtherArea ? '#1a5f4a' : '#fff', color: showOtherArea ? '#fff' : '#57534e', border: `1px solid ${showOtherArea ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>{showOtherArea && '✓ '}Other</button>
+          <button type="button" onClick={() => { setShowOtherArea(true); setSelectedAreas([]); }} onMouseEnter={() => setPlanningAreasHover('area-other')} onMouseLeave={() => setPlanningAreasHover(null)} style={{ padding: '10px 16px', background: planningAreasHover === 'area-other' ? (showOtherArea ? '#145040' : '#f0faf5') : (showOtherArea ? '#1a5f4a' : '#fff'), color: showOtherArea ? '#fff' : (planningAreasHover === 'area-other' ? '#1a5f4a' : '#57534e'), border: `1px solid ${planningAreasHover === 'area-other' ? '#1a5f4a' : (showOtherArea ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>{showOtherArea && '✓ '}Other</button>
         </div>
         {showOtherArea && (
           <input type="text" placeholder="Enter planning area (1-100 characters)" maxLength={100} value={otherArea} onChange={(e) => setOtherArea(e.target.value)} style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', boxSizing: 'border-box' }} />
@@ -676,7 +692,7 @@ const OfferToTutorFlow = () => {
           <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Subjects</div><div style={{ fontWeight: '600' }}>{selectedSubjects.join(', ')}</div></div>
           <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Topics</div><div style={{ fontWeight: '600' }}>{formatTopicsSummary() || '—'}</div></div>
           <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Availability</div><div style={{ fontWeight: '600' }}>{formatAvailabilitySummary() || '—'}</div></div>
-          <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Planning areas</div><div style={{ fontWeight: '600' }}>{(showOtherArea && otherArea ? [otherArea] : planningAreas).join(', ') || '—'}</div></div>
+          <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Planning areas</div><div style={{ fontWeight: '600' }}>{(showOtherArea && otherArea ? [otherArea] : selectedAreas).join(', ') || '—'}</div></div>
           <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Accessibility accommodations</div><div style={{ fontWeight: '600' }}>{accessibilityAccommodations.length > 0 ? accessibilityAccommodations.map((a) => ({ 'I can accommodate wheelchair users': 'Wheelchair', 'I can use hearing assistance devices': 'Hearing assistance', 'I can provide visual aids/large print materials': 'Visual aids', 'I am flexible with venue accessibility requirements': 'Venue flexibility' }[a] || a)).join(', ') : 'None specified'}</div></div>
           <div><div style={{ opacity: 0.8, marginBottom: '4px' }}>Max hours/week</div><div style={{ fontWeight: '600' }}>{maxWeeklyHours} hours</div></div>
         </div>
@@ -687,7 +703,7 @@ const OfferToTutorFlow = () => {
       )}
       {/* Navigation */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        <button onClick={handleFormSubmit} disabled={loading} onMouseEnter={() => !loading && setHovered('activate')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '16px', background: loading ? '#e7e5e4' : (hovered === 'activate' ? '#2d7a61' : '#1a5f4a'), color: loading ? '#a8a29e' : '#fff', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '16px', transition: 'all 0.2s ease' }}>{loading ? 'Activating...' : '✓ Activate Tutor Profile'}</button>
+        <button onClick={handleFormSubmit} disabled={loading} onMouseEnter={() => !loading && setHovered('activate')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '16px', background: loading ? '#e7e5e4' : (hovered === 'activate' ? '#14583e' : '#1a5f4a'), color: loading ? '#a8a29e' : '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '16px', boxShadow: !loading && hovered === 'activate' ? '0 4px 14px rgba(26, 95, 74, 0.35)' : 'none', transition: 'all 0.2s ease' }}>{loading ? 'Activating...' : '✓ Activate Tutor Profile'}</button>
         <button onClick={() => setCurrentStep(2)} onMouseEnter={() => setHovered('back3')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'back3' ? '#f0faf5' : '#fff', color: '#57534e', border: `1px solid ${hovered === 'back3' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '12px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>← Back to Edit</button>
       </div>
     </div>
