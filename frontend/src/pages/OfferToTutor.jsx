@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 
@@ -8,7 +8,9 @@ import api from '../services/api';
 // ============================================================
 
 const DAY_TO_DOW = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 0 };
+const DOW_TO_DAY = { 0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat' };
 const TIME_TO_HOUR = { '9 AM': 9, '10 AM': 10, '11 AM': 11, '12 PM': 12, '1 PM': 13, '2 PM': 14, '3 PM': 15, '4 PM': 16, '5 PM': 17, '6 PM': 18, '7 PM': 19, '8 PM': 20 };
+const HOUR_TO_TIME = Object.fromEntries(Object.entries(TIME_TO_HOUR).map(([label, h]) => [h, label]));
 
 const PLANNING_AREAS_FULL = [
   'Ang Mo Kio', 'Bedok', 'Bishan', 'Boon Lay', 'Bukit Batok', 'Bukit Merah',
@@ -74,6 +76,8 @@ const OfferToTutorFlow = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [hovered, setHovered] = useState(null);
+  const [existingProfile, setExistingProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(true);
 
   const allSubjects = [
     { name: 'Mathematics', topics: ['Calculus', 'Integration', 'Differentiation', 'Linear Algebra', 'Statistics'] },
@@ -84,6 +88,103 @@ const OfferToTutorFlow = () => {
     { name: 'Economics', topics: ['Microeconomics', 'Macroeconomics', 'Econometrics'] },
     { name: 'English', topics: ['Essay Writing', 'Literature', 'Grammar'] },
   ];
+
+  const slotsFromAvailability = (slots) => {
+    if (!Array.isArray(slots)) return [];
+    return slots
+      .map(({ day_of_week, hour_slot }) => {
+        const day = DOW_TO_DAY[day_of_week];
+        const time = HOUR_TO_TIME[hour_slot];
+        if (!day || !time) return null;
+        return `${day}-${time}`;
+      })
+      .filter(Boolean);
+  };
+
+  const applyProfileFromApi = (profile) => {
+    const known = new Set(allSubjects.map((s) => s.name));
+    const nextTopics = {};
+    (profile.topics || []).forEach(({ subject, topic }) => {
+      if (!nextTopics[subject]) nextTopics[subject] = [];
+      nextTopics[subject].push(topic);
+    });
+
+    const selectedSubs = [];
+    let showOther = false;
+    for (const s of profile.subjects || []) {
+      if (s === 'Other') showOther = true;
+      else if (known.has(s)) selectedSubs.push(s);
+      else {
+        showOther = true;
+        const orphaned = nextTopics[s];
+        if (orphaned?.length) {
+          nextTopics.Other = [...(nextTopics.Other || []), ...orphaned];
+          delete nextTopics[s];
+        }
+      }
+    }
+
+    const areas = profile.planning_areas || [];
+    const inStd = areas.filter((a) => PLANNING_AREAS_FULL.includes(a));
+    const custom = areas.filter((a) => !PLANNING_AREAS_FULL.includes(a));
+    if (custom.length > 0) {
+      setShowOtherArea(true);
+      setPlanningAreas([]);
+      setOtherArea(custom.join(', '));
+    } else {
+      setShowOtherArea(false);
+      setPlanningAreas(inStd.length ? inStd : []);
+      setOtherArea('');
+    }
+
+    setSelectedAcademicLevels(profile.academic_levels?.length ? [...profile.academic_levels] : []);
+    setSelectedSubjects(selectedSubs);
+    setTopicsBySubject(nextTopics);
+    setShowOtherSubject(showOther);
+    setMaxWeeklyHours([2, 3, 5, 8, 10].includes(profile.max_weekly_hours) ? profile.max_weekly_hours : 5);
+    setTutorModeActive(!!profile.is_active_mode);
+    setAccessibilityNotes(profile.accessibility_notes || '');
+    const caps = profile.accessibility_capabilities || [];
+    const checkboxOpts = [
+      'I can accommodate wheelchair users',
+      'I can use hearing assistance devices',
+      'I can provide visual aids/large print materials',
+      'I am flexible with venue accessibility requirements',
+    ];
+    const matched = caps.filter((c) => checkboxOpts.includes(c));
+    setAccessibilityAccommodations(matched.length ? matched : ['I am flexible with venue accessibility requirements']);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setProfileLoading(true);
+      try {
+        const { data: profile } = await api.get('/tutor-profile');
+        if (cancelled) return;
+        setExistingProfile(profile);
+        applyProfileFromApi(profile);
+        try {
+          const { data: avail } = await api.get('/tutor-profile/availability');
+          if (cancelled) return;
+          const sl = slotsFromAvailability(avail.slots);
+          if (sl.length) setSelectedSlots(sl);
+        } catch {
+          // ignore availability load errors
+        }
+      } catch (err) {
+        if (err.response?.status === 404) {
+          setExistingProfile(null);
+        } else {
+          const d = err.response?.data?.detail;
+          setError(typeof d === 'string' ? d : 'Failed to load tutor profile');
+        }
+      } finally {
+        if (!cancelled) setProfileLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const getAllTopics = () => Object.values(topicsBySubject).flat();
   const hasAnyTopics = () => getAllTopics().length > 0;
@@ -221,21 +322,30 @@ const OfferToTutorFlow = () => {
     try {
       const areas = showOtherArea && otherArea ? [otherArea] : planningAreas;
       const subjects = [...selectedSubjects, ...(showOtherSubject && (topicsBySubject['Other']?.length ?? 0) > 0 ? ['Other'] : [])];
-      await api.post('/tutor-profile', {
+      const payload = {
         academic_levels: selectedAcademicLevels,
         subjects,
         tutor_topics: buildTutorTopics(),
         planning_areas: areas,
         max_weekly_hours: maxWeeklyHours,
-        accessibility_capabilities: [],
+        accessibility_capabilities: accessibilityAccommodations,
         accessibility_notes: accessibilityNotes || null,
         is_active_mode: tutorModeActive,
-      });
+      };
+      if (existingProfile) {
+        await api.put('/tutor-profile', payload);
+      } else {
+        await api.post('/tutor-profile', payload);
+      }
       await api.put('/tutor-profile/availability', { slots: slotsToAvailability() });
       await api.patch('/tutor-profile/mode', { is_active_mode: tutorModeActive });
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.detail ?? err.message ?? 'Failed to activate profile');
+      const d = err.response?.data?.detail;
+      let msg = err.message ?? 'Failed to save tutor profile';
+      if (typeof d === 'string') msg = d;
+      else if (Array.isArray(d)) msg = d.map((x) => (x.msg != null ? x.msg : JSON.stringify(x))).join(', ');
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -584,7 +694,13 @@ const OfferToTutorFlow = () => {
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: '#fafaf9', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+    <div style={{ minHeight: '100vh', background: '#fafaf9', fontFamily: 'system-ui, -apple-system, sans-serif', position: 'relative' }}>
+      {profileLoading && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(250,250,249,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px' }}>
+          <span style={{ fontSize: '36px' }}>⏳</span>
+          <span style={{ fontSize: '15px', color: '#57534e', fontWeight: '500' }}>Loading your tutor profile…</span>
+        </div>
+      )}
       <OfferFlowHeader onCancel={() => navigate('/dashboard')} />
       <OfferStepIndicator currentStep={currentStep} />
       {currentStep === 1 && renderStep1()}
