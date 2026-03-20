@@ -128,17 +128,6 @@ const Dashboard = () => {
     return dayStr + ', ' + fmt(hourVal) + '-' + fmt(hourVal + 1);
   };
 
-  const getUrgency = (s) => {
-    const val = s.urgency_category ||
-      s.request?.urgency_category ||
-      s.learning_need?.urgency_category;
-    const map = {
-      'exam_soon': '🔥 Exam Soon',
-      'assignment_due': '⚡ Assignment Due',
-      'general_study': '📚 General Study'
-    };
-    return map[val] || val || '—';
-  };
   const navigate = useNavigate();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
@@ -154,6 +143,7 @@ const Dashboard = () => {
   const [tutorSessionsPending, setTutorSessionsPending] = useState([]);
   const [proposingSessionId, setProposingSessionId] = useState(null);
   const [proposedSlots, setProposedSlots] = useState([]);
+  const [slotsProposedSessionId, setSlotsProposedSessionId] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [hovered, setHovered] = useState(null);
@@ -333,6 +323,7 @@ const Dashboard = () => {
       await api.post(`/sessions/${sessionId}/decline`);
       setProposingSessionId(null);
       setProposedSlots([]);
+      setSlotsProposedSessionId(null);
       await fetchSummary();
       await fetchBadges();
       if (activeTab === 'tutoring') {
@@ -345,11 +336,32 @@ const Dashboard = () => {
     }
   };
 
+  const slotToProposedPayload = (slot) => {
+    if (typeof slot === 'string') {
+      const parts = slot.trim().split(/\s+/);
+      const dateStr = parts[0];
+      const hourVal = parseInt(String(parts[1] || '').replace(/h$/i, ''), 10);
+      if (dateStr && !isNaN(hourVal)) return { date: dateStr, hour_slot: hourVal };
+      return null;
+    }
+    if (slot && typeof slot === 'object') {
+      const d = slot.date || slot.day_of_week;
+      const h = slot.hour_slot;
+      if (d != null && h != null && !isNaN(Number(h))) {
+        const dateStr = typeof d === 'string' ? d.split(' ')[0] : String(d);
+        return { date: dateStr, hour_slot: Number(h) };
+      }
+    }
+    return null;
+  };
+
   const handleProposeSlots = async (sessionId) => {
     try {
-      await api.post(`/sessions/${sessionId}/propose-slots`, { proposed_slots: proposedSlots });
+      const selectedSlots = proposedSlots.map(slotToProposedPayload).filter(Boolean);
+      await api.post(`/sessions/${sessionId}/propose-slots`, { proposed_slots: selectedSlots });
       setProposingSessionId(null);
       setProposedSlots([]);
+      setSlotsProposedSessionId(sessionId);
       await fetchSummary();
       await fetchBadges();
       if (activeTab === 'tutoring') {
@@ -474,8 +486,8 @@ const Dashboard = () => {
         {/* Upcoming Sessions */}
         <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', padding: '24px' }}>
           <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px', color: '#1c1917' }}>📅 Upcoming Sessions</h3>
-          {upcomingSessions.map(session => (
-            <div key={session.id} onClick={() => { setSelectedSession(session); setShowDetailPanel(true); }} onMouseEnter={() => setHovered(`session-${session.id}`)} onMouseLeave={() => setHovered(null)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: '#f5f5f4', borderRadius: '12px', marginBottom: '12px', cursor: 'pointer', boxShadow: hovered === `session-${session.id}` ? '0 4px 16px rgba(0,0,0,0.12)' : '0 2px 8px rgba(0,0,0,0.08)', transform: hovered === `session-${session.id}` ? 'translateY(-2px)' : 'none', transition: 'all 0.2s ease' }}>
+          {upcomingSessions.map((session, index) => (
+            <div key={session.id || index} onClick={() => { setSelectedSession(session); setShowDetailPanel(true); }} onMouseEnter={() => setHovered(`session-${session.id || index}`)} onMouseLeave={() => setHovered(null)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: '#f5f5f4', borderRadius: '12px', marginBottom: '12px', cursor: 'pointer', boxShadow: hovered === `session-${session.id || index}` ? '0 4px 16px rgba(0,0,0,0.12)' : '0 2px 8px rgba(0,0,0,0.08)', transform: hovered === `session-${session.id || index}` ? 'translateY(-2px)' : 'none', transition: 'all 0.2s ease' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                 <div style={{ width: '48px', height: '48px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold' }}>{session.initials}</div>
                 <div>
@@ -574,6 +586,27 @@ const Dashboard = () => {
 
   // MY TUTORING TAB
   const TutoringTab = () => {
+    const urgencyLabel = (session) => {
+      console.log('[session keys and values]', JSON.stringify(session, null, 2));
+      console.log('[urgency]', session.urgency_category, Object.keys(session));
+      const urgencyMap = {
+        'exam_soon': '🔥 Exam Soon',
+        'assignment_due': '⚡ Assignment Due',
+        'general_study': '📚 General Study'
+      };
+      const ln = Array.isArray(session.learning_needs) ? session.learning_needs[0] : session.learning_needs;
+      const nestedReq = session.tutoring_requests;
+      const urgencyVal =
+        session.urgency_category ||
+        (nestedReq && typeof nestedReq === 'object' ? nestedReq.urgency_category : null) ||
+        ln?.urgency_category ||
+        session['tutoring_requests.urgency_category'] ||
+        session.urgency_level ||
+        session.urgency;
+      const normalized = typeof urgencyVal === 'string' ? urgencyVal.trim() : urgencyVal;
+      return urgencyMap[normalized] || '—';
+    };
+
     const slotsForRequest = (req) => {
       const raw = req.time_slots || [];
       if (raw.length === 0) return [];
@@ -613,17 +646,21 @@ const Dashboard = () => {
       ) : (
         mergedTutorIncoming.map((req) => (
         <div key={req.session_id || req.id} style={{ background: '#fff', borderRadius: '16px', border: '2px solid #f59e0b', padding: '24px', marginBottom: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '16px' }}>
             <div style={{ display: 'flex', gap: '16px' }}>
               <div style={{ width: '56px', height: '56px', background: '#f59e0b', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '18px' }}>{req.initials}</div>
               <div>
-                <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1c1917', marginBottom: '4px' }}>{req.subjects?.join(', ') || req.academic_level || req.subject || '—'}</h3>
+                <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1c1917', marginBottom: '4px' }}>
+                  {(() => {
+                    const subjectDisplay = Array.isArray(req.subjects) ? req.subjects.join(', ') : req.academic_level || '—';
+                    const topicsDisplay = Array.isArray(req.topics) && req.topics.length > 0 ? req.topics.join(', ') : null;
+                    return `${subjectDisplay}${topicsDisplay ? ` • ${topicsDisplay}` : ''}`;
+                  })()}
+                </h3>
                 <p style={{ fontSize: '14px', color: '#57534e', marginBottom: '4px' }}>from {req.student} • {req.level}</p>
                 <div style={{ display: 'flex', gap: '16px', fontSize: '14px', color: '#57534e', flexWrap: 'wrap' }}>
-                  <span>📅 {req.date}</span>
-                  <span>🕐 {req.time}</span>
+                  <span>📅 Requested: {req.date || '—'} at {(req.time || '—').toUpperCase()} | {urgencyLabel(req)}</span>
                   {req.distance_bucket && req.distance_bucket !== '—' && <span>📍 {req.distance_bucket}</span>}
-                  <span style={{ background: getUrgency(req).includes('Exam') ? '#fef2f2' : '#fef3c7', color: getUrgency(req).includes('Exam') ? '#ef4444' : '#f59e0b', padding: '2px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: '600' }}>{getUrgency(req)}</span>
                 </div>
                 {(req.time_slots?.length > 0) && (
                   <div style={{ fontSize: '13px', color: '#57534e', marginTop: '8px' }}>
@@ -632,32 +669,36 @@ const Dashboard = () => {
                 )}
               </div>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '18px', fontWeight: '700', color: '#1a5f4a', marginTop: '4px' }}>Fee: {req.fee}</div>
-            </div>
           </div>
 
           {(() => {
             const sid = req.session_id || req.id;
             const st = (req.status || req.state || '').toLowerCase().replace(/\s/g, '_');
+            if (slotsProposedSessionId === sid) {
+              return (
+                <div style={{ marginTop: '12px', padding: '14px 16px', background: '#ecfdf5', borderRadius: '12px', border: '1px solid #6ee7b7', color: '#166534', fontSize: '15px', fontWeight: '600' }}>
+                  ✓ Time slots proposed. Waiting for tutee to confirm.
+                </div>
+              );
+            }
             const needsPropose = st === 'tutor_accepted' || proposingSessionId === sid;
             if (needsPropose) {
               return (
             <div style={{ background: '#f0fdf4', borderRadius: '12px', padding: '16px', marginTop: '12px', border: '1px solid #bbf7d0' }}>
-              <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#166534', marginBottom: '12px' }}>Propose time slot(s)</h4>
+              <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#166534', marginBottom: '12px' }}>Select time slots to propose to tutee:</h4>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
                 {slotsForRequest(req).map((slot, idx) => {
                   const key = typeof slot === 'object' ? `${slot.date || slot.day_of_week}-${slot.hour_slot}-${idx}` : `slot-${idx}`;
-                  const label = typeof slot === 'object' ? (slot.date ? `${slot.date} ${slot.hour_slot ?? ''}h` : `Day ${slot.day_of_week ?? ''} ${slot.hour_slot ?? ''}h`) : String(slot);
+                  const label = formatSlot(slot);
                   const isSelected = proposedSlots.some((s) => JSON.stringify(s) === JSON.stringify(slot));
                   return (
-                    <button key={key} onClick={() => toggleProposedSlot(slot)} style={{ padding: '8px 14px', background: isSelected ? '#1a5f4a' : '#fff', color: isSelected ? '#fff' : '#1a5f4a', border: `1px solid ${isSelected ? '#1a5f4a' : '#86efac'}`, borderRadius: '8px', fontSize: '13px', fontWeight: '500', cursor: 'pointer' }}>{label}</button>
+                    <button key={key} onClick={() => toggleProposedSlot(slot)} style={{ padding: '8px 14px', background: isSelected ? '#22c55e' : '#fff', color: isSelected ? '#fff' : '#166534', border: `1px solid ${isSelected ? '#16a34a' : '#86efac'}`, borderRadius: '8px', fontSize: '13px', fontWeight: '500', cursor: 'pointer' }}>{label}</button>
                   );
                 })}
                 {slotsForRequest(req).length === 0 && <span style={{ fontSize: '13px', color: '#57534e' }}>No preferred slots from tutee</span>}
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={() => handleProposeSlots(sid)} disabled={proposedSlots.length === 0} onMouseEnter={() => setHovered('propose-btn')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 20px', background: proposedSlots.length > 0 ? (hovered === 'propose-btn' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: proposedSlots.length > 0 ? 'pointer' : 'not-allowed', fontSize: '14px' }}>Propose</button>
+                <button onClick={() => handleProposeSlots(sid)} disabled={proposedSlots.length === 0} onMouseEnter={() => setHovered('propose-btn')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 20px', background: proposedSlots.length > 0 ? (hovered === 'propose-btn' ? '#16a34a' : '#22c55e') : '#e7e5e4', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: proposedSlots.length > 0 ? 'pointer' : 'not-allowed', fontSize: '14px' }}>Propose</button>
                 <button onClick={() => { setProposingSessionId(null); setProposedSlots([]); }} style={{ padding: '10px 20px', background: '#fff', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '14px' }}>Cancel</button>
               </div>
             </div>
