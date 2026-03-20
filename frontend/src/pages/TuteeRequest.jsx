@@ -28,7 +28,7 @@ const DURATION_HOURS_MAP = { '1 hour': 1, '2 hours': 2, '4 hours': 4 };
 const getInitials = (name) => (name || '').split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '??';
 
 // Stable components at module level to prevent remount-on-typing (which caused scroll-to-top)
-const TuteeFlowHeader = ({ onCancel }) => {
+const TuteeFlowHeader = ({ onCancel, cancelLabel = '✕ Cancel Request' }) => {
   const [h, setH] = useState(false);
   return (
     <header style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #0d3d2e 100%)', padding: '0 32px', height: '72px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -36,7 +36,7 @@ const TuteeFlowHeader = ({ onCancel }) => {
         <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
         <span style={{ color: '#fff', fontSize: '22px', fontWeight: '700' }}>PeerLearn</span>
       </div>
-      <button onClick={onCancel} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} style={{ background: h ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>✕ Cancel Request</button>
+      <button type="button" onClick={onCancel} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} style={{ background: h ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>{cancelLabel}</button>
     </header>
   );
 };
@@ -314,6 +314,74 @@ const RequestHelpFlow = () => {
 
   const handleModifyRequestFromNoTutors = () => {
     setShowWaitlistSuccess(false);
+    setCurrentStep(1);
+  };
+
+  const handleFlowHeaderCancel = async () => {
+    if (awaitingTutorAccept && requestId) {
+      setLoading(true);
+      try {
+        await api.delete(`/requests/${requestId}`);
+      } catch {
+        /* still exit flow */
+      } finally {
+        setLoading(false);
+      }
+    }
+    navigate('/dashboard');
+  };
+
+  const handleGoToMyDashboard = () => {
+    try {
+      sessionStorage.setItem('peerlearn_dashboard_tab', 'learning');
+    } catch {
+      /* ignore */
+    }
+    navigate('/dashboard?tab=learning');
+  };
+
+  const handleCancelThisRequest = async () => {
+    if (!requestId) {
+      navigate('/dashboard');
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      await api.delete(`/requests/${requestId}`);
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err.response?.data?.detail ?? err.message ?? 'Could not cancel this request');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleModifyRequestAfterTutorSubmit = async () => {
+    if (!requestId) {
+      setAwaitingTutorAccept(false);
+      setSessionId(null);
+      setSelectedTutor(null);
+      setCurrentStep(1);
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      await api.delete(`/requests/${requestId}`);
+    } catch (err) {
+      setError(err.response?.data?.detail ?? err.message ?? 'Could not remove your previous request');
+      setLoading(false);
+      return;
+    } finally {
+      setLoading(false);
+    }
+    setAwaitingTutorAccept(false);
+    setRequestId(null);
+    setSessionId(null);
+    setSelectedTutor(null);
+    setRecommendedTutors([]);
+    setRecommendedVenues([]);
     setCurrentStep(1);
   };
 
@@ -746,20 +814,103 @@ const RequestHelpFlow = () => {
   // STEP 3: Choose Tutor
   const renderStep3 = () => {
     if (awaitingTutorAccept) {
+      const selectedTutorObj = recommendedTutors.find((t) => String(t.id) === String(selectedTutor));
+      const tutorDisplayName = selectedTutorObj?.name ?? 'your tutor';
       return (
-        <div style={{ maxWidth: '560px', margin: '0 auto', padding: '48px 24px', textAlign: 'center' }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>⏳</div>
-          <h1 style={{ fontSize: '24px', fontWeight: '700', color: '#1c1917', marginBottom: '12px' }}>Waiting for tutor to accept your request...</h1>
-          <p style={{ color: '#57534e', marginBottom: '28px', fontSize: '15px', lineHeight: 1.6 }}>
-            You&apos;ll be able to choose a venue once your tutor accepts. Check your dashboard for updates.
-          </p>
-          <button
-            type="button"
-            onClick={() => setAwaitingTutorAccept(false)}
-            style={{ padding: '14px 28px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px' }}
+        <div style={{ maxWidth: '560px', margin: '0 auto', padding: '48px 24px' }}>
+          <h1 style={{ fontSize: '24px', fontWeight: '700', color: '#166534', marginBottom: '20px', textAlign: 'center' }}>✓ Request Submitted Successfully!</h1>
+          <div
+            style={{
+              background: '#f0fdf4',
+              border: '1px solid #bbf7d0',
+              borderRadius: '12px',
+              padding: '20px',
+              marginBottom: '28px',
+              textAlign: 'left',
+            }}
           >
-            ← Back
-          </button>
+            <p style={{ color: '#166534', fontSize: '15px', lineHeight: 1.65, margin: 0 }}>
+              Your tutoring request has been sent to <strong>{tutorDisplayName}</strong>. You&apos;ll be notified when they accept and propose time slots.
+            </p>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
+            <button
+              type="button"
+              onClick={handleGoToMyDashboard}
+              disabled={loading}
+              onMouseEnter={() => setHovered('await-dash')}
+              onMouseLeave={() => setHovered(null)}
+              style={{
+                width: '100%',
+                padding: '14px 24px',
+                background: loading ? '#e7e5e4' : (hovered === 'await-dash' ? '#2d7a61' : '#1a5f4a'),
+                color: loading ? '#a8a29e' : '#fff',
+                border: 'none',
+                borderRadius: '10px',
+                fontWeight: '600',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                fontSize: '16px',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              🏠 Go to My Dashboard
+            </button>
+            <button
+              type="button"
+              onClick={handleModifyRequestAfterTutorSubmit}
+              disabled={loading}
+              onMouseEnter={() => !loading && setHovered('await-mod')}
+              onMouseLeave={() => setHovered(null)}
+              style={{
+                width: '100%',
+                padding: '14px 24px',
+                background: hovered === 'await-mod' ? '#f0faf5' : '#fff',
+                color: '#1a5f4a',
+                border: `2px solid ${hovered === 'await-mod' ? '#1a5f4a' : '#e7e5e4'}`,
+                borderRadius: '10px',
+                fontWeight: '600',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                fontSize: '15px',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              ✏️ Modify Request
+            </button>
+            <button
+              type="button"
+              onClick={handleCancelThisRequest}
+              disabled={loading}
+              onMouseEnter={() => !loading && setHovered('await-cancel')}
+              onMouseLeave={() => setHovered(null)}
+              style={{
+                width: '100%',
+                padding: '14px 24px',
+                background: hovered === 'await-cancel' ? '#fef2f2' : '#fff',
+                color: '#b91c1c',
+                border: `1px solid ${hovered === 'await-cancel' ? '#fecaca' : '#e7e5e4'}`,
+                borderRadius: '10px',
+                fontWeight: '500',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                fontSize: '15px',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              ✕ Cancel this Request
+            </button>
+          </div>
+          {error && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '12px', marginBottom: '20px', fontSize: '14px', color: '#b91c1c' }}>{error}</div>
+          )}
+          <div style={{ borderTop: '1px solid #e7e5e4', paddingTop: '24px' }}>
+            <div style={{ fontSize: '15px', fontWeight: '600', color: '#1c1917', marginBottom: '14px' }}>What happens next?</div>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '14px', color: '#57534e', lineHeight: 1.55 }}>
+              <li>📬 Your request is visible to matching tutors</li>
+              <li>✓ Tutor will accept and propose time slots</li>
+              <li>📅 You confirm a time slot</li>
+              <li>💳 Complete payment to confirm session</li>
+              <li>🎓 Attend your session!</li>
+            </ul>
+          </div>
         </div>
       );
     }
@@ -1100,7 +1251,10 @@ const RequestHelpFlow = () => {
 
   return (
     <div style={{ minHeight: '100vh', background: '#fafaf9', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-      <TuteeFlowHeader onCancel={() => navigate('/dashboard')} />
+      <TuteeFlowHeader
+        onCancel={handleFlowHeaderCancel}
+        cancelLabel={awaitingTutorAccept ? '✕ Cancel this Request' : '✕ Cancel Request'}
+      />
       <TuteeStepIndicator currentStep={currentStep} />
       {currentStep === 1 && renderStep1()}
       {currentStep === 2 && renderStep2()}
