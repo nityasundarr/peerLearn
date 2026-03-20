@@ -113,6 +113,14 @@ const mapNotificationToUi = (n) => ({
   ...n,
 });
 
+const urgencyLabel = {
+  exam_soon: '🔥 Exam Soon',
+  assignment_due: '⚡ Assignment Due',
+  general_study: '📚 General Study',
+  urgent: '🔥 Exam Soon',
+  normal: '📚 General Study'
+};
+
 const Dashboard = () => {
   const formatSlot = (slot) => {
     if (!slot) return '';
@@ -126,20 +134,6 @@ const Dashboard = () => {
     const fmt = (n) => n === 0 ? '12AM' : n < 12 ?
       n + 'AM' : n === 12 ? '12PM' : (n - 12) + 'PM';
     return dayStr + ', ' + fmt(hourVal) + '-' + fmt(hourVal + 1);
-  };
-
-  const getUrgency = (s) => {
-    const val = s.urgency_category ||
-      s.urgency_level ||
-      s.urgency;
-    const map = {
-      'exam_soon': '🔥 Exam Soon',
-      'assignment_due': '⚡ Assignment Due',
-      'general_study': '📚 General Study',
-      'urgent': '🔥 Exam Soon',
-      'normal': '📚 General Study'
-    };
-    return map[val] || val || '—';
   };
 
   const navigate = useNavigate();
@@ -175,40 +169,22 @@ const Dashboard = () => {
   const incomingRequests = (summary?.incoming_requests || []).map(mapRequestToUi);
   const pendingActions = summary?.pending_actions || [];
 
-  // Merged incoming requests for My Tutoring tab: prefer /tutor/requests/incoming, else sessions with pending_tutor_selection
+  // My Tutoring: base = GET /sessions?role=tutor; overlay GET /tutor/requests/incoming when ids match
   const mergedTutorIncoming = (() => {
-    if (tutorIncomingRequests.length > 0) {
-      return tutorIncomingRequests.map(mapRequestToUi);
-    }
-    const pending = tutorSessionsPending.filter((s) => {
+    const incomingMapped = tutorIncomingRequests.map(mapRequestToUi);
+    const baseSessions = tutoringSessions.filter((s) => {
       const st = (s.status || s.state || '').toLowerCase().replace(/\s/g, '_');
-      return st === 'pending_tutor_selection' || st === 'pending' || st === 'tutor_accepted';
+      return st === 'pending_tutor_selection' || st === 'tutor_accepted';
     });
-    if (pending.length > 0) return pending.map(mapSessionToIncomingRequest);
-    // Fallback: GET /sessions?role=tutor may return pending_tutor_selection
-    const fromTutoring = tutoringSessions.filter((s) => {
-      const st = (s.state || s.status || '').toUpperCase().replace(/\s/g, '_');
-      return st === 'PENDING_TUTOR_SELECTION' || st === 'PENDING_TUTOR' || st === 'TUTOR_ACCEPTED';
+    if (baseSessions.length === 0 && incomingMapped.length > 0) {
+      return incomingMapped;
+    }
+    return baseSessions.map((s) => {
+      const match = incomingMapped.find((r) =>
+        r.id === s.id || r.session_id === s.id || r.id === s.session_id
+      );
+      return match ? { ...s, ...match } : s;
     });
-    return fromTutoring.map((s) => ({
-      ...mapRequestToUi({
-        session_id: s.id,
-        id: s.id,
-        tutee_full_name: s.tutee,
-        subjects: s.subject ? [s.subject] : [],
-        topics: s.topic ? [s.topic] : [],
-        academic_level: s.subject || s.level || '—',
-        time_slots: s.time_slots || s.proposed_slots || [],
-        planning_areas: [],
-        distance_bucket: s.distance_bucket || '—',
-        urgency_level: s.urgency || '—',
-        duration_hours: s.duration_hours ?? 1,
-        fee: s.fee,
-        created_at: s.created_at,
-        date: s.date,
-      }),
-      time_slots: s.time_slots || s.proposed_slots || [],
-    }));
   })();
 
   const fetchSummary = async () => {
@@ -653,7 +629,7 @@ const Dashboard = () => {
                 </h3>
                 <p style={{ fontSize: '14px', color: '#57534e', marginBottom: '4px' }}>from {req.student} • {req.level}</p>
                 <div style={{ display: 'flex', gap: '16px', fontSize: '14px', color: '#57534e', flexWrap: 'wrap' }}>
-                  <span>📅 Requested: {req.date || '—'} at {(req.time || '—').toUpperCase()} | {getUrgency(req)}</span>
+                  <span>📅 Requested: {req.date || '—'} at {(req.time || '—').toUpperCase()} | {urgencyLabel[req.urgency] || urgencyLabel[req.urgency_level] || urgencyLabel[req.urgency_category] || req.urgency || '—'}</span>
                   {req.distance_bucket && req.distance_bucket !== '—' && <span>📍 {req.distance_bucket}</span>}
                 </div>
                 {(req.time_slots?.length > 0) && (
