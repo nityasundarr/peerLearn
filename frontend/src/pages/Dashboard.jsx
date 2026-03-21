@@ -417,51 +417,39 @@ const ChatsTab = React.memo(function ChatsTab({
               <div
                 key={msgId}
                 style={{
-                  display: 'flex', gap: '10px',
+                  display: 'flex',
                   marginBottom: '16px',
                   flexDirection: isOwn ? 'row-reverse' : 'row',
                   alignItems: 'flex-end',
                 }}
               >
                 <div style={{
-                  width: '32px', height: '32px',
-                  background: isOwn ? '#1a5f4a' : '#f59e0b',
-                  borderRadius: '8px', display: 'flex',
-                  alignItems: 'center', justifyContent: 'center',
-                  color: '#fff', fontWeight: 'bold', fontSize: '11px',
-                  flexShrink: 0,
-                }}
-                >
-                  {isOwn ? 'Me'
-                    : getOtherPersonName(selectedSession).slice(0, 2).toUpperCase()}
-                </div>
-                <div style={{
                   textAlign: isOwn ? 'right' : 'left',
                   maxWidth: '320px',
                 }}
                 >
-                  <div style={{ fontSize: '11px', color: '#a8a29e', marginBottom: '4px' }}>
-                    {isOwn ? 'You' : getOtherPersonName(selectedSession)}
-                    {' · '}
-                    {formatMsgTime(msg.sent_at || msg.created_at)}
-                  </div>
+                  {!isOwn && (
+                    <div style={{ fontSize: '11px', color: '#a8a29e', marginBottom: '4px' }}>
+                      {getOtherPersonName(selectedSession)}
+                    </div>
+                  )}
                   <div style={{
-                    background: isOwn ? '#1a5f4a' : '#fff',
+                    background: isOwn ? '#1a5f4a' : '#f5f5f4',
+                    color: isOwn ? '#fff' : '#1c1917',
+                    borderRadius: isOwn ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
                     padding: '12px 16px',
-                    borderRadius: isOwn ? '12px 12px 4px 12px'
-                      : '12px 12px 12px 4px',
+                    maxWidth: '320px',
                     display: 'inline-block',
-                    boxShadow: isOwn ? 'none'
-                      : '0 1px 4px rgba(0,0,0,0.08)',
+                    boxShadow: isOwn ? 'none' : '0 1px 4px rgba(0,0,0,0.08)',
                   }}
                   >
-                    <p style={{
-                      fontSize: '14px', margin: 0,
-                      color: isOwn ? '#fff' : '#1c1917',
-                    }}
-                    >
+                    <p style={{ fontSize: '14px', margin: 0, color: isOwn ? '#fff' : '#1c1917' }}>
                       {msg.content}
                     </p>
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#a8a29e', marginTop: '4px' }}>
+                    {formatMsgTime(msg.sent_at || msg.created_at)}
+                    {isOwn && ' ✓'}
                   </div>
                 </div>
               </div>
