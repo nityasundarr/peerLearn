@@ -95,6 +95,9 @@ const normalizeSessionStatus = (s) =>
 
 const learningScheduleDisplay = (s) => {
   const st = normalizeSessionStatus(s);
+  if (st === 'pending_tutor_selection') {
+    return { date: 'Waiting for tutor to accept', time: '' };
+  }
   if (st === 'tutor_accepted' && !s.scheduled_at) {
     return { date: 'Pending slot confirmation', time: '' };
   }
@@ -551,6 +554,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
+  const [learningFilterTab, setLearningFilterTab] = useState('upcoming');
   const [showDetailPanel, setShowDetailPanel] = useState(false);
   const [showMessaging, setShowMessaging] = useState(false);
   const [selectedSession, setSelectedSession] = useState(null);
@@ -651,9 +655,6 @@ const Dashboard = () => {
   const learningBadge = hasTuteeRole
     ? learningSessions.filter((s) =>
       ['tutor_accepted', 'pending_confirmation', 'pending_tutor_selection'].includes(s.status),
-    ).length + notifications.filter((n) =>
-      (n.unread || n.is_read === false)
-      && (String(n.type || '').toLowerCase().includes('match')),
     ).length
     : 0;
   const tutoringBadge = hasTutorRole ? tutoringPendingSelectionCount + tutorUnreadNotifCount : 0;
@@ -1377,7 +1378,6 @@ const Dashboard = () => {
 
   // MY LEARNING TAB
   const LearningTab = () => {
-    const [learningFilterTab, setLearningFilterTab] = useState('upcoming');
     const learningTabKeys = [
       { key: 'upcoming', label: 'Upcoming' },
       { key: 'pending', label: 'Pending' },
@@ -1416,7 +1416,8 @@ const Dashboard = () => {
             <div style={{ display: 'flex', gap: '16px' }}>
               <div style={{ width: '56px', height: '56px', background: '#f59e0b', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '18px' }}>{tuteeSession.initials}</div>
               <div>
-                <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1c1917', marginBottom: '4px' }}>{tuteeSession.subject}: {tuteeSession.topic}</h3>
+                <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1c1917', marginBottom: '4px' }}>
+                {tuteeSession.subject || (Array.isArray(tuteeSession.subjects) ? tuteeSession.subjects[0] : null) || '—'}: {tuteeSession.topic || (Array.isArray(tuteeSession.topics) ? tuteeSession.topics[0] : null) || '—'}</h3>
                 <p style={{ fontSize: '14px', color: '#57534e', marginBottom: '8px' }}>with {tuteeSession.tutor}</p>
                 <div style={{ display: 'flex', gap: '16px', fontSize: '14px', color: '#57534e', flexWrap: 'wrap' }}>
                   <span>📅 {sched.date}</span>
