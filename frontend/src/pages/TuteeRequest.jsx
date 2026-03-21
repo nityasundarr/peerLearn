@@ -319,6 +319,11 @@ const RequestHelpFlow = () => {
     setCurrentStep(1);
   };
 
+  const handleGoToDashboardAfterWaitlist = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    navigate('/dashboard', { state: { refresh: true } });
+  };
+
   const handleFlowHeaderCancel = async () => {
     if (awaitingTutorAccept && requestId) {
       setLoading(true);
@@ -930,7 +935,7 @@ const RequestHelpFlow = () => {
           </p>
           <button
             type="button"
-            onClick={() => navigate('/dashboard')}
+            onClick={handleGoToDashboardAfterWaitlist}
             style={{ padding: '14px 32px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '16px' }}
           >
             Go to Dashboard
