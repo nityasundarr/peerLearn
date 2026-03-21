@@ -130,6 +130,7 @@ const learningTuteeBucket = (s) => {
   const st = normalizeSessionStatus(s);
   if (st === 'cancelled') return 'cancelled';
   if (st === 'pending_tutor_selection') return 'pending';
+  if (st === 'tutor_accepted') return 'upcoming';
   if (st === 'completed' || st === 'completed_attended' || st === 'completed_no_show') return 'past';
   return 'upcoming';
 };
@@ -594,7 +595,7 @@ const Dashboard = () => {
     COMPLETED: { label: 'Completed', color: '#6b7280', bg: '#f3f4f6' },
   };
 
-  const upcomingSessions = (summary?.upcoming_sessions || []).map(mapSessionToUi);
+  
   const incomingRequests = (summary?.incoming_requests || []).map(mapRequestToUi);
   const pendingActions = summary?.pending_actions || [];
 
@@ -619,11 +620,6 @@ const Dashboard = () => {
   const rolesLower = (Array.isArray(user?.roles) ? user.roles : []).map((r) => String(r).toLowerCase());
   const hasTutorRole = rolesLower.includes('tutor');
   const hasTuteeRole = rolesLower.length === 0 || rolesLower.includes('tutee') || rolesLower.includes('student');
-
-  const learningSessionActionCount = learningSessions.filter((s) => {
-    const st = normalizeSessionStatus(s);
-    return st === 'tutor_accepted' || st === 'pending_confirmation' || st === 'pending_confirm';
-  }).length;
 
   const tutoringPendingSelectionCount = mergedTutorIncoming.filter((s) => {
     const st = normalizeSessionStatus(s);
@@ -652,7 +648,14 @@ const Dashboard = () => {
     });
   }
 
-  const learningBadge = hasTuteeRole ? learningSessionActionCount + tuteeUnreadNotifCount : 0;
+  const learningBadge = hasTuteeRole
+    ? learningSessions.filter((s) =>
+      ['tutor_accepted', 'pending_confirmation', 'pending_tutor_selection'].includes(s.status),
+    ).length + notifications.filter((n) =>
+      (n.unread || n.is_read === false)
+      && (String(n.type || '').toLowerCase().includes('match')),
+    ).length
+    : 0;
   const tutoringBadge = hasTutorRole ? tutoringPendingSelectionCount + tutorUnreadNotifCount : 0;
 
   const currentUserIdForBadges = user?.id || user?.user_id;
@@ -1153,9 +1156,8 @@ const Dashboard = () => {
     const stats = summary?.stats || {};
     console.log('[HomeTab] openRequests:', openTuteeRequests);
     console.log('[HomeTab] learningSessions:', learningSessions.map((s) => s.status));
-    const pendingCount = learningSessions.filter((s) =>
-      s.status === 'pending_tutor_selection',
-    ).length + openTuteeRequests.length;
+    const pendingCount = openTuteeRequests.length
+      + learningSessions.filter((s) => s.status === 'pending_tutor_selection').length;
     const upcomingSessions = learningSessions.filter((s) =>
       ['confirmed', 'tutor_accepted', 'pending_confirmation'].includes(s.status),
     ).slice(0, 3);
@@ -1176,8 +1178,25 @@ const Dashboard = () => {
     );
     const tutorHasIncomingHome = hasTutorRole && mergedTutorIncoming.length > 0;
 
+    const hasPendingTutorSelectionSession = hasTuteeRole && learningSessions.some((s) => s.status === 'pending_tutor_selection');
+    const openReqIds = new Set(openTuteeRequests.map((r) => String(r.id ?? r.request_id ?? '')));
+    const hasMatchForOpenRequest = openTuteeRequests.length > 0 && learningSessions.some((s) => (
+      s.status === 'pending_tutor_selection' && openReqIds.has(String(s.request_id ?? ''))
+    ));
+
     const homePendingBlocks = [];
-    if (hasTuteeRole && openTuteeRequests.length > 0) {
+    if (hasTuteeRole && hasPendingTutorSelectionSession && (hasMatchForOpenRequest || openTuteeRequests.length === 0)) {
+      homePendingBlocks.push(
+        <div key="home-pa-tutor-matched" style={{ background: '#ecfdf5', border: '1px solid #86efac', borderRadius: '12px', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: '15px', fontWeight: '600', color: '#166534' }}>🎓 A matching tutor has been found for your request!</div>
+            <div style={{ fontSize: '13px', color: '#15803d', marginTop: '4px' }}>Review the tutor and confirm your session</div>
+          </div>
+          <button type="button" onClick={() => setActiveTab('learning')} onMouseEnter={() => setHovered('home-pa-view-match')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === 'home-pa-view-match' ? '#16a34a' : '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '14px', whiteSpace: 'nowrap' }}>View Match →</button>
+        </div>,
+      );
+    }
+    if (hasTuteeRole && openTuteeRequests.length > 0 && !hasPendingTutorSelectionSession) {
       homePendingBlocks.push(
         <div key="home-pa-open-tutee" style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '12px', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <div>
