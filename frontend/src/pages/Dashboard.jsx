@@ -880,7 +880,9 @@ const Dashboard = () => {
 
   useEffect(() => {
     learningSessions.forEach((sess) => {
-      if (normalizeSessionStatus(sess) === 'pending_confirmation' && sess.id && !pendingFeeFetchedRef.current.has(sess.id)) {
+      if (['pending_confirmation', 'confirmed'].includes(
+        normalizeSessionStatus(sess),
+      ) && sess.id && !pendingFeeFetchedRef.current.has(sess.id)) {
         pendingFeeFetchedRef.current.add(sess.id);
         fetchFeeAndStore(sess.id);
       }
@@ -1488,7 +1490,6 @@ const Dashboard = () => {
             <div style={{ textAlign: 'right' }}>
               <StatusBadge state={tuteeSession.state} />
               <div style={{ fontSize: '13px', fontWeight: '600', color: '#57534e', marginTop: '8px' }}>{learningTuteeStatusLabel(tuteeSession)}</div>
-              <div style={{ fontSize: '18px', fontWeight: '700', color: '#1a5f4a', marginTop: '4px' }}>{tuteeSession.fee}</div>
             </div>
           </div>
           {showProposeUi && (
@@ -1557,19 +1558,27 @@ const Dashboard = () => {
               </button>
             </div>
           )}
-          <div style={{ display: 'flex', gap: '12px', marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #e7e5e4', flexWrap: 'wrap', alignItems: 'center' }}>
-            <button onClick={() => { setSelectedSession(tuteeSession); setShowDetailPanel(true); }} style={{ padding: '10px 20px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>View Details</button>
-            <button onClick={() => navigate(`/session/${tuteeSession.id}/chat`)} style={{ padding: '10px 20px', background: '#fff', color: '#3b82f6', border: '1px solid #93c5fd', borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>💬 Message Tutor</button>
+          <div style={{ marginTop: '20px', borderTop: '1px solid #e7e5e4' }}>
             {tuteeSession.state === 'CONFIRMED' && (
-              <span style={{ color: '#16a34a', fontWeight: '700', fontSize: '15px' }}>
+              <div style={{
+                textAlign: 'center',
+                padding: '12px 0 0 0',
+                fontSize: '15px',
+                fontWeight: '700',
+                color: '#16a34a',
+              }}
+              >
                 ✓ Paid{' '}
                 {sessionFees[tuteeSession.id] != null
                   ? `$${Number(sessionFees[tuteeSession.id]).toFixed(2)}`
                   : tuteeSession.fee && tuteeSession.fee !== '—'
                     ? tuteeSession.fee
                     : ''}
-              </span>
+              </div>
             )}
+            <div style={{ display: 'flex', gap: '12px', paddingTop: tuteeSession.state === 'CONFIRMED' ? '12px' : '20px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <button onClick={() => { setSelectedSession(tuteeSession); setShowDetailPanel(true); }} style={{ padding: '10px 20px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>View Details</button>
+            <button onClick={() => navigate(`/session/${tuteeSession.id}/chat`)} style={{ padding: '10px 20px', background: '#fff', color: '#3b82f6', border: '1px solid #93c5fd', borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>💬 Message Tutor</button>
             {tuteeSession.state === 'CONFIRMED' && tuteeSession.scheduled_at && new Date() > new Date(tuteeSession.scheduled_at) && (
               <button
                 type="button"
@@ -1580,6 +1589,7 @@ const Dashboard = () => {
               </button>
             )}
             <button style={{ padding: '10px 20px', background: '#fff', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', marginLeft: 'auto' }}>Cancel</button>
+            </div>
           </div>
         </div>
         );
