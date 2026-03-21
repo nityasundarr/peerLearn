@@ -351,7 +351,10 @@ const OfferToTutorFlow = () => {
       }
       await api.put('/tutor-profile/availability', { slots: slotsToAvailability() });
       await api.patch('/tutor-profile/mode', { is_active_mode: tutorModeActive });
-      navigate('/dashboard');
+      // Force dashboard to refetch by clearing any cached state
+      // The dashboard will re-fetch on mount
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      navigate('/dashboard', { state: { refresh: true } });
     } catch (err) {
       const d = err.response?.data?.detail;
       let msg = err.message ?? 'Failed to save tutor profile';

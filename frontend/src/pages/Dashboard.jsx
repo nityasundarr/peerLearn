@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
 import api from '../services/api';
 import { useAuth } from '../services/AuthContext';
@@ -541,6 +541,7 @@ const Dashboard = () => {
   };
 
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
   const [learningFilterTab, setLearningFilterTab] = useState('upcoming');
@@ -782,6 +783,21 @@ const Dashboard = () => {
     };
     load();
     return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (location?.state?.refresh) {
+      // Clear the state so it doesn't trigger again
+      window.history.replaceState({}, '');
+      // Refetch everything
+      fetchSummary();
+      fetchBadges();
+      fetchLearningSessions();
+      fetchOpenTuteeRequests();
+      fetchTutoringSessions();
+      fetchTutorIncomingRequests();
+      fetchNotifications();
+    }
   }, []);
 
   useEffect(() => {
