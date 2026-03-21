@@ -133,8 +133,9 @@ const learningTuteeBucket = (s) => {
   const st = normalizeSessionStatus(s);
   if (st === 'cancelled') return 'cancelled';
   if (st === 'pending_tutor_selection') return 'pending';
-  if (st === 'tutor_accepted') return 'upcoming';
-  if (st === 'completed' || st === 'completed_attended' || st === 'completed_no_show') return 'past';
+  if (st === 'completed' || st === 'completed_attended'
+    || st === 'completed_no_show') return 'past';
+  // tutor_accepted, pending_confirmation, confirmed → upcoming
   return 'upcoming';
 };
 
@@ -555,6 +556,7 @@ const Dashboard = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
   const [learningFilterTab, setLearningFilterTab] = useState('upcoming');
+  const [tutoringFilterTab, setTutoringFilterTab] = useState('incoming');
   const [showDetailPanel, setShowDetailPanel] = useState(false);
   const [showMessaging, setShowMessaging] = useState(false);
   const [selectedSession, setSelectedSession] = useState(null);
@@ -657,7 +659,7 @@ const Dashboard = () => {
       ['tutor_accepted', 'pending_confirmation', 'pending_tutor_selection'].includes(s.status),
     ).length
     : 0;
-  const tutoringBadge = hasTutorRole ? tutoringPendingSelectionCount + tutorUnreadNotifCount : 0;
+  const tutoringBadge = hasTutorRole ? tutoringPendingSelectionCount : 0;
 
   const currentUserIdForBadges = user?.id || user?.user_id;
   const chatsUnreadFromOthers = chatMessages.filter(
@@ -1581,6 +1583,26 @@ const Dashboard = () => {
       return raw.map((s) => (typeof s === 'object' ? s : { date: s, hour_slot: s }));
     };
 
+    const tutoringTabKeys = [
+      { key: 'incoming', label: 'Incoming Requests' },
+      { key: 'upcoming', label: 'Upcoming' },
+      { key: 'past', label: 'Past' },
+      { key: 'cancelled', label: 'Cancelled' },
+    ];
+    const tutoringIncomingBadgeCount = mergedTutorIncoming.length;
+    const tutoringUpcomingBadgeCount = tutoringSessions.filter((s) =>
+      normalizeSessionStatus(s) === 'confirmed',
+    ).length;
+    const tutoringFilteredSessions = tutoringSessions.filter((s) => {
+      const st = normalizeSessionStatus(s);
+      if (tutoringFilterTab === 'upcoming') return st === 'confirmed';
+      if (tutoringFilterTab === 'past') {
+        return ['completed', 'completed_attended', 'completed_no_show'].includes(st);
+      }
+      if (tutoringFilterTab === 'cancelled') return st === 'cancelled';
+      return false;
+    });
+
     return (
     <div>
       {/* Tutor Stats */}
@@ -1593,21 +1615,61 @@ const Dashboard = () => {
         ))}
       </div>
 
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
-        {[{ label: 'Incoming Requests', badge: mergedTutorIncoming.length }, { label: 'Upcoming' }, { label: 'Past' }, { label: 'Cancelled' }].map((tab, i) => {
-          const sel = i === 0;
-          const h = hovered === `tutor-tab-${tab.label}`;
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
+        {tutoringTabKeys.map(({ key, label }) => {
+          const sel = tutoringFilterTab === key;
+          const h = hovered === `tutor-tab-${key}`;
           return (
-            <button key={tab.label} onMouseEnter={() => setHovered(`tutor-tab-${tab.label}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 20px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.15s ease' }}>
-              {tab.label}
-              {tab.badge > 0 && <span style={{ background: '#ef4444', color: '#fff', padding: '2px 8px', borderRadius: '10px', fontSize: '12px' }}>{tab.badge}</span>}
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTutoringFilterTab(key)}
+              onMouseEnter={() => setHovered(`tutor-tab-${key}`)}
+              onMouseLeave={() => setHovered(null)}
+              style={{
+                padding: '10px 20px',
+                background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'),
+                color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'),
+                border: `1px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`,
+                borderRadius: '8px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              {label}
+              {key === 'incoming' && tutoringIncomingBadgeCount > 0 && (
+                <span style={{
+                  background: '#ef4444',
+                  color: '#fff',
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  marginLeft: '6px',
+                }}>{tutoringIncomingBadgeCount}</span>
+              )}
+              {key === 'upcoming' && tutoringUpcomingBadgeCount > 0 && (
+                <span style={{
+                  background: '#ef4444',
+                  color: '#fff',
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  marginLeft: '6px',
+                }}>{tutoringUpcomingBadgeCount}</span>
+              )}
             </button>
           );
         })}
       </div>
 
       {/* Incoming Requests with Accept/Decline/Message (SRS 2.12.6.3) */}
-      {mergedTutorIncoming.length === 0 ? (
+      {tutoringFilterTab === 'incoming' && (mergedTutorIncoming.length === 0 ? (
         <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', padding: '48px 24px', textAlign: 'center', color: '#57534e' }}>
           No incoming requests at this time
         </div>
@@ -1683,6 +1745,41 @@ const Dashboard = () => {
           })()}
         </div>
         ))
+      ))}
+      {tutoringFilterTab !== 'incoming' && (
+        tutoringFilteredSessions.length === 0 ? (
+          <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', padding: '48px 24px', textAlign: 'center', color: '#57534e' }}>
+            No sessions in this section.
+          </div>
+        ) : (
+          tutoringFilteredSessions.map((sess) => {
+            const sid = sess.session_id || sess.id;
+            const sched = learningScheduleDisplay(sess);
+            const venueLine = venueDisplayForLearning(sess);
+            return (
+              <div key={sid} style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', padding: '24px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ display: 'flex', gap: '16px' }}>
+                    <div style={{ width: '56px', height: '56px', background: '#f59e0b', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '18px' }}>{sess.initials}</div>
+                    <div>
+                      <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1c1917', marginBottom: '4px' }}>{sess.subject}: {sess.topic}</h3>
+                      <p style={{ fontSize: '14px', color: '#57534e', marginBottom: '8px' }}>{sess.tutee || 'Student'}</p>
+                      <div style={{ display: 'flex', gap: '16px', fontSize: '14px', color: '#57534e', flexWrap: 'wrap' }}>
+                        <span>📅 {sched.date}</span>
+                        {sched.time ? <span>🕐 {sched.time}</span> : null}
+                        <span>📍 {venueLine}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <StatusBadge state={sess.state} />
+                    <button type="button" onClick={() => navigate(`/session/${sid}/chat`)} style={{ marginTop: '12px', padding: '10px 16px', background: '#fff', color: '#3b82f6', border: '1px solid #93c5fd', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '14px' }}>💬 Message</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )
       )}
     </div>
     );
