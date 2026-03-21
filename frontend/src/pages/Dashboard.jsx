@@ -1097,12 +1097,15 @@ const Dashboard = () => {
   };
 
   const getNotificationActionLabel = (notif) => {
-    const t = String(notif?.type || notif?.notification_type || '').toLowerCase();
-    if (t === 'slot_proposed') return 'Confirm your slot →';
-    if (t === 'session_accepted') return 'View session →';
-    if (t === 'payment_received') return 'View session →';
-    if (t === 'new_message') return 'View chat →';
+    const t = String(notif?.type || '').toLowerCase();
+    if (t === 'tutor_matched' || t === 'match') return 'View in Pending →';
+    if (t === 'slot_proposed' || t.includes('slot') || t.includes('proposed'))
+      return 'Confirm your slot →';
+    if (t === 'session_accepted' || t === 'tutor_accepted' || t.includes('accepted'))
+      return 'View session →';
     if (t === 'request_matched') return 'View in My Tutoring →';
+    if (t === 'payment_received' || t.includes('payment')) return 'View session →';
+    if (t === 'new_message' || t.includes('message')) return 'View chat →';
     return 'View →';
   };
 
@@ -1121,25 +1124,32 @@ const Dashboard = () => {
       )));
       fetchBadges();
     }
-    const type = String(notif?.type || notif?.notification_type || '').toLowerCase();
+    const type = String(notif?.type || '').toLowerCase();
     const sessionId = notif?.session_id || notif?.data?.session_id;
 
-    if (type.includes('message') || type.includes('chat')) {
+    if (type === 'new_message' || type.includes('message')) {
       setActiveTab('chats');
       if (sessionId) setSelectedChatSessionId(sessionId);
-    } else if (type.includes('slot') || type.includes('proposed')
-      || type.includes('confirm')) {
+    } else if (type === 'tutor_matched' || type === 'match') {
       setActiveTab('learning');
-    } else if (type.includes('accept') || type.includes('tutor')) {
+      setLearningFilterTab('pending');
+    } else if (type === 'slot_proposed' || type.includes('slot')
+      || type.includes('proposed')) {
       setActiveTab('learning');
-    } else if (type.includes('request') || type.includes('incoming')) {
+      setLearningFilterTab('upcoming');
+    } else if (type === 'session_accepted' || type === 'tutor_accepted'
+      || type.includes('accepted')) {
+      setActiveTab('learning');
+      setLearningFilterTab('upcoming');
+    } else if (type === 'payment_received' || type.includes('payment')) {
+      setActiveTab('learning');
+      setLearningFilterTab('upcoming');
+    } else if (type === 'request_matched' || type.includes('incoming')) {
       setActiveTab('tutoring');
-    } else if (type.includes('payment') || type.includes('paid')) {
-      setActiveTab('learning');
     } else if (type.includes('complaint') || type.includes('appeal')) {
-      // stay on notifications
+      // stay on notifications tab, do nothing
     } else {
-      setActiveTab('home');
+      setActiveTab('learning');
     }
   };
 
@@ -1705,7 +1715,6 @@ const Dashboard = () => {
             }}
             >
               <span style={{ fontSize: '13px', fontWeight: '600', color: '#1a5f4a', whiteSpace: 'nowrap' }}>{getNotificationActionLabel(notif)}</span>
-              <span style={{ fontSize: '18px', color: '#1a5f4a', lineHeight: 1 }}>→</span>
             </div>
           </div>
         );
