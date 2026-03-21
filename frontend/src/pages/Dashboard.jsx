@@ -1215,28 +1215,57 @@ const Dashboard = () => {
     ));
 
     const homePendingBlocks = [];
-    if (hasTuteeRole && hasPendingTutorSelectionSession && (hasMatchForOpenRequest || openTuteeRequests.length === 0)) {
+
+    const pendingTutorSelectionCount = learningSessions.filter(
+      (s) => (s.status || s.state || '')
+        .toLowerCase()
+        .replace(/\s/g, '_') === 'pending_tutor_selection'
+    ).length;
+
+    const openRequestCount = pendingTutorSelectionCount + openTuteeRequests.length;
+    if (hasTuteeRole && openRequestCount > 0) {
       homePendingBlocks.push(
-        <div key="home-pa-tutor-matched" style={{ background: '#ecfdf5', border: '1px solid #86efac', borderRadius: '12px', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div
+          key="home-pa-open-combined"
+          style={{
+            background: '#fffbeb',
+            border: '1px solid #fde68a',
+            borderRadius: '12px',
+            padding: '16px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '12px',
+            flexWrap: 'wrap',
+          }}
+        >
           <div>
-            <div style={{ fontSize: '15px', fontWeight: '600', color: '#166534' }}>🎓 A matching tutor has been found for your request!</div>
-            <div style={{ fontSize: '13px', color: '#15803d', marginTop: '4px' }}>Review the tutor and confirm your session</div>
+            <div style={{ fontSize: '15px', fontWeight: '600', color: '#92400e' }}
+            >
+              📬  {openRequestCount} request(s) waiting for a tutor
+            </div>
+            <div style={{ fontSize: '13px', color: '#a16207', marginTop: '4px' }}>
+              Your request is open — we'll notify you when a tutor accepts
+            </div>
           </div>
-          <button type="button" onClick={() => { setActiveTab('learning'); setLearningFilterTab('pending'); }} onMouseEnter={() => setHovered('home-pa-view-match')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === 'home-pa-view-match' ? '#16a34a' : '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '14px', whiteSpace: 'nowrap' }}>View Match →</button>
-        </div>,
-      );
-    }
-    if (hasTuteeRole && openTuteeRequests.length > 0 && !hasPendingTutorSelectionSession) {
-      homePendingBlocks.push(
-        <div key="home-pa-open-tutee" style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '12px', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ fontSize: '15px', fontWeight: '600', color: '#92400e' }}>📬 {openTuteeRequests.length} request(s) waiting for a tutor</div>
-            <div style={{ fontSize: '13px', color: '#a16207', marginTop: '4px' }}>Your request is open — we&apos;ll notify you when a tutor accepts</div>
+          <button type="button" onClick={() => { setActiveTab('learning'); setLearningFilterTab('pending'); }} onMouseEnter={() => setHovered('home-pa-open-combined')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === 'home-pa-open-combined' ? '#f59e0b' : '#fbbf24', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '14px', whiteSpace: 'nowrap' }}>View in Pending →</button>
+
           </div>
-          <button type="button" onClick={() => setActiveTab('learning')} onMouseEnter={() => setHovered('home-pa-open-learn')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === 'home-pa-open-learn' ? '#f59e0b' : '#fbbf24', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '14px', whiteSpace: 'nowrap' }}>View in My Learning →</button>
-        </div>,
-      );
-    }
+      )
+    };
+
+
+
+    
+
+
+
+
+
+
+
+
+
     if (tuteeNeedsSlotConfirm) {
       homePendingBlocks.push(
         <div key="home-pa-slots" style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '12px', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
