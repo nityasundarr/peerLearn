@@ -1171,11 +1171,22 @@ const Dashboard = () => {
     console.log('[HomeTab] learningSessions:', learningSessions.map((s) => s.status));
     const pendingCount = openTuteeRequests.length
       + learningSessions.filter((s) => s.status === 'pending_tutor_selection').length;
-    const upcomingSessions = learningSessions.filter((s) =>
+    const tuteeUpcoming = learningSessions.filter((s) =>
       ['confirmed', 'tutor_accepted', 'pending_confirmation'].includes(s.status),
-    ).slice(0, 3);
+    );
+    const tutorUpcoming = tutoringSessions.filter((s) =>
+      s.status === 'confirmed',
+    );
+    const seenUpcomingIds = new Set();
+    const upcomingSessionsMerged = [...tuteeUpcoming, ...tutorUpcoming].filter((s) => {
+      const id = s.id || s.session_id;
+      if (!id || seenUpcomingIds.has(id)) return false;
+      seenUpcomingIds.add(id);
+      return true;
+    });
+    const upcomingSessions = upcomingSessionsMerged.slice(0, 3);
     const statItems = [
-      { label: 'Upcoming', value: String(stats.upcoming ?? (summary?.upcoming_sessions || []).length ?? 0), icon: '📅' },
+      { label: 'Upcoming', value: String(upcomingSessionsMerged.length), icon: '📅' },
       { label: 'Pending', value: String(pendingCount), icon: '⏳' },
       { label: 'Hours Learned', value: String(stats.hours_learned ?? 0), icon: '📚' },
       { label: 'Hours Taught', value: String(stats.hours_taught ?? 0), icon: '🎓' },
@@ -1554,7 +1565,9 @@ const Dashboard = () => {
                 ✓ Paid{' '}
                 {sessionFees[tuteeSession.id] != null
                   ? `$${Number(sessionFees[tuteeSession.id]).toFixed(2)}`
-                  : (tuteeSession.fee && tuteeSession.fee !== '—' ? tuteeSession.fee : '—')}
+                  : tuteeSession.fee && tuteeSession.fee !== '—'
+                    ? tuteeSession.fee
+                    : ''}
               </span>
             )}
             {tuteeSession.state === 'CONFIRMED' && tuteeSession.scheduled_at && new Date() > new Date(tuteeSession.scheduled_at) && (
