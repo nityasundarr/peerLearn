@@ -1395,6 +1395,18 @@ const Dashboard = () => {
       { key: 'cancelled', label: 'Cancelled' },
     ];
     const filteredLearningSessions = learningSessions.filter((s) => learningTuteeBucket(s) === learningFilterTab);
+    const pendingTabCount = learningSessions.filter((s) =>
+      learningTuteeBucket(s) === 'pending',
+    ).length;
+    const upcomingActionCount = learningSessions.filter((s) => {
+      const st = normalizeSessionStatus(s);
+      return (
+        (st === 'tutor_accepted'
+          && Array.isArray(s.proposed_slots)
+          && s.proposed_slots.length > 0)
+        || st === 'pending_confirmation'
+      );
+    }).length;
     return (
     <div>
       <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
@@ -1402,7 +1414,31 @@ const Dashboard = () => {
           const sel = learningFilterTab === key;
           const h = hovered === `learn-tab-${key}`;
           return (
-            <button key={key} type="button" onClick={() => setLearningFilterTab(key)} onMouseEnter={() => setHovered(`learn-tab-${key}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 20px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.15s ease' }}>{label}</button>
+            <button key={key} type="button" onClick={() => setLearningFilterTab(key)} onMouseEnter={() => setHovered(`learn-tab-${key}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 20px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.15s ease' }}>
+              {label}
+              {key === 'pending' && pendingTabCount > 0 && (
+                <span style={{
+                  background: '#ef4444',
+                  color: '#fff',
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  marginLeft: '6px',
+                }}>{pendingTabCount}</span>
+              )}
+              {key === 'upcoming' && upcomingActionCount > 0 && (
+                <span style={{
+                  background: '#ef4444',
+                  color: '#fff',
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  marginLeft: '6px',
+                }}>{upcomingActionCount}</span>
+              )}
+            </button>
           );
         })}
       </div>
