@@ -1472,7 +1472,27 @@ const Dashboard = () => {
         const showProposeUi = st === 'tutor_accepted' && proposed.length > 0;
         const pick = tuteeSlotPick[tuteeSession.id];
         return (
-        <div key={tuteeSession.id} style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', padding: '24px', marginBottom: '16px' }}>
+        <div
+          key={tuteeSession.id}
+          onMouseEnter={() => setHovered(`learn-card-${tuteeSession.id}`)}
+          onMouseLeave={() => setHovered(null)}
+          style={{
+            background: hovered === `learn-card-${tuteeSession.id}`
+              ? '#f9fafb' : '#fff',
+            borderRadius: '16px',
+            border: `1px solid ${hovered === `learn-card-${tuteeSession.id}`
+              ? '#1a5f4a' : '#e7e5e4'}`,
+            padding: '24px',
+            marginBottom: '16px',
+            boxShadow: hovered === `learn-card-${tuteeSession.id}`
+              ? '0 4px 16px rgba(0,0,0,0.10)'
+              : '0 1px 4px rgba(0,0,0,0.04)',
+            transform: hovered === `learn-card-${tuteeSession.id}`
+              ? 'translateY(-2px)' : 'none',
+            transition: 'all 0.2s ease',
+            cursor: 'default',
+          }}
+        >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div style={{ display: 'flex', gap: '16px' }}>
               <div style={{ width: '56px', height: '56px', background: '#f59e0b', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '18px' }}>{tuteeSession.initials}</div>
@@ -1552,7 +1572,19 @@ const Dashboard = () => {
               <button
                 type="button"
                 onClick={() => openPaymentModal(tuteeSession)}
-                style={{ padding: '10px 20px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '14px' }}
+                onMouseEnter={() => setHovered(`learn-pay-${tuteeSession.id}`)}
+                onMouseLeave={() => setHovered(null)}
+                style={{
+                  padding: '10px 20px',
+                  background: hovered === `learn-pay-${tuteeSession.id}` ? '#16a34a' : '#22c55e',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  transition: 'all 0.2s ease',
+                }}
               >
                 💳 Pay Now
               </button>
@@ -1577,18 +1609,80 @@ const Dashboard = () => {
               </div>
             )}
             <div style={{ display: 'flex', gap: '12px', paddingTop: tuteeSession.state === 'CONFIRMED' ? '12px' : '20px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <button onClick={() => { setSelectedSession(tuteeSession); setShowDetailPanel(true); }} style={{ padding: '10px 20px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>View Details</button>
-            <button onClick={() => navigate(`/session/${tuteeSession.id}/chat`)} style={{ padding: '10px 20px', background: '#fff', color: '#3b82f6', border: '1px solid #93c5fd', borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>💬 Message Tutor</button>
+            <button
+              type="button"
+              onClick={() => { setSelectedSession(tuteeSession); setShowDetailPanel(true); }}
+              onMouseEnter={() => setHovered(`learn-view-${tuteeSession.id}`)}
+              onMouseLeave={() => setHovered(null)}
+              style={{
+                padding: '10px 20px',
+                background: hovered === `learn-view-${tuteeSession.id}` ? '#145040' : '#1a5f4a',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              View Details
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate(`/session/${tuteeSession.id}/chat`)}
+              onMouseEnter={() => setHovered(`learn-msg-${tuteeSession.id}`)}
+              onMouseLeave={() => setHovered(null)}
+              style={{
+                padding: '10px 20px',
+                background: hovered === `learn-msg-${tuteeSession.id}` ? '#eff6ff' : '#fff',
+                color: '#3b82f6',
+                border: `1px solid ${hovered === `learn-msg-${tuteeSession.id}` ? '#3b82f6' : '#93c5fd'}`,
+                borderRadius: '8px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              💬 Message Tutor
+            </button>
             {tuteeSession.state === 'CONFIRMED' && tuteeSession.scheduled_at && new Date() > new Date(tuteeSession.scheduled_at) && (
               <button
                 type="button"
                 onClick={() => navigate(`/feedback/${tuteeSession.id}`)}
-                style={{ padding: '10px 20px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}
+                onMouseEnter={() => setHovered(`learn-fb-${tuteeSession.id}`)}
+                onMouseLeave={() => setHovered(null)}
+                style={{
+                  padding: '10px 20px',
+                  background: hovered === `learn-fb-${tuteeSession.id}` ? '#d97706' : '#f59e0b',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
               >
                 ⭐ Leave Feedback
               </button>
             )}
-            <button style={{ padding: '10px 20px', background: '#fff', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', marginLeft: 'auto' }}>Cancel</button>
+            <button
+              type="button"
+              onMouseEnter={() => setHovered(`learn-cancel-${tuteeSession.id}`)}
+              onMouseLeave={() => setHovered(null)}
+              style={{
+                padding: '10px 20px',
+                background: hovered === `learn-cancel-${tuteeSession.id}` ? '#fef2f2' : '#fff',
+                color: '#ef4444',
+                border: `1px solid ${hovered === `learn-cancel-${tuteeSession.id}` ? '#ef4444' : '#fecaca'}`,
+                borderRadius: '8px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                marginLeft: 'auto',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              Cancel
+            </button>
             </div>
           </div>
         </div>
@@ -1697,8 +1791,25 @@ const Dashboard = () => {
           No incoming requests at this time
         </div>
       ) : (
-        mergedTutorIncoming.map((req) => (
-        <div key={req.session_id || req.id} style={{ background: '#fff', borderRadius: '16px', border: '2px solid #f59e0b', padding: '24px', marginBottom: '16px' }}>
+        mergedTutorIncoming.map((req) => {
+          const incomingCardId = req.session_id || req.id;
+          return (
+        <div
+          key={incomingCardId}
+          onMouseEnter={() => setHovered(`tutor-card-${incomingCardId}`)}
+          onMouseLeave={() => setHovered(null)}
+          style={{
+            background: hovered === `tutor-card-${incomingCardId}` ? '#f9fafb' : '#fff',
+            borderRadius: '16px',
+            border: hovered === `tutor-card-${incomingCardId}` ? '1px solid #1a5f4a' : '2px solid #f59e0b',
+            padding: '24px',
+            marginBottom: '16px',
+            boxShadow: hovered === `tutor-card-${incomingCardId}`
+              ? '0 4px 16px rgba(0,0,0,0.10)' : '0 1px 4px rgba(0,0,0,0.04)',
+            transform: hovered === `tutor-card-${incomingCardId}` ? 'translateY(-2px)' : 'none',
+            transition: 'all 0.2s ease',
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '16px' }}>
             <div style={{ display: 'flex', gap: '16px' }}>
               <div style={{ width: '56px', height: '56px', background: '#f59e0b', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '18px' }}>{req.initials}</div>
@@ -1767,7 +1878,8 @@ const Dashboard = () => {
             );
           })()}
         </div>
-        ))
+          );
+        })
       ))}
       {tutoringFilterTab !== 'incoming' && (
         tutoringFilteredSessions.length === 0 ? (
@@ -1779,8 +1891,24 @@ const Dashboard = () => {
             const sid = sess.session_id || sess.id;
             const sched = learningScheduleDisplay(sess);
             const venueLine = venueDisplayForLearning(sess);
+            const cardHoverId = sess.id || sid;
             return (
-              <div key={sid} style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', padding: '24px', marginBottom: '16px' }}>
+              <div
+                key={sid}
+                onMouseEnter={() => setHovered(`tutor-card-${cardHoverId}`)}
+                onMouseLeave={() => setHovered(null)}
+                style={{
+                  background: hovered === `tutor-card-${cardHoverId}` ? '#f9fafb' : '#fff',
+                  borderRadius: '16px',
+                  border: hovered === `tutor-card-${cardHoverId}` ? '1px solid #1a5f4a' : '1px solid #e7e5e4',
+                  padding: '24px',
+                  marginBottom: '16px',
+                  boxShadow: hovered === `tutor-card-${cardHoverId}`
+                    ? '0 4px 16px rgba(0,0,0,0.10)' : '0 1px 4px rgba(0,0,0,0.04)',
+                  transform: hovered === `tutor-card-${cardHoverId}` ? 'translateY(-2px)' : 'none',
+                  transition: 'all 0.2s ease',
+                }}
+              >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div style={{ display: 'flex', gap: '16px' }}>
                     <div style={{ width: '56px', height: '56px', background: '#f59e0b', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '18px' }}>{sess.initials}</div>
@@ -1796,7 +1924,26 @@ const Dashboard = () => {
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <StatusBadge state={sess.state} />
-                    <button type="button" onClick={() => navigate(`/session/${sid}/chat`)} style={{ marginTop: '12px', padding: '10px 16px', background: '#fff', color: '#3b82f6', border: '1px solid #93c5fd', borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '14px' }}>💬 Message</button>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/session/${sid}/chat`)}
+                      onMouseEnter={() => setHovered(`tutor-msg-card-${cardHoverId}`)}
+                      onMouseLeave={() => setHovered(null)}
+                      style={{
+                        marginTop: '12px',
+                        padding: '10px 16px',
+                        background: hovered === `tutor-msg-card-${cardHoverId}` ? '#eff6ff' : '#fff',
+                        color: '#3b82f6',
+                        border: `1px solid ${hovered === `tutor-msg-card-${cardHoverId}` ? '#3b82f6' : '#93c5fd'}`,
+                        borderRadius: '8px',
+                        fontWeight: '500',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      💬 Message
+                    </button>
                   </div>
                 </div>
               </div>
@@ -2109,7 +2256,21 @@ return (
                   type="button"
                   disabled={paymentLoading}
                   onClick={() => !paymentLoading && closePaymentModal()}
-                  style={{ position: 'absolute', top: '16px', right: '16px', background: '#f5f5f4', border: 'none', width: '36px', height: '36px', borderRadius: '8px', cursor: paymentLoading ? 'not-allowed' : 'pointer', fontSize: '16px' }}
+                  onMouseEnter={() => setHovered('modal-close')}
+                  onMouseLeave={() => setHovered(null)}
+                  style={{
+                    position: 'absolute',
+                    top: '16px',
+                    right: '16px',
+                    background: hovered === 'modal-close' ? '#e7e5e4' : '#f5f5f4',
+                    border: 'none',
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    cursor: paymentLoading ? 'not-allowed' : 'pointer',
+                    fontSize: '16px',
+                    transition: 'all 0.15s ease',
+                  }}
                 >
                   ✕
                 </button>
@@ -2127,7 +2288,18 @@ return (
                   <button
                     type="button"
                     onClick={() => setPaymentError(null)}
-                    style={{ padding: '12px 24px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer' }}
+                    onMouseEnter={() => setHovered('pay-retry')}
+                    onMouseLeave={() => setHovered(null)}
+                    style={{
+                      padding: '12px 24px',
+                      background: hovered === 'pay-retry' ? '#145040' : '#1a5f4a',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '10px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                    }}
                   >
                     Try Again
                   </button>
@@ -2153,6 +2325,8 @@ return (
                         key={t.id}
                         type="button"
                         onClick={() => setPaymentTab(t.id)}
+                        onMouseEnter={() => setHovered(`pay-tab-${t.id}`)}
+                        onMouseLeave={() => setHovered(null)}
                         style={{
                           flex: 1,
                           padding: '8px 6px',
@@ -2161,8 +2335,9 @@ return (
                           border: 'none',
                           borderRadius: '8px',
                           cursor: 'pointer',
-                          background: paymentTab === t.id ? '#1a5f4a' : '#f5f5f4',
+                          background: paymentTab === t.id ? '#1a5f4a' : hovered === `pay-tab-${t.id}` ? '#e7e5e4' : '#f5f5f4',
                           color: paymentTab === t.id ? '#fff' : '#57534e',
+                          transition: 'all 0.15s ease',
                         }}
                       >
                         {t.label}
@@ -2179,7 +2354,9 @@ return (
                         type="button"
                         disabled={paymentLoading}
                         onClick={handlePaymentModalConfirm}
-                        style={{ width: '100%', padding: '14px', background: paymentLoading ? '#86efac' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: paymentLoading ? 'wait' : 'pointer' }}
+                        onMouseEnter={() => setHovered('pay-paynow-btn')}
+                        onMouseLeave={() => setHovered(null)}
+                        style={{ width: '100%', padding: '14px', background: paymentLoading ? '#86efac' : hovered === 'pay-paynow-btn' ? '#16a34a' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: paymentLoading ? 'wait' : 'pointer', transition: 'all 0.2s ease' }}
                       >
                         {paymentLoading ? '⏳ Processing...' : '✓ I have completed payment'}
                       </button>
@@ -2198,7 +2375,19 @@ return (
                         type="button"
                         disabled={paymentLoading}
                         onClick={handlePaymentModalConfirm}
-                        style={{ width: '100%', padding: '14px', background: paymentLoading ? '#86efac' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: paymentLoading ? 'wait' : 'pointer' }}
+                        onMouseEnter={() => setHovered('pay-card-btn')}
+                        onMouseLeave={() => setHovered(null)}
+                        style={{
+                          width: '100%',
+                          padding: '14px',
+                          background: paymentLoading ? '#86efac' : hovered === 'pay-card-btn' ? '#16a34a' : '#22c55e',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '10px',
+                          fontWeight: '700',
+                          cursor: paymentLoading ? 'wait' : 'pointer',
+                          transition: 'all 0.2s ease',
+                        }}
                       >
                         {paymentLoading ? '⏳ Processing...' : `Pay ${modalFeeStr}`}
                       </button>
@@ -2214,7 +2403,19 @@ return (
                         type="button"
                         disabled={paymentLoading}
                         onClick={handlePaymentModalConfirm}
-                        style={{ width: '100%', padding: '14px', background: paymentLoading ? '#86efac' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: paymentLoading ? 'wait' : 'pointer' }}
+                        onMouseEnter={() => setHovered('pay-bank-btn')}
+                        onMouseLeave={() => setHovered(null)}
+                        style={{
+                          width: '100%',
+                          padding: '14px',
+                          background: paymentLoading ? '#86efac' : hovered === 'pay-bank-btn' ? '#16a34a' : '#22c55e',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '10px',
+                          fontWeight: '700',
+                          cursor: paymentLoading ? 'wait' : 'pointer',
+                          transition: 'all 0.2s ease',
+                        }}
                       >
                         {paymentLoading ? 'Processing...' : '✓ I have transferred the payment'}
                       </button>
