@@ -1,14 +1,139 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../services/AuthContext';
+import api from '../services/api';
 
 // ============================================================
 // SECTION 1: LANDING PAGE WITH LOGIN/SIGNUP MODALS
 // Updated to match SRS requirements
 // ============================================================
 
+const PREFERRED_LANGUAGE_MAP = { en: 'English', zh: 'Chinese', ms: 'Malay', ta: 'Tamil' };
+
 const LandingPage = () => {
+  const navigate = useNavigate();
+  const { signIn, signUp, resetPassword } = useAuth();
   const [showModal, setShowModal] = useState(null); // 'login' | 'signup' | 'verify' | null
+  const [hovered, setHovered] = useState(null);
   const [showOtherPlanningArea, setShowOtherPlanningArea] = useState(false);
   const [showOtherSchool, setShowOtherSchool] = useState(false);
+
+  // Login form state
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState(null);
+  const [loginLoading, setLoginLoading] = useState(false);
+
+  // Signup form state
+  const [signupFullName, setSignupFullName] = useState('');
+  const [signupEmail, setSignupEmail] = useState('');
+  const [signupPassword, setSignupPassword] = useState('');
+  const [signupPreferredLanguage, setSignupPreferredLanguage] = useState('en');
+  const [signupError, setSignupError] = useState(null);
+  const [signupLoading, setSignupLoading] = useState(false);
+
+  // Verify modal: email used for resend
+  const [verifyEmail, setVerifyEmail] = useState('');
+  const [resendError, setResendError] = useState(null);
+  const [resendSuccess, setResendSuccess] = useState(false);
+
+  // Forgot password state
+  const [forgotError, setForgotError] = useState(null);
+  const [forgotSuccess, setForgotSuccess] = useState(false);
+
+  const handleLoginSubmit = async (e) => {
+    e.preventDefault();
+    setLoginError(null);
+    setLoginLoading(true);
+    const { data, error } = await signIn(loginEmail.trim(), loginPassword);
+    setLoginLoading(false);
+    if (error) {
+      const msg = (error.message || '').toLowerCase();
+      if (msg.includes('lock')) {
+        setLoginError('locked');
+      } else if (msg.includes('verif') || msg.includes('unverified')) {
+        setLoginError('unverified');
+      } else if (msg.includes('domain') || msg.includes('edu.sg')) {
+        setLoginError('invalid_domain');
+      } else {
+        setLoginError(msg || 'Login failed');
+      }
+      return;
+    }
+    if (data?.user) {
+      setShowModal(null);
+      navigate('/dashboard');
+    }
+  };
+
+  const handleSignupSubmit = async (e) => {
+    e.preventDefault();
+    setSignupError(null);
+    setSignupLoading(true);
+    const preferredLang = (signupPreferredLanguage && PREFERRED_LANGUAGE_MAP[signupPreferredLanguage]) || 'English';
+    const { data, error } = await signUp(signupEmail.trim(), signupPassword, {
+      full_name: signupFullName.trim(),
+      preferred_language: preferredLang,
+    });
+    setSignupLoading(false);
+    if (error) {
+      const msg = (error.message || '').toLowerCase();
+      if (msg.includes('domain') || msg.includes('edu.sg')) {
+        setSignupError('invalid_domain');
+      } else {
+        setSignupError(error.message || 'Registration failed');
+      }
+      return;
+    }
+    if (data) {
+      setVerifyEmail(signupEmail.trim());
+      setResendError(null);
+      setResendSuccess(false);
+      setShowModal('verify');
+    }
+  };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setForgotError(null);
+    setForgotSuccess(false);
+    const email = loginEmail.trim();
+    if (!email) {
+      setForgotError('Please enter your email address first.');
+      return;
+    }
+    const { error } = await resetPassword(email);
+    if (error) {
+      const msg = (error.message || '').toLowerCase();
+      if (msg.includes('domain') || msg.includes('edu.sg')) {
+        setForgotError('invalid_domain');
+      } else {
+        setForgotError(error.message || 'Request failed');
+      }
+      return;
+    }
+    setForgotSuccess(true);
+  };
+
+  const handleResendVerification = async (e) => {
+    e.preventDefault();
+    setResendError(null);
+    setResendSuccess(false);
+    if (!verifyEmail) return;
+    try {
+      await api.post('/auth/resend-verification', { email: verifyEmail });
+      setResendSuccess(true);
+    } catch (err) {
+      const d = err.response?.data?.detail;
+      const msg = Array.isArray(d) ? d.map((e) => e.msg ?? e).join(', ') : (d ?? err.message ?? 'Request failed');
+      const lower = (msg || '').toLowerCase();
+      if (lower.includes('domain') || lower.includes('edu.sg')) {
+        setResendError('invalid_domain');
+      } else {
+        setResendError(msg);
+      }
+    }
+  };
 
   return (
     <div style={{
@@ -52,8 +177,10 @@ const LandingPage = () => {
         <div style={{ display: 'flex', gap: '12px' }}>
           <button
             onClick={() => setShowModal('login')}
+            onMouseEnter={() => setHovered('nav-login')}
+            onMouseLeave={() => setHovered(null)}
             style={{
-              background: 'transparent',
+              background: hovered === 'nav-login' ? 'rgba(255,255,255,0.1)' : 'transparent',
               border: '2px solid rgba(255,255,255,0.4)',
               color: '#fff',
               padding: '10px 24px',
@@ -61,12 +188,15 @@ const LandingPage = () => {
               fontSize: '15px',
               fontWeight: '500',
               cursor: 'pointer',
+              transition: 'all 0.15s ease',
             }}
           >Log In</button>
           <button
             onClick={() => setShowModal('signup')}
+            onMouseEnter={() => setHovered('nav-signup')}
+            onMouseLeave={() => setHovered(null)}
             style={{
-              background: '#f59e0b',
+              background: hovered === 'nav-signup' ? '#fbbf24' : '#f59e0b',
               border: 'none',
               color: '#fff',
               padding: '10px 24px',
@@ -74,6 +204,7 @@ const LandingPage = () => {
               fontSize: '15px',
               fontWeight: '600',
               cursor: 'pointer',
+              transition: 'all 0.2s ease',
             }}
           >Sign Up Free</button>
         </div>
@@ -111,8 +242,8 @@ const LandingPage = () => {
         </p>
         
         <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
-          <button style={{
-            background: '#f59e0b',
+          <button onMouseEnter={() => setHovered('hero-find')} onMouseLeave={() => setHovered(null)} style={{
+            background: hovered === 'hero-find' ? '#fbbf24' : '#f59e0b',
             border: 'none',
             color: '#fff',
             padding: '16px 32px',
@@ -123,9 +254,10 @@ const LandingPage = () => {
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
+            transition: 'all 0.2s ease',
           }}>🎓 Find a Tutor</button>
-          <button style={{
-            background: 'rgba(255,255,255,0.15)',
+          <button onMouseEnter={() => setHovered('hero-tutor')} onMouseLeave={() => setHovered(null)} style={{
+            background: hovered === 'hero-tutor' ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.15)',
             border: '2px solid rgba(255,255,255,0.4)',
             color: '#fff',
             padding: '16px 32px',
@@ -136,6 +268,7 @@ const LandingPage = () => {
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
+            transition: 'all 0.15s ease',
           }}>💡 Start Tutoring</button>
         </div>
       </section>
@@ -290,17 +423,20 @@ const LandingPage = () => {
             {/* Close Button */}
             <button
               onClick={() => setShowModal(null)}
+              onMouseEnter={() => setHovered('login-close')}
+              onMouseLeave={() => setHovered(null)}
               style={{
                 position: 'absolute',
                 top: '16px',
                 right: '16px',
-                background: '#f5f5f4',
+                background: hovered === 'login-close' ? '#e7e5e4' : '#f5f5f4',
                 border: 'none',
                 width: '32px',
                 height: '32px',
                 borderRadius: '8px',
                 cursor: 'pointer',
                 fontSize: '16px',
+                transition: 'all 0.15s ease',
               }}
             >✕</button>
 
@@ -316,88 +452,195 @@ const LandingPage = () => {
               fontSize: '15px',
             }}>Log in to continue learning and teaching</p>
 
-            {/* Email/Username Field */}
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{
-                display: 'block',
-                fontSize: '14px',
-                fontWeight: '600',
-                marginBottom: '8px',
-                color: '#1c1917',
-              }}>Email Address</label>
-              <input
-                type="email"
-                placeholder="you@school.edu.sg"
+            <form onSubmit={handleLoginSubmit}>
+              {/* Email/Username Field */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{
+                  display: 'block',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  marginBottom: '8px',
+                  color: '#1c1917',
+                }}>Email Address</label>
+                <input
+                  type="email"
+                  placeholder="you@school.edu.sg"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '14px 16px',
+                    borderRadius: '10px',
+                    border: '1px solid #e7e5e4',
+                    fontSize: '15px',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              {/* Password Field */}
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{
+                  display: 'block',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  marginBottom: '8px',
+                  color: '#1c1917',
+                }}>Password</label>
+                <input
+                  type="password"
+                  placeholder="••••••••"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '14px 16px',
+                    borderRadius: '10px',
+                    border: '1px solid #e7e5e4',
+                    fontSize: '15px',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              {/* Error: locked account */}
+              {loginError === 'locked' && (
+                <div style={{
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  marginBottom: '16px',
+                  fontSize: '14px',
+                  color: '#b91c1c',
+                }}>
+                  🔒 Account is locked. Use the Forgot password link below to reset your password and unlock your account.
+                </div>
+              )}
+
+              {/* Error: unverified email */}
+              {loginError === 'unverified' && (
+                <div style={{
+                  background: '#fef3c7',
+                  border: '1px solid #fde68a',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  marginBottom: '16px',
+                  fontSize: '14px',
+                  color: '#92400e',
+                }}>
+                  📧 Please verify your email first. Check your inbox or{' '}
+                  <a href="#" onClick={(e) => { e.preventDefault(); setShowModal('verify'); setVerifyEmail(loginEmail); setResendError(null); setResendSuccess(false); }} onMouseEnter={() => setHovered('login-resend')} onMouseLeave={() => setHovered(null)} style={{ color: '#1a5f4a', fontWeight: '600', textDecoration: 'none', cursor: 'pointer', opacity: hovered === 'login-resend' ? 0.85 : 1, transition: 'all 0.15s ease' }}>resend verification email</a>.
+                </div>
+              )}
+
+              {/* Error: invalid domain */}
+              {loginError === 'invalid_domain' && (
+                <div style={{
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  marginBottom: '16px',
+                  fontSize: '14px',
+                  color: '#b91c1c',
+                }}>
+                  Only .edu.sg email addresses are allowed.
+                </div>
+              )}
+
+              {/* Error: other */}
+              {loginError && loginError !== 'locked' && loginError !== 'unverified' && loginError !== 'invalid_domain' && (
+                <div style={{
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  marginBottom: '16px',
+                  fontSize: '14px',
+                  color: '#b91c1c',
+                }}>
+                  {loginError}
+                </div>
+              )}
+
+              {/* Account Lockout Info (SRS 2.1.2.4) */}
+              <div style={{
+                background: '#fef3c7',
+                border: '1px solid #fde68a',
+                borderRadius: '8px',
+                padding: '10px 12px',
+                marginBottom: '16px',
+                fontSize: '12px',
+                color: '#92400e',
+              }}>
+                ⚠️ Account will be temporarily locked after 5 consecutive failed login attempts.
+              </div>
+
+              {/* Forgot Password Link */}
+              <div style={{ textAlign: 'right', marginBottom: '24px' }}>
+                <a href="#" onClick={handleForgotPassword} onMouseEnter={() => setHovered('login-forgot')} onMouseLeave={() => setHovered(null)} style={{
+                  color: '#1a5f4a',
+                  fontSize: '14px',
+                  textDecoration: 'none',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  opacity: hovered === 'login-forgot' ? 0.85 : 1,
+                  transition: 'all 0.15s ease',
+                }}>Forgot password?</a>
+              </div>
+
+              {/* Forgot password success/error */}
+              {forgotSuccess && (
+                <div style={{
+                  background: '#f0fdf4',
+                  border: '1px solid #bbf7d0',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  marginBottom: '16px',
+                  fontSize: '14px',
+                  color: '#166534',
+                }}>
+                  Password reset email sent. Check your inbox.
+                </div>
+              )}
+              {forgotError && (
+                <div style={{
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  marginBottom: '16px',
+                  fontSize: '14px',
+                  color: '#b91c1c',
+                }}>
+                  {forgotError === 'invalid_domain' ? 'Only .edu.sg email addresses are allowed.' : forgotError}
+                </div>
+              )}
+
+              {/* Login Button */}
+              <button
+                type="submit"
+                disabled={loginLoading}
+                onMouseEnter={() => !loginLoading && setHovered('login-submit')}
+                onMouseLeave={() => setHovered(null)}
                 style={{
                   width: '100%',
-                  padding: '14px 16px',
+                  padding: '14px',
+                  background: loginLoading ? '#1a5f4a' : (hovered === 'login-submit' ? '#2d7a61' : '#1a5f4a'),
+                  color: '#fff',
+                  border: 'none',
                   borderRadius: '10px',
-                  border: '1px solid #e7e5e4',
-                  fontSize: '15px',
-                  boxSizing: 'border-box',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  cursor: loginLoading ? 'wait' : 'pointer',
+                  marginBottom: '20px',
+                  transition: 'all 0.2s ease',
                 }}
-              />
-            </div>
-
-            {/* Password Field */}
-            <div style={{ marginBottom: '12px' }}>
-              <label style={{
-                display: 'block',
-                fontSize: '14px',
-                fontWeight: '600',
-                marginBottom: '8px',
-                color: '#1c1917',
-              }}>Password</label>
-              <input
-                type="password"
-                placeholder="••••••••"
-                style={{
-                  width: '100%',
-                  padding: '14px 16px',
-                  borderRadius: '10px',
-                  border: '1px solid #e7e5e4',
-                  fontSize: '15px',
-                  boxSizing: 'border-box',
-                }}
-              />
-            </div>
-
-            {/* Account Lockout Info (SRS 2.1.2.4) */}
-            <div style={{
-              background: '#fef3c7',
-              border: '1px solid #fde68a',
-              borderRadius: '8px',
-              padding: '10px 12px',
-              marginBottom: '16px',
-              fontSize: '12px',
-              color: '#92400e',
-            }}>
-              ⚠️ Account will be temporarily locked after 5 consecutive failed login attempts.
-            </div>
-
-            {/* Forgot Password Link */}
-            <div style={{ textAlign: 'right', marginBottom: '24px' }}>
-              <a href="#" style={{
-                color: '#1a5f4a',
-                fontSize: '14px',
-                textDecoration: 'none',
-                fontWeight: '500',
-              }}>Forgot password?</a>
-            </div>
-
-            {/* Login Button */}
-            <button style={{
-              width: '100%',
-              padding: '14px',
-              background: '#1a5f4a',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '10px',
-              fontSize: '16px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              marginBottom: '20px',
-            }}>Log In</button>
+              >
+                {loginLoading ? 'Logging in...' : 'Log In'}
+              </button>
+            </form>
 
             {/* Divider */}
             <div style={{
@@ -442,7 +685,9 @@ const LandingPage = () => {
               <a
                 href="#"
                 onClick={(e) => { e.preventDefault(); setShowModal('signup'); }}
-                style={{ color: '#1a5f4a', fontWeight: '600', textDecoration: 'none' }}
+                onMouseEnter={() => setHovered('login-signup-link')}
+                onMouseLeave={() => setHovered(null)}
+                style={{ color: '#1a5f4a', fontWeight: '600', textDecoration: 'none', cursor: 'pointer', opacity: hovered === 'login-signup-link' ? 0.85 : 1, transition: 'all 0.15s ease' }}
               >Sign up free</a>
             </p>
           </div>
@@ -488,17 +733,20 @@ const LandingPage = () => {
             {/* Close Button */}
             <button
               onClick={() => setShowModal(null)}
+              onMouseEnter={() => setHovered('signup-close')}
+              onMouseLeave={() => setHovered(null)}
               style={{
                 position: 'absolute',
                 top: '16px',
                 right: '16px',
-                background: '#f5f5f4',
+                background: hovered === 'signup-close' ? '#e7e5e4' : '#f5f5f4',
                 border: 'none',
                 width: '32px',
                 height: '32px',
                 borderRadius: '8px',
                 cursor: 'pointer',
                 fontSize: '16px',
+                transition: 'all 0.15s ease',
               }}
             >✕</button>
 
@@ -514,79 +762,116 @@ const LandingPage = () => {
               fontSize: '15px',
             }}>Join the peer learning community</p>
 
-            {/* Full Name Field (SRS 2.1.1.2) */}
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{
-                display: 'block',
-                fontSize: '14px',
-                fontWeight: '600',
-                marginBottom: '8px',
-                color: '#1c1917',
-              }}>Full Name <span style={{ color: '#ef4444' }}>*</span></label>
-              <input
-                type="text"
-                placeholder="John Doe"
-                style={{
-                  width: '100%',
-                  padding: '14px 16px',
-                  borderRadius: '10px',
-                  border: '1px solid #e7e5e4',
-                  fontSize: '15px',
-                  boxSizing: 'border-box',
-                }}
-              />
-              <p style={{ fontSize: '12px', color: '#a8a29e', marginTop: '4px' }}>
-                1-100 characters
-              </p>
-            </div>
+            <form onSubmit={handleSignupSubmit}>
+              {/* Full Name Field (SRS 2.1.1.2) */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{
+                  display: 'block',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  marginBottom: '8px',
+                  color: '#1c1917',
+                }}>Full Name <span style={{ color: '#ef4444' }}>*</span></label>
+                <input
+                  type="text"
+                  placeholder="John Doe"
+                  value={signupFullName}
+                  onChange={(e) => setSignupFullName(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '14px 16px',
+                    borderRadius: '10px',
+                    border: '1px solid #e7e5e4',
+                    fontSize: '15px',
+                    boxSizing: 'border-box',
+                  }}
+                />
+                <p style={{ fontSize: '12px', color: '#a8a29e', marginTop: '4px' }}>
+                  1-100 characters
+                </p>
+              </div>
 
-            {/* Email Field (SRS 2.1.1.3) */}
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{
-                display: 'block',
-                fontSize: '14px',
-                fontWeight: '600',
-                marginBottom: '8px',
-                color: '#1c1917',
-              }}>Email Address <span style={{ color: '#ef4444' }}>*</span></label>
-              <input
-                type="email"
-                placeholder="you@school.edu.sg"
-                style={{
-                  width: '100%',
-                  padding: '14px 16px',
-                  borderRadius: '10px',
-                  border: '1px solid #e7e5e4',
-                  fontSize: '15px',
-                  boxSizing: 'border-box',
-                }}
-              />
-              <p style={{ fontSize: '12px', color: '#a8a29e', marginTop: '4px' }}>
-                📧 A verification link will be sent to activate your account
-              </p>
-            </div>
+              {/* Email Field (SRS 2.1.1.3) */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{
+                  display: 'block',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  marginBottom: '8px',
+                  color: '#1c1917',
+                }}>Email Address <span style={{ color: '#ef4444' }}>*</span></label>
+                <input
+                  type="email"
+                  placeholder="you@school.edu.sg"
+                  value={signupEmail}
+                  onChange={(e) => setSignupEmail(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '14px 16px',
+                    borderRadius: '10px',
+                    border: '1px solid #e7e5e4',
+                    fontSize: '15px',
+                    boxSizing: 'border-box',
+                  }}
+                />
+                <p style={{ fontSize: '12px', color: '#a8a29e', marginTop: '4px' }}>
+                  📧 A verification link will be sent to activate your account
+                </p>
+              </div>
 
-            {/* Password Field (SRS 2.1.1.5) */}
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{
-                display: 'block',
-                fontSize: '14px',
-                fontWeight: '600',
-                marginBottom: '8px',
-                color: '#1c1917',
-              }}>Password <span style={{ color: '#ef4444' }}>*</span></label>
-              <input
-                type="password"
-                placeholder="Min 8 characters"
-                style={{
-                  width: '100%',
-                  padding: '14px 16px',
-                  borderRadius: '10px',
-                  border: '1px solid #e7e5e4',
-                  fontSize: '15px',
-                  boxSizing: 'border-box',
-                }}
-              />
+              {/* Signup error: invalid domain */}
+              {signupError === 'invalid_domain' && (
+                <div style={{
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  marginBottom: '16px',
+                  fontSize: '14px',
+                  color: '#b91c1c',
+                }}>
+                  Only .edu.sg email addresses are allowed.
+                </div>
+              )}
+
+              {/* Signup error: other */}
+              {signupError && signupError !== 'invalid_domain' && (
+                <div style={{
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  marginBottom: '16px',
+                  fontSize: '14px',
+                  color: '#b91c1c',
+                }}>
+                  {signupError}
+                </div>
+              )}
+
+              {/* Password Field (SRS 2.1.1.5) */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{
+                  display: 'block',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  marginBottom: '8px',
+                  color: '#1c1917',
+                }}>Password <span style={{ color: '#ef4444' }}>*</span></label>
+                <input
+                  type="password"
+                  placeholder="Min 8 characters"
+                  value={signupPassword}
+                  onChange={(e) => setSignupPassword(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '14px 16px',
+                    borderRadius: '10px',
+                    border: '1px solid #e7e5e4',
+                    fontSize: '15px',
+                    boxSizing: 'border-box',
+                  }}
+                />
               {/* Password Requirements (SRS 2.1.1.5.1-4) */}
               <div style={{ marginTop: '8px', fontSize: '12px', color: '#57534e' }}>
                 <p style={{ marginBottom: '4px', fontWeight: '500' }}>Password must contain:</p>
@@ -608,16 +893,20 @@ const LandingPage = () => {
                 marginBottom: '8px',
                 color: '#1c1917',
               }}>Preferred Language <span style={{ color: '#ef4444' }}>*</span></label>
-              <select style={{
-                width: '100%',
-                padding: '14px 16px',
-                borderRadius: '10px',
-                border: '1px solid #e7e5e4',
-                fontSize: '15px',
-                boxSizing: 'border-box',
-                background: '#ffffff',
-                cursor: 'pointer',
-              }}>
+              <select
+                value={signupPreferredLanguage}
+                onChange={(e) => setSignupPreferredLanguage(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '14px 16px',
+                  borderRadius: '10px',
+                  border: '1px solid #e7e5e4',
+                  fontSize: '15px',
+                  boxSizing: 'border-box',
+                  background: '#ffffff',
+                  cursor: 'pointer',
+                }}
+              >
                 <option value="">Select language</option>
                 <option value="en">English</option>
                 <option value="zh">Chinese (中文)</option>
@@ -831,20 +1120,28 @@ const LandingPage = () => {
             </label>
 
             {/* Create Account Button */}
-            <button 
-              onClick={() => setShowModal('verify')}
+            <button
+              type="submit"
+              disabled={signupLoading}
+              onMouseEnter={() => !signupLoading && setHovered('signup-submit')}
+              onMouseLeave={() => setHovered(null)}
               style={{
                 width: '100%',
                 padding: '14px',
-                background: '#1a5f4a',
+                background: signupLoading ? '#1a5f4a' : (hovered === 'signup-submit' ? '#2d7a61' : '#1a5f4a'),
                 color: '#fff',
                 border: 'none',
                 borderRadius: '10px',
                 fontSize: '16px',
                 fontWeight: '600',
-                cursor: 'pointer',
+                cursor: signupLoading ? 'wait' : 'pointer',
                 marginBottom: '20px',
-            }}>Create Account</button>
+                transition: 'all 0.2s ease',
+              }}
+            >
+              {signupLoading ? 'Creating account...' : 'Create Account'}
+            </button>
+            </form>
 
             {/* Divider */}
             <div style={{
@@ -952,7 +1249,7 @@ const LandingPage = () => {
               lineHeight: '1.6',
             }}>
               We've sent a verification link to<br />
-              <strong style={{ color: '#1c1917' }}>john.doe@school.edu.sg</strong>
+              <strong style={{ color: '#1c1917' }}>{verifyEmail || 'your email'}</strong>
             </p>
 
             <div style={{
@@ -966,24 +1263,37 @@ const LandingPage = () => {
               </p>
               <p style={{ fontSize: '13px', color: '#a8a29e' }}>
                 Didn't receive the email? Check your spam folder or{' '}
-                <a href="#" style={{ color: '#1a5f4a', textDecoration: 'none', fontWeight: '500' }}>
+                <a href="#" onClick={handleResendVerification} onMouseEnter={() => setHovered('verify-resend')} onMouseLeave={() => setHovered(null)} style={{ color: '#1a5f4a', textDecoration: 'none', fontWeight: '500', cursor: 'pointer', opacity: hovered === 'verify-resend' ? 0.85 : 1, transition: 'all 0.15s ease' }}>
                   resend verification email
                 </a>
               </p>
+              {resendSuccess && (
+                <p style={{ fontSize: '14px', color: '#166534', marginTop: '12px' }}>
+                  ✓ Verification email sent.
+                </p>
+              )}
+              {resendError && (
+                <p style={{ fontSize: '14px', color: '#b91c1c', marginTop: '12px' }}>
+                  {resendError === 'invalid_domain' ? 'Only .edu.sg email addresses are allowed.' : resendError}
+                </p>
+              )}
             </div>
 
             <button
               onClick={() => setShowModal('login')}
+              onMouseEnter={() => setHovered('verify-back')}
+              onMouseLeave={() => setHovered(null)}
               style={{
                 width: '100%',
                 padding: '14px',
-                background: '#1a5f4a',
+                background: hovered === 'verify-back' ? '#2d7a61' : '#1a5f4a',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '10px',
                 fontSize: '16px',
                 fontWeight: '600',
                 cursor: 'pointer',
+                transition: 'all 0.2s ease',
             }}>Back to Login</button>
           </div>
         </div>

@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import api from '../services/api';
 
 // ============================================================
 // SECTION 3: REQUEST HELP FLOW (UPDATED)
@@ -12,14 +14,97 @@ import React, { useState } from 'react';
 // - Session states displayed (2.7)
 // ============================================================
 
+const ACADEMIC_LEVEL_MAP = { primary: 'Primary', secondary: 'Secondary', jc: 'Junior College', poly: 'Polytechnic', ite: 'ITE', uni: 'University' };
+const PLANNING_AREAS_FULL = [
+  'Ang Mo Kio', 'Bedok', 'Bishan', 'Boon Lay', 'Bukit Batok', 'Bukit Merah',
+  'Bukit Panjang', 'Bukit Timah', 'Central Area', 'Choa Chu Kang', 'Clementi',
+  'Geylang', 'Hougang', 'Jurong East', 'Jurong West', 'Kallang', 'Marine Parade',
+  'Novena', 'Pasir Ris', 'Punggol', 'Queenstown', 'Sembawang', 'Sengkang',
+  'Serangoon', 'Tampines', 'Toa Payoh', 'Woodlands', 'Yishun',
+];
+const URGENCY_MAP = { exam: 'exam_soon', assignment: 'assignment_due', general: 'general_study' };
+const DURATION_HOURS_MAP = { '1 hour': 1, '2 hours': 2, '4 hours': 4 };
+
+const getInitials = (name) => (name || '').split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '??';
+
+// Stable components at module level to prevent remount-on-typing (which caused scroll-to-top)
+const TuteeFlowHeader = ({ onCancel, cancelLabel = '✕ Cancel Request' }) => {
+  const [h, setH] = useState(false);
+  return (
+    <header style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #0d3d2e 100%)', padding: '0 32px', height: '72px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
+        <span style={{ color: '#fff', fontSize: '22px', fontWeight: '700' }}>PeerLearn</span>
+      </div>
+      <button type="button" onClick={onCancel} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} style={{ background: h ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>{cancelLabel}</button>
+    </header>
+  );
+};
+
+const TuteeStepIndicator = ({ currentStep }) => (
+  <div style={{ background: '#fff', padding: '24px 32px', borderBottom: '1px solid #e7e5e4' }}>
+    <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative' }}>
+        <div style={{ position: 'absolute', top: '18px', left: '40px', right: '40px', height: '4px', background: '#e7e5e4', zIndex: 1 }}>
+          <div style={{ width: `${((currentStep - 1) / 5) * 100}%`, height: '100%', background: '#1a5f4a', transition: 'width 0.3s' }}></div>
+        </div>
+        {[
+          { num: 1, label: 'Details' },
+          { num: 2, label: 'Schedule' },
+          { num: 3, label: 'Tutor' },
+          { num: 4, label: 'Venue' },
+          { num: 5, label: 'Payment' },
+          { num: 6, label: 'Confirm' },
+        ].map(step => (
+          <div key={step.num} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, width: '70px' }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: currentStep >= step.num ? '#1a5f4a' : '#fff', border: `3px solid ${currentStep >= step.num ? '#1a5f4a' : '#e7e5e4'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: currentStep >= step.num ? '#fff' : '#a8a29e', fontWeight: '600', fontSize: '14px', marginBottom: '8px' }}>
+              {currentStep > step.num ? '✓' : step.num}
+            </div>
+            <span style={{ fontSize: '11px', fontWeight: currentStep === step.num ? '600' : '400', color: currentStep >= step.num ? '#1c1917' : '#a8a29e', textAlign: 'center' }}>{step.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
 const RequestHelpFlow = () => {
+  const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedTutor, setSelectedTutor] = useState(null);
   const [selectedVenue, setSelectedVenue] = useState(null);
-  const [selectedSubject, setSelectedSubject] = useState('Mathematics');
+  const [selectedSubjects, setSelectedSubjects] = useState(['Mathematics']);
   const [showOtherSubject, setShowOtherSubject] = useState(false);
   const [showOtherArea, setShowOtherArea] = useState(false);
-  const [selectedTopics, setSelectedTopics] = useState(['Integration']);
+  const [topicsBySubject, setTopicsBySubject] = useState({ Mathematics: ['Integration'] });
+
+  const [academicLevel, setAcademicLevel] = useState('uni');
+  const [urgency, setUrgency] = useState('exam');
+  const [selectedDates, setSelectedDates] = useState([]);
+  const [selectedTimeSlots, setSelectedTimeSlots] = useState([]);
+  const [durationHours, setDurationHours] = useState(1);
+  const [selectedAreas, setSelectedAreas] = useState([]);
+  const [otherArea, setOtherArea] = useState('');
+  const [otherSubject, setOtherSubject] = useState('');
+  const [customTopicInput, setCustomTopicInput] = useState('');
+  const [customTopicWarning, setCustomTopicWarning] = useState('');
+  const [customTopicTargetSubject, setCustomTopicTargetSubject] = useState(null);
+  const [accessibilityNotes, setAccessibilityNotes] = useState('');
+  const [accessibilityNeeds, setAccessibilityNeeds] = useState([]);
+  const [description, setDescription] = useState('');
+
+  const [requestId, setRequestId] = useState(null);
+  const [sessionId, setSessionId] = useState(null);
+  const [recommendedTutors, setRecommendedTutors] = useState([]);
+  const [recommendedVenues, setRecommendedVenues] = useState([]);
+  const [sessionFee, setSessionFee] = useState(null);
+  const [awaitingTutorAccept, setAwaitingTutorAccept] = useState(false);
+  const [showWaitlistSuccess, setShowWaitlistSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [hovered, setHovered] = useState(null);
+  const [noTutorsHover, setNoTutorsHover] = useState(null);
+  const [awaitingScreenHover, setAwaitingScreenHover] = useState(null);
 
   // Predefined subjects and topics (matching Tutor flow)
   const allSubjects = [
@@ -32,93 +117,414 @@ const RequestHelpFlow = () => {
     { name: 'English', topics: ['Essay Writing', 'Literature', 'Grammar', 'Creative Writing'] },
   ];
 
-  const recommendedTutors = [
-    { id: 1, name: 'Sarah Tan', initials: 'ST', rating: 4.9, sessions: 24, topics: ['Calculus', 'Integration', 'Differentiation'], availability: 'High', distance: 'Near', workload: 'Low', matchScore: 95, reliabilityScore: 98, explanation: 'Specializes in calculus integration, available at your preferred time, nearby location, balanced workload.' },
-    { id: 2, name: 'James Lim', initials: 'JL', rating: 4.7, sessions: 18, topics: ['Calculus', 'Linear Algebra'], availability: 'Medium', distance: 'Near', workload: 'Medium', matchScore: 88, reliabilityScore: 95, explanation: 'Strong in calculus, good availability match, very close to your area.' },
-    { id: 3, name: 'Emily Wong', initials: 'EW', rating: 4.8, sessions: 31, topics: ['Calculus', 'Statistics'], availability: 'Medium', distance: 'Medium', workload: 'High', matchScore: 75, reliabilityScore: 92, explanation: 'Excellent rating and experience, slightly further with moderate workload.' },
-  ];
+  const mapTutorToUi = (t) => ({
+    id: t.tutor_id ?? t.id,
+    name: t.full_name ?? t.name ?? 'Tutor',
+    initials: getInitials(t.full_name ?? t.name),
+    rating: t.avg_rating ?? t.rating ?? 0,
+    sessions: t.total_sessions ?? t.sessions ?? 0,
+    topics: t.topics ?? t.tutor_topics ?? [],
+    availability: t.availability ?? 'Medium',
+    distance: t.distance_bucket ?? t.distance ?? 'Medium',
+    workload: t.workload ?? 'Medium',
+    matchScore: t.score ?? t.match_score ?? 0,
+    reliabilityScore: t.reliability_score ?? t.score ?? 0,
+    explanation: t.explanation ?? t.reason ?? '',
+  });
 
-  const recommendedVenues = [
-    { id: 1, name: 'Clementi Public Library', type: 'Library', address: '3155 Commonwealth Ave West, #05-13/14/15', distanceStudent: '0.8 km', distanceTutor: '1.2 km', accessibility: ['Wheelchair', 'Lift'], amenities: ['WiFi', 'Power Outlets', 'Quiet Zone'], hours: '10:00 AM - 9:00 PM', matchScore: 92, explanation: 'Closest to both parties, fully accessible, has quiet study areas.' },
-    { id: 2, name: 'West Coast Community Centre', type: 'CC', address: '2 Clementi West Street 2', distanceStudent: '1.5 km', distanceTutor: '0.9 km', accessibility: ['Wheelchair', 'Lift'], amenities: ['WiFi', 'Cafe'], hours: '9:00 AM - 10:00 PM', matchScore: 85, explanation: 'Good facilities, longer operating hours.' },
-  ];
+  const mapVenueToUi = (v) => ({
+    id: v.venue_id ?? v.id,
+    name: v.name ?? '—',
+    type: v.venue_type ?? 'Library',
+    address: v.address ?? v.planning_area ?? '—',
+    distanceStudent: v.distance_student ?? v.distance_bucket ?? '—',
+    distanceTutor: v.distance_tutor ?? v.distance_bucket ?? '—',
+    accessibility: v.accessibility_features ?? v.accessibility ?? [],
+    amenities: v.amenities ?? [],
+    hours: v.hours ?? '—',
+    matchScore: v.score ?? v.match_score ?? 0,
+    explanation: v.explanation ?? '',
+  });
 
-  // Header
-  const FlowHeader = () => (
-    <header style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #0d3d2e 100%)', padding: '0 32px', height: '72px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
-        <span style={{ color: '#fff', fontSize: '22px', fontWeight: '700' }}>PeerLearn</span>
-      </div>
-      <button style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>✕ Cancel Request</button>
-    </header>
-  );
+  const getNextDateForWeekday = (dayName) => {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const targetDow = days.indexOf(dayName);
+    const today = new Date();
+    const currentDow = today.getDay();
+    let diff = targetDow - currentDow;
+    if (diff <= 0) diff += 7;
+    const next = new Date(today);
+    next.setDate(today.getDate() + diff);
+    return next.toISOString().slice(0, 10);
+  };
 
-  // Step Indicator (6 steps with Payment)
-  const StepIndicator = () => (
-    <div style={{ background: '#fff', padding: '24px 32px', borderBottom: '1px solid #e7e5e4' }}>
-      <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative' }}>
-          <div style={{ position: 'absolute', top: '18px', left: '40px', right: '40px', height: '4px', background: '#e7e5e4', zIndex: 1 }}>
-            <div style={{ width: `${((currentStep - 1) / 5) * 100}%`, height: '100%', background: '#1a5f4a', transition: 'width 0.3s' }}></div>
-          </div>
-          {[
-            { num: 1, label: 'Details' },
-            { num: 2, label: 'Schedule' },
-            { num: 3, label: 'Tutor' },
-            { num: 4, label: 'Venue' },
-            { num: 5, label: 'Payment' },
-            { num: 6, label: 'Confirm' },
-          ].map(step => (
-            <div key={step.num} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, width: '70px' }}>
-              <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: currentStep >= step.num ? '#1a5f4a' : '#fff', border: `3px solid ${currentStep >= step.num ? '#1a5f4a' : '#e7e5e4'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: currentStep >= step.num ? '#fff' : '#a8a29e', fontWeight: '600', fontSize: '14px', marginBottom: '8px' }}>
-                {currentStep > step.num ? '✓' : step.num}
-              </div>
-              <span style={{ fontSize: '11px', fontWeight: currentStep === step.num ? '600' : '400', color: currentStep >= step.num ? '#1c1917' : '#a8a29e', textAlign: 'center' }}>{step.label}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+  const getAllTopics = () => Object.values(topicsBySubject).flat();
+  const hasAnyTopics = () => getAllTopics().length > 0;
+
+  const toggleTopic = (subjectKey, topic) => {
+    setCustomTopicTargetSubject(subjectKey);
+    setTopicsBySubject((prev) => {
+      const current = prev[subjectKey] || [];
+      const has = current.includes(topic);
+      const next = { ...prev };
+      if (has) {
+        const filtered = current.filter((t) => t !== topic);
+        if (filtered.length === 0) delete next[subjectKey];
+        else next[subjectKey] = filtered;
+      } else {
+        next[subjectKey] = [...current, topic];
+      }
+      return next;
+    });
+  };
+
+  const CUSTOM_TOPIC_REGEX = /^[a-zA-Z0-9\s\-']+$/;
+
+  const handleAddCustomTopic = () => {
+    setCustomTopicWarning('');
+    const trimmed = customTopicInput.trim();
+    if (selectedSubjects.length === 0 && !showOtherSubject) {
+      setCustomTopicWarning('Please select a subject first');
+      return;
+    }
+    if (!trimmed) {
+      setCustomTopicWarning('Please type a topic name before clicking Add');
+      return;
+    }
+    if (trimmed.length > 100) {
+      setCustomTopicWarning('Topic must be 1-100 characters');
+      return;
+    }
+    if (!CUSTOM_TOPIC_REGEX.test(trimmed)) {
+      setCustomTopicWarning('Topic must use only letters, numbers, spaces, hyphens, apostrophes');
+      return;
+    }
+    const availableSubjects = [...selectedSubjects, ...(showOtherSubject ? [otherSubject || 'Other'] : [])].filter(Boolean);
+    const targetKey = availableSubjects.length === 1
+      ? availableSubjects[0]
+      : (availableSubjects.includes(customTopicTargetSubject) ? customTopicTargetSubject : availableSubjects[0]);
+    setTopicsBySubject((prev) => ({
+      ...prev,
+      [targetKey]: [...(prev[targetKey] || []), trimmed],
+    }));
+    setCustomTopicInput('');
+  };
+
+  const handleSubjectToggle = (subjectName) => {
+    if (selectedSubjects.includes(subjectName)) {
+      setSelectedSubjects(selectedSubjects.filter((s) => s !== subjectName));
+      setTopicsBySubject((prev) => {
+        const next = { ...prev };
+        delete next[subjectName];
+        return next;
+      });
+    } else {
+      setSelectedSubjects([...selectedSubjects, subjectName]);
+    }
+  };
+
+  const handleOtherSubjectToggle = () => {
+    setShowOtherSubject(!showOtherSubject);
+    if (showOtherSubject) {
+      setTopicsBySubject((prev) => {
+        const next = { ...prev };
+        delete next['Other'];
+        if (otherSubject) delete next[otherSubject];
+        return next;
+      });
+    }
+  };
+
+  const togglePlanningArea = (area) => {
+    setShowOtherArea(false);
+    setSelectedAreas((prev) => {
+      const current = Array.isArray(prev) ? [...prev] : [];
+      const index = current.indexOf(area);
+      if (index === -1) {
+        return [...current, area];
+      } else {
+        return current.filter((a) => a !== area);
+      }
+    });
+  };
+
+  const toggleDate = (day, date) => {
+    setSelectedDates((prev) => {
+      const has = prev.some((s) => s.day === day && s.date === date);
+      if (has) return prev.filter((s) => !(s.day === day && s.date === date));
+      return [...prev, { day, date }];
+    });
+  };
+
+  const toggleTimeSlot = (slotIndex) => {
+    setSelectedTimeSlots((prev) => {
+      const current = Array.isArray(prev) ? [...prev] : [];
+      const idx = current.indexOf(slotIndex);
+      if (idx === -1) return [...current, slotIndex].sort((a, b) => a - b);
+      return current.filter((x) => x !== slotIndex);
+    });
+  };
+
+  const buildRequestPayload = () => {
+    const subjects = [...selectedSubjects, ...(showOtherSubject && otherSubject ? [otherSubject] : [])].filter(Boolean);
+    const areas = showOtherArea ? (otherArea ? [otherArea] : selectedAreas) : selectedAreas;
+    const timeSlots = selectedDates.flatMap((d) => {
+      const isoDate = getNextDateForWeekday(d.day);
+      return selectedTimeSlots.map((h) => ({ date: isoDate, hour_slot: h + 9 }));
+    });
+    const payload = {
+      academic_level: ACADEMIC_LEVEL_MAP[academicLevel] || 'University',
+      subjects,
+      topics: getAllTopics(),
+      planning_areas: areas,
+      time_slots: timeSlots,
+      duration_hours: Number(durationHours),
+      urgency_category: URGENCY_MAP[urgency] || 'general_study',
+      accessibility_needs: accessibilityNeeds,
+      accessibility_notes: accessibilityNotes?.trim() || '',
+    };
+    return payload;
+  };
+
+  const handleFindTutors = async () => {
+    setError(null);
+    setLoading(true);
+    setRecommendedTutors([]);
+    setShowWaitlistSuccess(false);
+    setSelectedTutor(null);
+    try {
+      const payload = buildRequestPayload();
+      console.log('[TuteeRequest] POST /requests payload:', JSON.stringify(payload, null, 2));
+      const { data: reqData } = await api.post('/requests', payload);
+      const rid = reqData.id ?? reqData.request_id;
+      setRequestId(rid);
+
+      const { data: matchData } = await api.get('/matching/recommendations', { params: { request_id: rid } });
+      const list = Array.isArray(matchData) ? matchData : (matchData.recommendations ?? matchData.tutors ?? []);
+      setRecommendedTutors(list.map(mapTutorToUi));
+      setCurrentStep(3);
+    } catch (err) {
+      setError(err.response?.data?.detail ?? err.message ?? 'Request failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmitRequestAndWait = () => {
+    setShowWaitlistSuccess(true);
+  };
+
+  const handleModifyRequestFromNoTutors = () => {
+    setShowWaitlistSuccess(false);
+    setCurrentStep(1);
+  };
+
+  const handleGoToDashboardAfterWaitlist = async () => {
+    await new Promise((resolve) => setTimeout(resolve,1500));
+    navigate('/dashboard', { state: { refresh: true } });
+  };
+
+  const handleFlowHeaderCancel = async () => {
+    if (awaitingTutorAccept && requestId) {
+      setLoading(true);
+      try {
+        await api.delete(`/requests/${requestId}`);
+      } catch {
+        /* still exit flow */
+      } finally {
+        setLoading(false);
+      }
+    }
+    navigate('/dashboard');
+  };
+
+  const handleGoToMyDashboard = () => {
+    try {
+      sessionStorage.setItem('peerlearn_dashboard_tab', 'learning');
+    } catch {
+      /* ignore */
+    }
+    navigate('/dashboard?tab=learning');
+  };
+
+  const handleCancelThisRequest = async () => {
+    if (!requestId) {
+      navigate('/dashboard');
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      await api.delete(`/requests/${requestId}`);
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err.response?.data?.detail ?? err.message ?? 'Could not cancel this request');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleModifyRequestAfterTutorSubmit = async () => {
+    if (!requestId) {
+      setAwaitingTutorAccept(false);
+      setSessionId(null);
+      setSelectedTutor(null);
+      setCurrentStep(1);
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      await api.delete(`/requests/${requestId}`);
+    } catch (err) {
+      setError(err.response?.data?.detail ?? err.message ?? 'Could not remove your previous request');
+      setLoading(false);
+      return;
+    } finally {
+      setLoading(false);
+    }
+    setAwaitingTutorAccept(false);
+    setRequestId(null);
+    setSessionId(null);
+    setSelectedTutor(null);
+    setRecommendedTutors([]);
+    setRecommendedVenues([]);
+    setCurrentStep(1);
+  };
+
+  const normalizeSessionStatus = (raw) =>
+    String(raw || '')
+      .toLowerCase()
+      .replace(/\s/g, '_');
+
+  const handleSelectTutorAndProceed = async () => {
+    if (!selectedTutor || !requestId) return;
+    setError(null);
+    setLoading(true);
+    setRecommendedVenues([]);
+    setAwaitingTutorAccept(false);
+    try {
+      const tutorId = typeof selectedTutor === 'object' ? selectedTutor.id : selectedTutor;
+      const { data } = await api.post('/sessions', { request_id: requestId, tutor_id: tutorId });
+      const sid = data.id ?? data.session_id;
+      setSessionId(sid);
+      const st = normalizeSessionStatus(data.status ?? data.state);
+      if (st === 'pending_tutor_selection') {
+        setAwaitingTutorAccept(true);
+        return;
+      }
+      if (st === 'tutor_accepted' || st === 'pending_confirmation') {
+        setCurrentStep(4);
+        return;
+      }
+      setError('Venue selection is only available after your tutor accepts the request. Please check your dashboard for updates.');
+    } catch (err) {
+      setError(err.response?.data?.detail ?? err.message ?? 'Failed to create session');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleProceedToPayment = async () => {
+    if (!sessionId || !selectedVenue) return;
+    setError(null);
+    setLoading(true);
+    try {
+      await api.post(`/sessions/${sessionId}/venue`, { venue_id: selectedVenue });
+      setCurrentStep(5);
+    } catch (err) {
+      setError(err.response?.data?.detail ?? err.message ?? 'Failed to set venue');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePay = async () => {
+    if (!sessionId) return;
+    setError(null);
+    setLoading(true);
+    try {
+      await api.post('/payments/initiate', { session_id: sessionId });
+      setCurrentStep(6);
+    } catch (err) {
+      setError(err.response?.data?.detail ?? err.message ?? 'Payment failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentStep === 4 && sessionId && selectedTutor) {
+      const tutorId = typeof selectedTutor === 'object' ? selectedTutor.id : selectedTutor;
+      const params = {};
+      if (requestId) params.request_id = requestId;
+      if (tutorId) params.tutor_id = tutorId;
+      setSelectedVenue(null);
+      api.get('/venues/recommend', { params })
+        .then(({ data }) => {
+          const list = Array.isArray(data) ? data : (data.venues ?? data.recommendations ?? []);
+          setRecommendedVenues(list.map(mapVenueToUi));
+        })
+        .catch(() => setRecommendedVenues([]));
+    }
+  }, [currentStep, sessionId, selectedTutor, requestId]);
+
+  useEffect(() => {
+    if (currentStep === 5 && sessionId) {
+      api.get('/payments/fee', { params: { session_id: sessionId } })
+        .then(({ data }) => setSessionFee(data.fee ?? data.amount ?? null))
+        .catch(() => setSessionFee(null));
+    }
+  }, [currentStep, sessionId]);
 
   // STEP 1: Subject, Academic Level & Topics (UPDATED - matching Tutor UI)
-  const Step1 = () => {
-    const currentSubjectData = allSubjects.find(s => s.name === selectedSubject);
-    
-    return (
+  const renderStep1 = () => (
     <div style={{ maxWidth: '700px', margin: '0 auto', padding: '48px 24px' }}>
       <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px', color: '#1c1917' }}>What do you need help with? 🎓</h1>
       <p style={{ color: '#57534e', marginBottom: '36px' }}>Tell us about the subject and topics you're struggling with.</p>
 
-      {/* Academic Level (SRS 2.2.3.3) */}
-      <div style={{ marginBottom: '28px' }}>
-        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#1c1917' }}>
-          Academic Level <span style={{ color: '#ef4444' }}>*</span>
-        </label>
-        <select style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', background: '#fff' }}>
-          <option value="">Select your academic level</option>
-          <option value="primary">Primary School</option>
-          <option value="secondary">Secondary School</option>
-          <option value="jc">Junior College</option>
-          <option value="poly">Polytechnic</option>
-          <option value="ite">Institute of Technical Education (ITE)</option>
-          <option value="uni">University</option>
-        </select>
-      </div>
-
-      {/* Subject Selection - Matching Tutor UI (predefined buttons + Other) */}
+      {/* Academic Level (SRS 2.2.3.3) — pill/chip buttons matching OfferToTutor */}
       <div style={{ marginBottom: '28px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>
-          Select Subject <span style={{ color: '#ef4444' }}>*</span>
+          Academic Level <span style={{ color: '#ef4444' }}>*</span>
+        </label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+          {[
+            { value: 'primary', label: 'Primary' },
+            { value: 'secondary', label: 'Secondary' },
+            { value: 'jc', label: 'Junior College' },
+            { value: 'poly', label: 'Polytechnic' },
+            { value: 'ite', label: 'ITE' },
+            { value: 'uni', label: 'University' },
+          ].map(({ value, label }) => {
+            const isSelected = academicLevel === value;
+            const h = hovered === `acad-${value}`;
+            return (
+              <button key={value} onClick={() => setAcademicLevel(value)} onMouseEnter={() => setHovered(`acad-${value}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 20px', background: h ? (isSelected ? '#145040' : '#f0faf5') : (isSelected ? '#1a5f4a' : '#fff'), color: isSelected ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `2px solid ${h ? '#1a5f4a' : (isSelected ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px', transition: 'all 0.15s ease' }}>
+                {isSelected && '✓ '}{label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Subject Selection - multi-select matching OfferToTutor */}
+      <div style={{ marginBottom: '28px' }}>
+        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>
+          Select Subjects <span style={{ color: '#ef4444' }}>*</span>
+          <span style={{ fontWeight: '400', color: '#a8a29e', marginLeft: '8px' }}>(select one or more)</span>
         </label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
-          {allSubjects.map(subject => (
-            <button key={subject.name} onClick={() => { setSelectedSubject(subject.name); setShowOtherSubject(false); setSelectedTopics([]); }} style={{ padding: '12px 20px', background: selectedSubject === subject.name && !showOtherSubject ? '#1a5f4a' : '#fff', color: selectedSubject === subject.name && !showOtherSubject ? '#fff' : '#57534e', border: `2px solid ${selectedSubject === subject.name && !showOtherSubject ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}>
-              {selectedSubject === subject.name && !showOtherSubject && '✓ '}{subject.name}
-            </button>
-          ))}
-          <button onClick={() => { setShowOtherSubject(true); setSelectedSubject(''); setSelectedTopics([]); }} style={{ padding: '12px 20px', background: showOtherSubject ? '#1a5f4a' : '#fff', color: showOtherSubject ? '#fff' : '#57534e', border: `2px solid ${showOtherSubject ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}>
+          {allSubjects.map(subject => {
+            const sel = selectedSubjects.includes(subject.name);
+            const h = hovered === `subj-${subject.name}`;
+            return (
+              <button key={subject.name} onClick={() => handleSubjectToggle(subject.name)} onMouseEnter={() => setHovered(`subj-${subject.name}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 20px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `2px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px', transition: 'all 0.15s ease' }}>
+                {sel && '✓ '}{subject.name}
+              </button>
+            );
+          })}
+          <button onClick={handleOtherSubjectToggle} onMouseEnter={() => setHovered('subj-other')} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 20px', background: hovered === 'subj-other' ? (showOtherSubject ? '#145040' : '#f0faf5') : (showOtherSubject ? '#1a5f4a' : '#fff'), color: showOtherSubject ? '#fff' : (hovered === 'subj-other' ? '#1a5f4a' : '#57534e'), border: `2px solid ${hovered === 'subj-other' ? '#1a5f4a' : (showOtherSubject ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px', transition: 'all 0.15s ease' }}>
             {showOtherSubject && '✓ '}Other
           </button>
         </div>
@@ -126,44 +532,57 @@ const RequestHelpFlow = () => {
         {/* Other Subject Input */}
         {showOtherSubject && (
           <div style={{ marginTop: '12px' }}>
-            <input type="text" placeholder="Enter subject name (1-100 characters)" maxLength={100} style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', boxSizing: 'border-box' }} />
+            <input type="text" placeholder="Enter subject name (1-100 characters)" maxLength={100} value={otherSubject} onChange={(e) => setOtherSubject(e.target.value)} style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', boxSizing: 'border-box' }} />
             <p style={{ fontSize: '12px', color: '#a8a29e', marginTop: '4px' }}>1-100 characters</p>
           </div>
         )}
       </div>
 
-      {/* Topic Selection - Matching Tutor UI (predefined buttons based on subject) */}
-      {(selectedSubject || showOtherSubject) && (
+      {/* Topic Selection - one section per selected subject (matching OfferToTutor) */}
+      {(selectedSubjects.length > 0 || showOtherSubject) && (
         <div style={{ marginBottom: '28px' }}>
           <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>
             Select Topics <span style={{ color: '#ef4444' }}>*</span>
             <span style={{ fontWeight: '400', color: '#a8a29e', marginLeft: '8px' }}>(select one or more)</span>
           </label>
 
-          {/* Show predefined topics if a predefined subject is selected */}
-          {currentSubjectData && !showOtherSubject && (
-            <div style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
-              <div style={{ fontWeight: '600', color: '#1c1917', marginBottom: '12px' }}>📚 {selectedSubject} Topics</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {currentSubjectData.topics.map(topic => (
-                  <button key={topic} onClick={() => selectedTopics.includes(topic) ? setSelectedTopics(selectedTopics.filter(t => t !== topic)) : setSelectedTopics([...selectedTopics, topic])} style={{ padding: '10px 16px', background: selectedTopics.includes(topic) ? '#1a5f4a' : '#fff', color: selectedTopics.includes(topic) ? '#fff' : '#57534e', border: `1px solid ${selectedTopics.includes(topic) ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px' }}>
-                    {selectedTopics.includes(topic) && '✓ '}{topic}
-                  </button>
-                ))}
+          {selectedSubjects.map(subjectName => {
+            const subject = allSubjects.find(s => s.name === subjectName);
+            if (!subject) return null;
+            const subjectTopics = topicsBySubject[subjectName] || [];
+            const customTopics = subjectTopics.filter((t) => !subject.topics.includes(t));
+            return (
+              <div key={subjectName} style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px', marginBottom: '12px' }}>
+                <div style={{ fontWeight: '600', color: '#1c1917', marginBottom: '12px' }}>📚 {subjectName} Topics</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {subject.topics.map(topic => {
+                    const isSelected = subjectTopics.includes(topic);
+                    const h = hovered === `topic-${subjectName}-${topic}`;
+                    return (
+                      <button key={topic} type="button" onClick={() => toggleTopic(subjectName, topic)} onMouseEnter={() => setHovered(`topic-${subjectName}-${topic}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: h ? (isSelected ? '#145040' : '#f0faf5') : (isSelected ? '#1a5f4a' : '#fff'), color: isSelected ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (isSelected ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px', transition: 'all 0.15s ease' }}>
+                        {isSelected && '✓ '}{topic}
+                      </button>
+                    );
+                  })}
+                  {customTopics.map(topic => (
+                    <button key={topic} type="button" onClick={() => toggleTopic(subjectName, topic)} onMouseEnter={() => setHovered(`ctopic-${subjectName}-${topic}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === `ctopic-${subjectName}-${topic}` ? '#145040' : '#1a5f4a', color: '#fff', border: '1px solid #1a5f4a', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px', transition: 'all 0.15s ease' }}>
+                      ✓ {topic}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })}
 
-          {/* Selected Topics Display */}
-          {selectedTopics.length > 0 && (
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ fontSize: '13px', color: '#57534e', marginBottom: '8px' }}>Selected topics:</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {selectedTopics.map(topic => (
-                  <span key={topic} style={{ background: '#dcfce7', color: '#166534', padding: '6px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    {topic}
-                    <button onClick={() => setSelectedTopics(selectedTopics.filter(t => t !== topic))} style={{ background: 'rgba(22, 101, 52, 0.2)', border: 'none', borderRadius: '50%', width: '18px', height: '18px', cursor: 'pointer', color: '#166534', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-                  </span>
+          {showOtherSubject && (
+            <div style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px', marginBottom: '12px' }}>
+              <div style={{ fontWeight: '600', color: '#1c1917', marginBottom: '12px' }}>📚 {otherSubject || 'Other'} Topics</div>
+              <p style={{ fontSize: '13px', color: '#57534e', marginBottom: '8px' }}>Add custom topics below.</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+                {(topicsBySubject[otherSubject || 'Other'] || []).map(topic => (
+                  <button key={topic} type="button" onClick={() => toggleTopic(otherSubject || 'Other', topic)} onMouseEnter={() => setHovered(`otopic-${topic}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === `otopic-${topic}` ? '#145040' : '#1a5f4a', color: '#fff', border: '1px solid #1a5f4a', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px', transition: 'all 0.15s ease' }}>
+                    ✓ {topic}
+                  </button>
                 ))}
               </div>
             </div>
@@ -171,11 +590,32 @@ const RequestHelpFlow = () => {
 
           {/* Custom Topic Input */}
           <div>
-            <div style={{ fontSize: '13px', color: '#57534e', marginBottom: '8px' }}>Add custom topic:</div>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <input type="text" placeholder="Type a topic (1-100 characters)" maxLength={100} style={{ flex: 1, padding: '12px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '14px', boxSizing: 'border-box' }} />
-              <button style={{ padding: '12px 20px', background: '#f5f5f4', border: '1px solid #e7e5e4', borderRadius: '10px', cursor: 'pointer', fontWeight: '500', color: '#1a5f4a', fontSize: '14px' }}>+ Add</button>
-            </div>
+            {(() => {
+              const availableSubjects = [...selectedSubjects, ...(showOtherSubject ? [otherSubject || 'Other'] : [])].filter(Boolean);
+              const showDropdown = availableSubjects.length > 1;
+              const effectiveTarget = availableSubjects.length === 1 ? availableSubjects[0] : (availableSubjects.includes(customTopicTargetSubject) ? customTopicTargetSubject : availableSubjects[0]);
+              return (
+                <>
+                  <div style={{ fontSize: '13px', color: '#57534e', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span>Add custom topic to:</span>
+                    {showDropdown ? (
+                      <select value={effectiveTarget} onChange={(e) => setCustomTopicTargetSubject(e.target.value)} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #e7e5e4', fontSize: '14px', background: '#fff', cursor: 'pointer' }}>
+                        {availableSubjects.map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span style={{ fontWeight: '600', color: '#1c1917' }}>{effectiveTarget}</span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                    <input type="text" placeholder="Type a topic (1-100 characters)" maxLength={100} value={customTopicInput} onChange={(e) => { setCustomTopicInput(e.target.value); setCustomTopicWarning(''); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddCustomTopic(); } }} style={{ flex: 1, padding: '12px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '14px', boxSizing: 'border-box' }} />
+                    <button type="button" onClick={handleAddCustomTopic} onMouseEnter={() => setHovered('add-custom')} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 20px', background: hovered === 'add-custom' ? '#1a5f4a' : '#f5f5f4', color: hovered === 'add-custom' ? '#fff' : '#1a5f4a', border: '1px solid #e7e5e4', borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px', transition: 'all 0.2s ease' }}>+ Add</button>
+                  </div>
+                  {customTopicWarning && <p style={{ fontSize: '13px', color: '#dc2626', marginTop: '8px' }}>{customTopicWarning}</p>}
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -185,39 +625,41 @@ const RequestHelpFlow = () => {
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#1c1917' }}>
           What specifically are you struggling with? <span style={{ fontWeight: '400', color: '#a8a29e' }}>(optional)</span>
         </label>
-        <textarea rows={3} placeholder="Describe what you need help with..." style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+        <textarea rows={3} placeholder="Describe what you need help with..." value={description} onChange={(e) => setDescription(e.target.value)} style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }} />
       </div>
 
       {/* Urgency (SRS 2.2.3.9) */}
-      <div style={{ marginBottom: '40px' }}>
+      <div style={{ marginBottom: '28px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>
           How urgent is this? <span style={{ color: '#ef4444' }}>*</span>
         </label>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
           {[
-            { id: 'exam', icon: '🔥', label: 'Exam Soon', desc: 'Upcoming examination', selected: true },
-            { id: 'assignment', icon: '📝', label: 'Assignment Due', desc: 'Near-term deadline', selected: false },
-            { id: 'general', icon: '📚', label: 'General Study', desc: 'Ongoing learning', selected: false },
-          ].map(opt => (
-            <label key={opt.id} style={{ background: opt.selected ? '#fef2f2' : '#fff', border: `2px solid ${opt.selected ? '#fecaca' : '#e7e5e4'}`, borderRadius: '12px', padding: '20px 16px', cursor: 'pointer', textAlign: 'center' }}>
-              <input type="radio" name="urgency" style={{ display: 'none' }} />
-              <div style={{ fontSize: '28px', marginBottom: '8px' }}>{opt.icon}</div>
-              <div style={{ fontWeight: '600', color: '#1c1917', marginBottom: '4px', fontSize: '14px' }}>{opt.label}</div>
-              <div style={{ fontSize: '12px', color: '#a8a29e' }}>{opt.desc}</div>
-            </label>
-          ))}
+            { id: 'exam', icon: '🔥', label: 'Exam Soon', desc: 'Upcoming examination' },
+            { id: 'assignment', icon: '📝', label: 'Assignment Due', desc: 'Near-term deadline' },
+            { id: 'general', icon: '📚', label: 'General Study', desc: 'Ongoing learning' },
+          ].map(opt => {
+            const h = hovered === `urgency-${opt.id}`;
+            return (
+              <label key={opt.id} onClick={() => setUrgency(opt.id)} onMouseEnter={() => setHovered(`urgency-${opt.id}`)} onMouseLeave={() => setHovered(null)} style={{ background: urgency === opt.id ? '#fef2f2' : '#fff', border: `2px solid ${urgency === opt.id ? '#fecaca' : '#e7e5e4'}`, borderRadius: '12px', padding: '20px 16px', cursor: 'pointer', textAlign: 'center', boxShadow: h ? '0 4px 16px rgba(0,0,0,0.12)' : '0 2px 8px rgba(0,0,0,0.08)', transform: h ? 'translateY(-2px)' : 'none', transition: 'all 0.2s ease' }}>
+                <input type="radio" name="urgency" checked={urgency === opt.id} readOnly style={{ display: 'none' }} />
+                <div style={{ fontSize: '28px', marginBottom: '8px' }}>{opt.icon}</div>
+                <div style={{ fontWeight: '600', color: '#1c1917', marginBottom: '4px', fontSize: '14px' }}>{opt.label}</div>
+                <div style={{ fontSize: '12px', color: '#a8a29e' }}>{opt.desc}</div>
+              </label>
+            );
+          })}
         </div>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button onClick={() => setCurrentStep(2)} disabled={selectedTopics.length === 0} style={{ padding: '14px 32px', background: selectedTopics.length > 0 ? '#1a5f4a' : '#e7e5e4', color: selectedTopics.length > 0 ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedTopics.length > 0 ? 'pointer' : 'not-allowed', fontSize: '15px' }}>Continue →</button>
+        <button onClick={() => setCurrentStep(2)} disabled={!hasAnyTopics()} onMouseEnter={() => hasAnyTopics() && setHovered('cont1')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: hasAnyTopics() ? (hovered === 'cont1' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: hasAnyTopics() ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: hasAnyTopics() ? 'pointer' : 'not-allowed', fontSize: '15px', transition: 'all 0.2s ease' }}>Continue →</button>
       </div>
     </div>
-    );
-  };
+  );
 
   // STEP 2: Schedule & Location
-  const Step2 = () => (
+  const renderStep2 = () => (
     <div style={{ maxWidth: '700px', margin: '0 auto', padding: '48px 24px' }}>
       <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px', color: '#1c1917' }}>When and where works for you? 📅</h1>
       <p style={{ color: '#57534e', marginBottom: '36px' }}>Select your preferred time slots and location.</p>
@@ -228,12 +670,17 @@ const RequestHelpFlow = () => {
           Preferred Dates <span style={{ color: '#ef4444' }}>*</span> <span style={{ fontWeight: '400', color: '#a8a29e' }}>(select multiple)</span>
         </label>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          {[{ day: 'Mon', date: '13', selected: false }, { day: 'Tue', date: '14', selected: true }, { day: 'Wed', date: '15', selected: false }, { day: 'Thu', date: '16', selected: true }, { day: 'Fri', date: '17', selected: false }, { day: 'Sat', date: '18', selected: false }, { day: 'Sun', date: '19', selected: false }].map((d, i) => (
-            <button key={i} style={{ padding: '12px 16px', background: d.selected ? '#1a5f4a' : '#fff', color: d.selected ? '#fff' : '#57534e', border: `2px solid ${d.selected ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', minWidth: '70px', textAlign: 'center' }}>
-              <div style={{ fontSize: '12px', opacity: 0.8 }}>{d.day}</div>
-              <div style={{ fontSize: '18px', fontWeight: '600' }}>{d.date}</div>
-            </button>
-          ))}
+          {[{ day: 'Mon', date: '13' }, { day: 'Tue', date: '14' }, { day: 'Wed', date: '15' }, { day: 'Thu', date: '16' }, { day: 'Fri', date: '17' }, { day: 'Sat', date: '18' }, { day: 'Sun', date: '19' }].map((d) => {
+            const dateKey = `${d.day}-${d.date}`;
+            const isSelected = selectedDates.some((s) => s.day === d.day && s.date === d.date);
+            const h = hovered === `date-${dateKey}`;
+            return (
+              <button key={dateKey} type="button" onClick={() => toggleDate(d.day, d.date)} onMouseEnter={() => setHovered(`date-${dateKey}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 16px', background: h ? (isSelected ? '#145040' : '#f0faf5') : (isSelected ? '#1a5f4a' : '#fff'), color: isSelected ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `2px solid ${h ? '#1a5f4a' : (isSelected ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '10px', cursor: 'pointer', minWidth: '70px', textAlign: 'center', transition: 'all 0.15s ease' }}>
+                <div style={{ fontSize: '12px', opacity: 0.8 }}>{d.day}</div>
+                <div style={{ fontSize: '18px', fontWeight: '600' }}>{d.date}</div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -243,35 +690,49 @@ const RequestHelpFlow = () => {
           Preferred Time Slots <span style={{ color: '#ef4444' }}>*</span> <span style={{ fontWeight: '400', color: '#a8a29e' }}>(1-hour intervals)</span>
         </label>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
-          {['9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM'].map((time, i) => (
-            <button key={i} style={{ padding: '12px', background: [6, 7].includes(i) ? '#1a5f4a' : '#fff', color: [6, 7].includes(i) ? '#fff' : '#57534e', border: `1px solid ${[6, 7].includes(i) ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>{time}</button>
-          ))}
+          {['9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM'].map((time, i) => {
+            const sel = selectedTimeSlots.includes(i);
+            const h = hovered === `time-${time}`;
+            return (
+              <button key={time} type="button" onClick={() => toggleTimeSlot(i)} onMouseEnter={() => setHovered(`time-${time}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', cursor: 'pointer', fontSize: '14px', transition: 'all 0.15s ease' }}>{time}</button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Duration */}
+      {/* Duration (SRS 2.2.3.6: exactly 1h, 2h, 4h) */}
       <div style={{ marginBottom: '28px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>Session Duration</label>
         <div style={{ display: 'flex', gap: '12px' }}>
-          {['30 min', '1 hour', '1.5 hours', '2 hours'].map((dur, i) => (
-            <button key={dur} style={{ padding: '12px 24px', background: i === 1 ? '#1a5f4a' : '#fff', color: i === 1 ? '#fff' : '#57534e', border: `2px solid ${i === 1 ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500' }}>{dur}</button>
-          ))}
+          {['1 hour', '2 hours', '4 hours'].map((dur) => {
+            const hrs = DURATION_HOURS_MAP[dur] ?? 1;
+            const isSelected = durationHours === hrs;
+            const h = hovered === `dur-${dur}`;
+            return (
+              <button key={dur} onClick={() => setDurationHours(hrs)} onMouseEnter={() => setHovered(`dur-${dur}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 24px', background: h ? (isSelected ? '#145040' : '#f0faf5') : (isSelected ? '#1a5f4a' : '#fff'), color: isSelected ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `2px solid ${h ? '#1a5f4a' : (isSelected ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>{dur}</button>
+            );
+          })}
         </div>
       </div>
 
       {/* Planning Area with buttons + "Other" (matching Tutor UI) */}
       <div style={{ marginBottom: '28px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>
-          Preferred Area <span style={{ color: '#ef4444' }}>*</span>
+          Preferred Areas <span style={{ color: '#ef4444' }}>*</span>
+          <span style={{ fontWeight: '400', color: '#a8a29e', marginLeft: '8px' }}>(select one or more)</span>
         </label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
-          {['Clementi', 'Jurong East', 'Jurong West', 'Bukit Batok', 'Queenstown', 'Woodlands', 'Tampines', 'Bedok'].map((area, i) => (
-            <button key={area} style={{ padding: '10px 16px', background: i === 0 ? '#1a5f4a' : '#fff', color: i === 0 ? '#fff' : '#57534e', border: `1px solid ${i === 0 ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>{i === 0 && '✓ '}{area}</button>
-          ))}
-          <button onClick={() => setShowOtherArea(!showOtherArea)} style={{ padding: '10px 16px', background: showOtherArea ? '#1a5f4a' : '#fff', color: showOtherArea ? '#fff' : '#57534e', border: `1px solid ${showOtherArea ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>{showOtherArea && '✓ '}Other</button>
+          {PLANNING_AREAS_FULL.map((area) => {
+            const isSelected = !showOtherArea && selectedAreas.includes(area);
+            const h = hovered === `area-${area}`;
+            return (
+              <button key={area} type="button" onClick={() => togglePlanningArea(area)} onMouseEnter={() => setHovered(`area-${area}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: h ? (isSelected ? '#145040' : '#f0faf5') : (isSelected ? '#1a5f4a' : '#fff'), color: isSelected ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (isSelected ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>{isSelected && '✓ '}{area}</button>
+            );
+          })}
+          <button type="button" onClick={() => { setShowOtherArea(true); setSelectedAreas([]); }} onMouseEnter={() => setHovered('area-other')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === 'area-other' ? (showOtherArea ? '#145040' : '#f0faf5') : (showOtherArea ? '#1a5f4a' : '#fff'), color: showOtherArea ? '#fff' : (hovered === 'area-other' ? '#1a5f4a' : '#57534e'), border: `1px solid ${hovered === 'area-other' ? '#1a5f4a' : (showOtherArea ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>{showOtherArea && '✓ '}Other</button>
         </div>
         {showOtherArea && (
-          <input type="text" placeholder="Enter planning area (1-100 characters)" maxLength={100} style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', boxSizing: 'border-box' }} />
+          <input type="text" placeholder="Enter planning area (1-100 characters)" maxLength={100} value={otherArea} onChange={(e) => setOtherArea(e.target.value)} style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', boxSizing: 'border-box' }} />
         )}
       </div>
 
@@ -283,19 +744,38 @@ const RequestHelpFlow = () => {
         <p style={{ fontSize: '13px', color: '#a8a29e', marginBottom: '12px' }}>Select any accessibility requirements for the venue.</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '12px' }}>
           {['Wheelchair accessible venue required', 'Ground floor / lift access required', 'Hearing assistance / quiet environment needed', 'Visual aids / good lighting required'].map((opt, i) => (
-            <label key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-              <input type="checkbox" style={{ width: '20px', height: '20px', accentColor: '#1a5f4a' }} />
+            <label key={i} onClick={() => setAccessibilityNeeds((prev) => prev.includes(opt) ? prev.filter((o) => o !== opt) : [...prev, opt])} style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={accessibilityNeeds.includes(opt)} readOnly style={{ width: '20px', height: '20px', accentColor: '#1a5f4a' }} />
               <span style={{ fontSize: '14px', color: '#57534e' }}>{opt}</span>
             </label>
           ))}
         </div>
-        <textarea rows={2} maxLength={256} placeholder="Additional accessibility notes (optional, max 256 characters)" style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }} />
-        <div style={{ textAlign: 'right', fontSize: '12px', color: '#a8a29e', marginTop: '4px' }}>0 / 256</div>
+        <textarea rows={2} maxLength={256} placeholder="Additional accessibility notes (optional, max 256 characters)" value={accessibilityNotes} onChange={(e) => setAccessibilityNotes(e.target.value)} style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+        <div style={{ textAlign: 'right', fontSize: '12px', color: '#a8a29e', marginTop: '4px' }}>{accessibilityNotes.length} / 256</div>
       </div>
 
+      {/* Full Confirmation Summary */}
+      <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '20px', marginBottom: '32px' }}>
+        <div style={{ fontSize: '14px', fontWeight: '600', color: '#166534', marginBottom: '16px' }}>For confirmation, you need help with:</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '14px' }}>
+          <div><span style={{ color: '#78716c', marginRight: '8px' }}>Academic Level:</span><strong style={{ color: '#166534' }}>{ACADEMIC_LEVEL_MAP[academicLevel] ?? academicLevel}</strong></div>
+          <div><span style={{ color: '#78716c', marginRight: '8px' }}>Subjects:</span><strong style={{ color: '#166534' }}>{[...selectedSubjects, ...(showOtherSubject && otherSubject ? [otherSubject] : [])].filter(Boolean).join(', ') || '—'}</strong></div>
+          <div><span style={{ color: '#78716c', marginRight: '8px' }}>Topics:</span><strong style={{ color: '#166534' }}>{Object.entries(topicsBySubject).filter(([, t]) => t.length > 0).map(([s, t]) => `${s}: ${t.join(', ')}`).join(' | ') || '—'}</strong></div>
+          <div><span style={{ color: '#78716c', marginRight: '8px' }}>What you need help with:</span><strong style={{ color: '#166534' }}>{accessibilityNotes.trim() || 'None'}</strong></div>
+          <div><span style={{ color: '#78716c', marginRight: '8px' }}>Urgency:</span><strong style={{ color: '#166534' }}>{urgency === 'exam' ? 'Exam Soon' : urgency === 'assignment' ? 'Assignment Due' : 'General Study'}</strong></div>
+          <div><span style={{ color: '#78716c', marginRight: '8px' }}>Preferred times:</span><strong style={{ color: '#166534' }}>{selectedDates.length > 0 && selectedTimeSlots.length > 0 ? (() => { const times = ['9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM']; const fmt = (t) => (t || '').replace(':00 ', '').toLowerCase(); const sel = [...selectedTimeSlots].sort((a, b) => a - b); const start = fmt(times[sel[0]]); const end = fmt(times[Math.min(sel[sel.length - 1] + 1, 11)] || times[11]); return selectedDates.map((d) => `${d.day} ${d.date} Jan ${start}-${end}`).join(', '); })() : '—'}</strong></div>
+          <div><span style={{ color: '#78716c', marginRight: '8px' }}>Preferred areas:</span><strong style={{ color: '#166534' }}>{(showOtherArea && otherArea ? [otherArea] : selectedAreas).join(', ') || '—'}</strong></div>
+          <div><span style={{ color: '#78716c', marginRight: '8px' }}>Accessibility needs:</span><strong style={{ color: '#166534' }}>{accessibilityNeeds.length > 0 ? accessibilityNeeds.map((a) => ({ 'Wheelchair accessible venue required': 'Wheelchair access', 'Ground floor / lift access required': 'Ground floor / lift access', 'Hearing assistance / quiet environment needed': 'Hearing assistance', 'Visual aids / good lighting required': 'Visual aids' }[a] || a)).join(', ') : 'None specified'}</strong></div>
+          <div><span style={{ color: '#78716c', marginRight: '8px' }}>Session duration:</span><strong style={{ color: '#166534' }}>{durationHours} hour{durationHours > 1 ? 's' : ''}</strong></div>
+        </div>
+      </div>
+
+      {error && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '12px', marginBottom: '20px', fontSize: '14px', color: '#b91c1c' }}>{error}</div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <button onClick={() => setCurrentStep(1)} style={{ padding: '14px 24px', background: '#fff', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '10px', fontWeight: '500', cursor: 'pointer' }}>← Back</button>
-        <button onClick={() => setCurrentStep(3)} style={{ padding: '14px 32px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer' }}>Find Tutors →</button>
+        <button onClick={() => setCurrentStep(1)} onMouseEnter={() => setHovered('back2')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 24px', background: hovered === 'back2' ? '#f0faf5' : '#fff', color: '#57534e', border: `1px solid ${hovered === 'back2' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>← Back</button>
+        <button onClick={handleFindTutors} disabled={loading} onMouseEnter={() => !loading && setHovered('find')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: loading ? '#e7e5e4' : (hovered === 'find' ? '#2d7a61' : '#1a5f4a'), color: loading ? '#a8a29e' : '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer', transition: 'all 0.2s ease' }}>{loading ? 'Finding...' : 'Find Tutors →'}</button>
       </div> 
 
       {/* Planning Area with "Other" (SRS 2.2.3.7)
@@ -339,7 +819,194 @@ const RequestHelpFlow = () => {
   );
 
   // STEP 3: Choose Tutor
-  const Step3 = () => (
+  const renderStep3 = () => {
+    if (awaitingTutorAccept) {
+      const selectedTutorObj = recommendedTutors.find((t) => String(t.id) === String(selectedTutor));
+      const tutorDisplayName = selectedTutorObj?.name ?? 'your tutor';
+      return (
+        <div style={{ maxWidth: '560px', margin: '0 auto', padding: '48px 24px' }}>
+          <h1 style={{ fontSize: '24px', fontWeight: '700', color: '#166534', marginBottom: '20px', textAlign: 'center' }}>✓ Request Submitted Successfully!</h1>
+          <div
+            style={{
+              background: '#f0fdf4',
+              border: '1px solid #bbf7d0',
+              borderRadius: '12px',
+              padding: '20px',
+              marginBottom: '28px',
+              textAlign: 'left',
+            }}
+          >
+            <p style={{ color: '#166534', fontSize: '15px', lineHeight: 1.65, margin: 0 }}>
+              Your tutoring request has been sent to <strong>{tutorDisplayName}</strong>. You&apos;ll be notified when they accept and propose time slots.
+            </p>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
+            <button
+              type="button"
+              onClick={handleGoToMyDashboard}
+              disabled={loading}
+              onMouseEnter={() => !loading && setAwaitingScreenHover('dash')}
+              onMouseLeave={() => setAwaitingScreenHover(null)}
+              style={{
+                width: '100%',
+                padding: '14px 24px',
+                background: loading ? '#e7e5e4' : (awaitingScreenHover === 'dash' ? '#145040' : '#1a5f4a'),
+                color: loading ? '#a8a29e' : '#fff',
+                border: 'none',
+                borderRadius: '10px',
+                fontWeight: '600',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                fontSize: '16px',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              🏠 Go to My Dashboard
+            </button>
+            <button
+              type="button"
+              onClick={handleModifyRequestAfterTutorSubmit}
+              disabled={loading}
+              onMouseEnter={() => !loading && setAwaitingScreenHover('modify')}
+              onMouseLeave={() => setAwaitingScreenHover(null)}
+              style={{
+                width: '100%',
+                padding: '14px 24px',
+                background: awaitingScreenHover === 'modify' ? '#f0faf5' : '#fff',
+                color: '#1a5f4a',
+                border: `2px solid ${awaitingScreenHover === 'modify' ? '#1a5f4a' : '#e7e5e4'}`,
+                borderRadius: '10px',
+                fontWeight: '600',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                fontSize: '15px',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              ✏️ Modify Request
+            </button>
+            <button
+              type="button"
+              onClick={handleCancelThisRequest}
+              disabled={loading}
+              onMouseEnter={() => !loading && setAwaitingScreenHover('cancel')}
+              onMouseLeave={() => setAwaitingScreenHover(null)}
+              style={{
+                width: '100%',
+                padding: '14px 24px',
+                background: awaitingScreenHover === 'cancel' ? '#fef2f2' : '#fff',
+                color: '#b91c1c',
+                border: `1px solid ${awaitingScreenHover === 'cancel' ? '#ef4444' : '#e7e5e4'}`,
+                borderRadius: '10px',
+                fontWeight: '500',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                fontSize: '15px',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              ✕ Cancel this Request
+            </button>
+          </div>
+          {error && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '12px', marginBottom: '20px', fontSize: '14px', color: '#b91c1c' }}>{error}</div>
+          )}
+          <div style={{ borderTop: '1px solid #e7e5e4', paddingTop: '24px' }}>
+            <div style={{ fontSize: '15px', fontWeight: '600', color: '#1c1917', marginBottom: '14px' }}>What happens next?</div>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '14px', color: '#57534e', lineHeight: 1.55 }}>
+              <li>📬 Your request is visible to matching tutors</li>
+              <li>✓ Tutor will accept and propose time slots</li>
+              <li>📅 You confirm a time slot</li>
+              <li>💳 Complete payment to confirm session</li>
+              <li>🎓 Attend your session!</li>
+            </ul>
+          </div>
+        </div>
+      );
+    }
+
+    if (showWaitlistSuccess) {
+      return (
+        <div style={{ maxWidth: '560px', margin: '0 auto', padding: '48px 24px', textAlign: 'center' }}>
+          <div style={{ fontSize: '56px', marginBottom: '20px' }}>✓</div>
+          <h1 style={{ fontSize: '26px', fontWeight: '700', color: '#166534', marginBottom: '16px' }}>Your request has been submitted!</h1>
+          <p style={{ color: '#57534e', marginBottom: '12px', fontSize: '16px', lineHeight: 1.6 }}>
+            We&apos;ll send you a notification when a matching tutor accepts your request.
+          </p>
+          <p style={{ color: '#57534e', marginBottom: '32px', fontSize: '15px', lineHeight: 1.6 }}>
+            You can track your request in <strong>My Learning → Pending</strong>.
+          </p>
+          <button
+            type="button"
+            onClick={handleGoToDashboardAfterWaitlist}
+            style={{ padding: '14px 32px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '16px' }}
+          >
+            Go to Dashboard
+          </button>
+        </div>
+      );
+    }
+
+    if (recommendedTutors.length === 0) {
+      return (
+        <div style={{ maxWidth: '640px', margin: '0 auto', padding: '48px 24px' }}>
+          <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '12px', color: '#1c1917' }}>Choose your tutor 🎓</h1>
+          <p style={{ color: '#57534e', marginBottom: '28px', fontSize: '16px', lineHeight: 1.6 }}>
+            No tutors are currently available for your request.
+          </p>
+          <div style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px 20px', marginBottom: '28px', fontSize: '14px', color: '#1c1917' }}>
+            <div><strong>Level:</strong> {ACADEMIC_LEVEL_MAP[academicLevel] ?? academicLevel}</div>
+            <div style={{ marginTop: '8px' }}><strong>Topics:</strong> {getAllTopics().join(', ') || '—'}</div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div>
+              <button
+                type="button"
+                onClick={handleSubmitRequestAndWait}
+                onMouseEnter={() => setNoTutorsHover('submit')}
+                onMouseLeave={() => setNoTutorsHover(null)}
+                style={{
+                  width: '100%',
+                  padding: '16px',
+                  background: noTutorsHover === 'submit' ? '#145040' : '#1a5f4a',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                📬 Submit Request &amp; Wait for a Tutor
+              </button>
+              <p style={{ fontSize: '13px', color: '#78716c', marginTop: '10px', textAlign: 'center' }}>
+                We&apos;ll notify you when a matching tutor becomes available
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleModifyRequestFromNoTutors}
+              onMouseEnter={() => setNoTutorsHover('modify')}
+              onMouseLeave={() => setNoTutorsHover(null)}
+              style={{
+                width: '100%',
+                padding: '14px',
+                background: noTutorsHover === 'modify' ? '#f0faf5' : '#fff',
+                color: '#1a5f4a',
+                border: '2px solid #1a5f4a',
+                borderRadius: '12px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                fontSize: '15px',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              ← Modify my request
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
     <div style={{ maxWidth: '900px', margin: '0 auto', padding: '48px 24px' }}>
       <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px', color: '#1c1917' }}>Choose your tutor 🎓</h1>
       <p style={{ color: '#57534e', marginBottom: '24px' }}>We found {recommendedTutors.length} tutors matching your request.</p>
@@ -348,21 +1015,25 @@ const RequestHelpFlow = () => {
       <div style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px 20px', marginBottom: '24px', display: 'flex', gap: '24px', fontSize: '14px', flexWrap: 'wrap' }}>
         <span><strong>Level:</strong> University</span>
         <span><strong>Subject:</strong> Mathematics</span>
-        <span><strong>Topics:</strong> {selectedTopics.join(', ')}</span>
+        <span><strong>Topics:</strong> {getAllTopics().join(', ')}</span>
         <span><strong>Time:</strong> Tue/Thu, 3-4 PM</span>
       </div>
 
       {/* Sort Options */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
-        {['Best Match', 'Highest Rated', 'Nearest', 'Most Reliable'].map((opt, i) => (
-          <button key={opt} style={{ padding: '8px 16px', background: i === 0 ? '#1a5f4a' : '#fff', color: i === 0 ? '#fff' : '#57534e', border: `1px solid ${i === 0 ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '13px' }}>{opt}</button>
-        ))}
+        {['Best Match', 'Highest Rated', 'Nearest', 'Most Reliable'].map((opt, i) => {
+          const sel = i === 0;
+          const h = hovered === `sort-${opt}`;
+          return (
+            <button key={opt} onMouseEnter={() => setHovered(`sort-${opt}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '8px 16px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '13px', transition: 'all 0.15s ease' }}>{opt}</button>
+          );
+        })}
       </div>
 
       {/* Tutor Cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '32px' }}>
         {recommendedTutors.map((tutor, index) => (
-          <div key={tutor.id} onClick={() => setSelectedTutor(tutor.id)} style={{ background: '#fff', borderRadius: '16px', border: selectedTutor === tutor.id ? '3px solid #1a5f4a' : '1px solid #e7e5e4', padding: '24px', cursor: 'pointer', position: 'relative' }}>
+          <div key={tutor.id} onClick={() => setSelectedTutor(tutor.id)} onMouseEnter={() => setHovered(`tutor-${tutor.id}`)} onMouseLeave={() => setHovered(null)} style={{ background: '#fff', borderRadius: '16px', border: selectedTutor === tutor.id ? '3px solid #1a5f4a' : '1px solid #e7e5e4', padding: '24px', cursor: 'pointer', position: 'relative', boxShadow: hovered === `tutor-${tutor.id}` ? '0 4px 16px rgba(0,0,0,0.12)' : '0 2px 8px rgba(0,0,0,0.08)', transform: hovered === `tutor-${tutor.id}` ? 'translateY(-2px)' : 'none', transition: 'all 0.2s ease' }}>
             {index === 0 && <div style={{ position: 'absolute', top: '-12px', right: '20px', background: '#f59e0b', color: '#fff', padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>⭐ Best Match</div>}
             <div style={{ display: 'flex', gap: '20px' }}>
               <div style={{ width: '64px', height: '64px', background: '#f59e0b', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px', flexShrink: 0 }}>{tutor.initials}</div>
@@ -398,15 +1069,19 @@ const RequestHelpFlow = () => {
         ))}
       </div>
 
+      {error && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '12px', marginBottom: '20px', fontSize: '14px', color: '#b91c1c' }}>{error}</div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <button onClick={() => setCurrentStep(2)} style={{ padding: '14px 24px', background: '#fff', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '10px', fontWeight: '500', cursor: 'pointer' }}>← Back</button>
-        <button onClick={() => setCurrentStep(4)} disabled={!selectedTutor} style={{ padding: '14px 32px', background: selectedTutor ? '#1a5f4a' : '#e7e5e4', color: selectedTutor ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedTutor ? 'pointer' : 'not-allowed' }}>Choose Venue →</button>
+        <button onClick={() => setCurrentStep(2)} onMouseEnter={() => setHovered('back3')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 24px', background: hovered === 'back3' ? '#f0faf5' : '#fff', color: '#57534e', border: `1px solid ${hovered === 'back3' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>← Back</button>
+        <button onClick={handleSelectTutorAndProceed} disabled={!selectedTutor || loading} onMouseEnter={() => selectedTutor && !loading && setHovered('venue')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: selectedTutor && !loading ? (hovered === 'venue' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: selectedTutor && !loading ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedTutor && !loading ? 'pointer' : 'not-allowed', transition: 'all 0.2s ease' }}>{loading ? 'Creating...' : 'Choose Venue →'}</button>
       </div>
     </div>
-  );
+    );
+  };
 
   // STEP 4: Choose Venue
-  const Step4 = () => (
+  const renderStep4 = () => (
     <div style={{ maxWidth: '900px', margin: '0 auto', padding: '48px 24px' }}>
       <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px', color: '#1c1917' }}>Choose a meeting venue 📍</h1>
       <p style={{ color: '#57534e', marginBottom: '24px' }}>Safe public venues near both you and your tutor.</p>
@@ -433,7 +1108,7 @@ const RequestHelpFlow = () => {
       {/* Venue Cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '32px' }}>
         {recommendedVenues.map((venue, index) => (
-          <div key={venue.id} onClick={() => setSelectedVenue(venue.id)} style={{ background: '#fff', borderRadius: '16px', border: selectedVenue === venue.id ? '3px solid #1a5f4a' : '1px solid #e7e5e4', padding: '24px', cursor: 'pointer', position: 'relative' }}>
+          <div key={venue.id} onClick={() => setSelectedVenue(venue.id)} onMouseEnter={() => setHovered(`venue-${venue.id}`)} onMouseLeave={() => setHovered(null)} style={{ background: '#fff', borderRadius: '16px', border: selectedVenue === venue.id ? '3px solid #1a5f4a' : '1px solid #e7e5e4', padding: '24px', cursor: 'pointer', position: 'relative', boxShadow: hovered === `venue-${venue.id}` ? '0 4px 16px rgba(0,0,0,0.12)' : '0 2px 8px rgba(0,0,0,0.08)', transform: hovered === `venue-${venue.id}` ? 'translateY(-2px)' : 'none', transition: 'all 0.2s ease' }}>
             {index === 0 && <div style={{ position: 'absolute', top: '-12px', right: '20px', background: '#1a5f4a', color: '#fff', padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>🏆 Recommended</div>}
             <div style={{ display: 'flex', gap: '20px' }}>
               <div style={{ width: '64px', height: '64px', background: venue.type === 'Library' ? '#dbeafe' : '#fef3c7', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', flexShrink: 0 }}>{venue.type === 'Library' ? '📚' : '🏢'}</div>
@@ -463,15 +1138,18 @@ const RequestHelpFlow = () => {
         ))}
       </div>
 
+      {error && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '12px', marginBottom: '20px', fontSize: '14px', color: '#b91c1c' }}>{error}</div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <button onClick={() => setCurrentStep(3)} style={{ padding: '14px 24px', background: '#fff', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '10px', fontWeight: '500', cursor: 'pointer' }}>← Back</button>
-        <button onClick={() => setCurrentStep(5)} disabled={!selectedVenue} style={{ padding: '14px 32px', background: selectedVenue ? '#1a5f4a' : '#e7e5e4', color: selectedVenue ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedVenue ? 'pointer' : 'not-allowed' }}>Proceed to Payment →</button>
+        <button onClick={() => setCurrentStep(3)} onMouseEnter={() => setHovered('back4')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 24px', background: hovered === 'back4' ? '#f0faf5' : '#fff', color: '#57534e', border: `1px solid ${hovered === 'back4' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>← Back</button>
+        <button onClick={handleProceedToPayment} disabled={!selectedVenue || loading} onMouseEnter={() => selectedVenue && !loading && setHovered('pay4')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: selectedVenue && !loading ? (hovered === 'pay4' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: selectedVenue && !loading ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedVenue && !loading ? 'pointer' : 'not-allowed', transition: 'all 0.2s ease' }}>{loading ? 'Setting venue...' : 'Proceed to Payment →'}</button>
       </div>
     </div>
   );
 
   // STEP 5: Payment (NEW per SRS 2.8)
-  const Step5 = () => (
+  const renderStep5 = () => (
     <div style={{ maxWidth: '600px', margin: '0 auto', padding: '48px 24px' }}>
       <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px', color: '#1c1917' }}>Payment 💳</h1>
       <p style={{ color: '#57534e', marginBottom: '32px' }}>Complete payment to confirm your session.</p>
@@ -496,10 +1174,13 @@ const RequestHelpFlow = () => {
         </div>
         <div style={{ borderTop: '2px solid #e7e5e4', paddingTop: '16px', display: 'flex', justifyContent: 'space-between', fontSize: '18px' }}>
           <span style={{ fontWeight: '600', color: '#1c1917' }}>Total</span>
-          <span style={{ fontWeight: '700', color: '#1a5f4a' }}>$27.50</span>
+          <span style={{ fontWeight: '700', color: '#1a5f4a' }}>${sessionFee != null ? Number(sessionFee).toFixed(2) : '27.50'}</span>
         </div>
       </div>
 
+      {error && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '12px', marginBottom: '20px', fontSize: '14px', color: '#b91c1c' }}>{error}</div>
+      )}
       {/* Pricing Tiers Info (SRS 2.8.4) */}
       <div style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px', marginBottom: '24px', fontSize: '13px', color: '#57534e' }}>
         <strong>Pricing by Level:</strong> Primary $15/hr • Secondary $18/hr • JC/Poly/ITE $22/hr • University $25/hr
@@ -509,7 +1190,7 @@ const RequestHelpFlow = () => {
       <div style={{ marginBottom: '24px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>Payment Method</label>
         {[{ id: 'card', label: 'Credit / Debit Card', icon: '💳', selected: true }, { id: 'paynow', label: 'PayNow', icon: '📱', selected: false }].map(m => (
-          <label key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px', background: m.selected ? '#f0fdf4' : '#fff', border: `2px solid ${m.selected ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '12px', cursor: 'pointer', marginBottom: '12px' }}>
+          <label key={m.id} onMouseEnter={() => setHovered(`paym-${m.id}`)} onMouseLeave={() => setHovered(null)} style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px', background: m.selected ? '#f0fdf4' : '#fff', border: `2px solid ${m.selected ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '12px', cursor: 'pointer', marginBottom: '12px', boxShadow: hovered === `paym-${m.id}` ? '0 4px 16px rgba(0,0,0,0.12)' : '0 2px 8px rgba(0,0,0,0.08)', transform: hovered === `paym-${m.id}` ? 'translateY(-2px)' : 'none', transition: 'all 0.2s ease' }}>
             <input type="radio" name="payment" defaultChecked={m.selected} style={{ display: 'none' }} />
             <span style={{ fontSize: '24px' }}>{m.icon}</span>
             <span style={{ fontWeight: '500', color: '#1c1917' }}>{m.label}</span>
@@ -537,14 +1218,14 @@ const RequestHelpFlow = () => {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <button onClick={() => setCurrentStep(4)} style={{ padding: '14px 24px', background: '#fff', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '10px', fontWeight: '500', cursor: 'pointer' }}>← Back</button>
-        <button onClick={() => setCurrentStep(6)} style={{ padding: '14px 32px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer' }}>Pay $27.50 →</button>
+        <button onClick={() => setCurrentStep(4)} onMouseEnter={() => setHovered('back5')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 24px', background: hovered === 'back5' ? '#f0faf5' : '#fff', color: '#57534e', border: `1px solid ${hovered === 'back5' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>← Back</button>
+        <button onClick={handlePay} disabled={loading} onMouseEnter={() => !loading && setHovered('pay5')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: loading ? '#e7e5e4' : (hovered === 'pay5' ? '#2d7a61' : '#1a5f4a'), color: loading ? '#a8a29e' : '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer', transition: 'all 0.2s ease' }}>{loading ? 'Processing...' : `Pay $${sessionFee != null ? Number(sessionFee).toFixed(2) : '27.50'} →`}</button>
       </div>
     </div>
   );
 
   // STEP 6: Confirmation (SRS 2.7.4)
-  const Step6 = () => (
+  const renderStep6 = () => (
     <div style={{ maxWidth: '600px', margin: '0 auto', padding: '48px 24px' }}>
       <div style={{ textAlign: 'center', marginBottom: '32px' }}>
         <div style={{ width: '80px', height: '80px', background: '#dcfce7', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', fontSize: '40px' }}>✓</div>
@@ -561,7 +1242,7 @@ const RequestHelpFlow = () => {
       <div style={{ background: '#fff', borderRadius: '20px', border: '1px solid #e7e5e4', overflow: 'hidden', marginBottom: '24px' }}>
         <div style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #2d8a6e 100%)', padding: '24px', color: '#fff' }}>
           <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '4px' }}>University • Mathematics</div>
-          <h2 style={{ fontSize: '24px', fontWeight: '700' }}>{selectedTopics.join(', ')}</h2>
+          <h2 style={{ fontSize: '24px', fontWeight: '700' }}>{getAllTopics().join(', ')}</h2>
         </div>
         <div style={{ padding: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #e7e5e4' }}>
@@ -594,23 +1275,26 @@ const RequestHelpFlow = () => {
 
       {/* Actions */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        <button style={{ width: '100%', padding: '16px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', fontSize: '16px' }}>📅 Add to Calendar</button>
-        <button style={{ width: '100%', padding: '14px', background: '#fff', color: '#1a5f4a', border: '2px solid #1a5f4a', borderRadius: '12px', fontWeight: '600', cursor: 'pointer' }}>💬 Message Tutor</button>
-        <button style={{ width: '100%', padding: '14px', background: '#fff', color: '#57534e', border: '1px solid #e7e5e4', borderRadius: '12px', fontWeight: '500', cursor: 'pointer' }}>← Back to Dashboard</button>
+        <button onMouseEnter={() => setHovered('cal')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '16px', background: hovered === 'cal' ? '#2d7a61' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', fontSize: '16px', transition: 'all 0.2s ease' }}>📅 Add to Calendar</button>
+        <button onMouseEnter={() => setHovered('msg')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'msg' ? '#f0faf5' : '#fff', color: '#1a5f4a', border: '2px solid #1a5f4a', borderRadius: '12px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s ease' }}>💬 Message Tutor</button>
+        <button onClick={() => navigate('/dashboard')} onMouseEnter={() => setHovered('dash')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'dash' ? '#f0faf5' : '#fff', color: '#57534e', border: `1px solid ${hovered === 'dash' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '12px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>← Back to Dashboard</button>
       </div>
     </div>
   );
 
   return (
     <div style={{ minHeight: '100vh', background: '#fafaf9', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-      <FlowHeader />
-      <StepIndicator />
-      {currentStep === 1 && <Step1 />}
-      {currentStep === 2 && <Step2 />}
-      {currentStep === 3 && <Step3 />}
-      {currentStep === 4 && <Step4 />}
-      {currentStep === 5 && <Step5 />}
-      {currentStep === 6 && <Step6 />}
+      <TuteeFlowHeader
+        onCancel={handleFlowHeaderCancel}
+        cancelLabel={awaitingTutorAccept ? '✕ Cancel this Request' : '✕ Cancel Request'}
+      />
+      <TuteeStepIndicator currentStep={currentStep} />
+      {currentStep === 1 && renderStep1()}
+      {currentStep === 2 && renderStep2()}
+      {currentStep === 3 && renderStep3()}
+      {currentStep === 4 && renderStep4()}
+      {currentStep === 5 && renderStep5()}
+      {currentStep === 6 && renderStep6()}
     </div>
   );
 };

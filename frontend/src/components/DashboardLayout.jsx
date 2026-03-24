@@ -14,9 +14,9 @@ const DashboardLayout = ({ activeTab, onTabChange, badges = {}, children }) => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [hovered, setHovered] = useState(null);
 
-  // Get user display info from Supabase user_metadata
-  const fullName = user?.user_metadata?.full_name || 'User';
+  const fullName = user?.full_name || 'User';
   const initials = fullName
     .split(' ')
     .map((n) => n[0])
@@ -58,24 +58,35 @@ const DashboardLayout = ({ activeTab, onTabChange, badges = {}, children }) => {
         <nav style={{ display: 'flex', gap: '8px' }}>
           <button
             onClick={() => onTabChange('home')}
+            onMouseEnter={() => setHovered('nav-dashboard')}
+            onMouseLeave={() => setHovered(null)}
             style={{
-              background: activeTab === 'home' ? 'rgba(255,255,255,0.2)' : 'transparent',
+              background: activeTab === 'home' ? 'rgba(255,255,255,0.2)' : (hovered === 'nav-dashboard' ? 'rgba(255,255,255,0.15)' : 'transparent'),
               border: 'none', padding: '10px 20px', borderRadius: '8px',
               color: '#fff', fontSize: '15px', fontWeight: '500', cursor: 'pointer',
+              transition: 'all 0.2s ease',
             }}
           >🏠 Dashboard</button>
           <button
             onClick={() => navigate('/request-help')}
+            onMouseEnter={() => setHovered('nav-get-help')}
+            onMouseLeave={() => setHovered(null)}
             style={{
-              background: 'transparent', border: 'none', padding: '10px 20px',
+              background: hovered === 'nav-get-help' ? 'rgba(255,255,255,0.15)' : 'transparent',
+              border: 'none', padding: '10px 20px',
               borderRadius: '8px', color: '#fff', fontSize: '15px', fontWeight: '500', cursor: 'pointer',
+              transition: 'all 0.2s ease',
             }}
           >🎓 Get Help</button>
           <button
             onClick={() => navigate('/offer-tutor')}
+            onMouseEnter={() => setHovered('nav-offer-help')}
+            onMouseLeave={() => setHovered(null)}
             style={{
-              background: 'transparent', border: 'none', padding: '10px 20px',
+              background: hovered === 'nav-offer-help' ? 'rgba(255,255,255,0.15)' : 'transparent',
+              border: 'none', padding: '10px 20px',
               borderRadius: '8px', color: '#fff', fontSize: '15px', fontWeight: '500', cursor: 'pointer',
+              transition: 'all 0.2s ease',
             }}
           >💡 Offer Help</button>
         </nav>
@@ -85,10 +96,14 @@ const DashboardLayout = ({ activeTab, onTabChange, badges = {}, children }) => {
           {/* Notification bell */}
           <button
             onClick={() => onTabChange('notifications')}
+            onMouseEnter={() => setHovered('bell')}
+            onMouseLeave={() => setHovered(null)}
             style={{
-              background: 'rgba(255,255,255,0.1)', border: 'none',
+              background: hovered === 'bell' ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)',
+              border: 'none',
               width: '44px', height: '44px', borderRadius: '10px',
               cursor: 'pointer', fontSize: '20px', position: 'relative',
+              transition: 'all 0.2s ease',
             }}
           >
             🔔
@@ -106,10 +121,14 @@ const DashboardLayout = ({ activeTab, onTabChange, badges = {}, children }) => {
           <div style={{ position: 'relative' }}>
             <div
               onClick={() => setShowProfileMenu(!showProfileMenu)}
+              onMouseEnter={() => setHovered('profile')}
+              onMouseLeave={() => setHovered(null)}
               style={{
                 display: 'flex', alignItems: 'center', gap: '10px',
-                background: 'rgba(255,255,255,0.2)', padding: '6px 14px 6px 6px',
+                background: hovered === 'profile' ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.15)',
+                padding: '6px 14px 6px 6px',
                 borderRadius: '10px', cursor: 'pointer',
+                transition: 'all 0.2s ease',
               }}
             >
               <div style={{
@@ -170,22 +189,27 @@ const DashboardLayout = ({ activeTab, onTabChange, badges = {}, children }) => {
         <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex' }}>
           {TABS.map((tab) => {
             const badgeCount = badges[tab.id] || tab.badge;
+            const isSelected = activeTab === tab.id;
+            const isHovered = hovered === `tab-${tab.id}`;
             return (
               <button
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}
+                onMouseEnter={() => setHovered(`tab-${tab.id}`)}
+                onMouseLeave={() => setHovered(null)}
                 style={{
-                  background: 'transparent',
+                  background: isSelected ? 'transparent' : (isHovered ? '#f0faf5' : 'transparent'),
                   border: 'none',
                   padding: '18px 24px',
                   fontSize: '15px',
-                  fontWeight: activeTab === tab.id ? '600' : '500',
-                  color: activeTab === tab.id ? '#1a5f4a' : '#57534e',
+                  fontWeight: isSelected ? '600' : '500',
+                  color: isSelected ? '#1a5f4a' : (isHovered ? '#1a5f4a' : '#57534e'),
                   cursor: 'pointer',
-                  borderBottom: activeTab === tab.id ? '3px solid #1a5f4a' : '3px solid transparent',
+                  borderBottom: isSelected ? '3px solid #1a5f4a' : '3px solid transparent',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
+                  transition: 'all 0.2s ease',
                 }}
               >
                 {tab.label}
