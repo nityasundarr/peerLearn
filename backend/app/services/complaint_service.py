@@ -161,25 +161,28 @@ def record_action(
         + timedelta(days=settings.APPEAL_WINDOW_DAYS)
     ).isoformat()
 
-    complaints_db.create_disciplinary_record(
+    record = complaints_db.create_disciplinary_record(
         user_id=body.affected_user_id,
         complaint_id=complaint_id,
         penalty_type=body.penalty_type,
         appeal_deadline=appeal_deadline,
     )
+    record_id = record.get("id", "")
 
     # Update complaint status
     complaints_db.update_complaint_status(complaint_id, body.update_status)
 
-    # Notify affected user
+    # Notify affected user — type "penalty_issued" lets the frontend show an
+    # "Appeal" action; record_id is embedded so the appeal page can be pre-filled.
     notifications_db.create_notification(
         user_id=body.affected_user_id,
-        notification_type="admin_alert",
+        notification_type="penalty_issued",
         title="Disciplinary action issued",
         content=(
             f"A {body.penalty_type} has been issued against your account. "
             f"Action taken: {body.action}. "
-            f"You may submit an appeal before {appeal_deadline[:10]}."
+            f"You may submit an appeal before {appeal_deadline[:10]}. "
+            f"[record:{record_id}]"
         ),
         is_mandatory=True,
     )

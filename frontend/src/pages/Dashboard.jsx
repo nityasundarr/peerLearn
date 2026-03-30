@@ -1114,6 +1114,7 @@ const Dashboard = () => {
     if (t === 'request_matched') return 'View in My Tutoring →';
     if (t === 'payment_received' || t.includes('payment')) return 'View session →';
     if (t === 'new_message' || t.includes('message')) return 'View chat →';
+    if (t === 'penalty_issued') return 'Appeal →';
     return 'View →';
   };
 
@@ -1154,6 +1155,16 @@ const Dashboard = () => {
       setLearningFilterTab('upcoming');
     } else if (type === 'request_matched' || type.includes('incoming')) {
       setActiveTab('tutoring');
+    } else if (type === 'penalty_issued') {
+      const match = String(notif?.content || notif?.message || '').match(/\[record:([^\]]+)\]/);
+      const recordId = match?.[1];
+      if (recordId) {
+        navigate(`/appeal/${recordId}`, {
+          state: {
+            penalty_type: String(notif?.content || notif?.message || '').match(/A (\w+) has been issued/)?.[1] ?? null,
+          },
+        });
+      }
     } else if (type.includes('complaint') || type.includes('appeal')) {
       // stay on notifications tab, do nothing
     } else {
@@ -1698,6 +1709,26 @@ const Dashboard = () => {
                 ⭐ Leave Feedback
               </button>
             )}
+            {learningFilterTab === 'past' && (
+              <button
+                type="button"
+                onClick={() => navigate('/complaints', { state: { preselectedSessionId: tuteeSession.id } })}
+                onMouseEnter={() => setHovered(`learn-report-${tuteeSession.id}`)}
+                onMouseLeave={() => setHovered(null)}
+                style={{
+                  padding: '10px 20px',
+                  background: hovered === `learn-report-${tuteeSession.id}` ? '#fef2f2' : '#fff',
+                  color: '#ef4444',
+                  border: `1px solid ${hovered === `learn-report-${tuteeSession.id}` ? '#ef4444' : '#fecaca'}`,
+                  borderRadius: '8px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                🚨 Report Issue
+              </button>
+            )}
             <button
               type="button"
               onMouseEnter={() => setHovered(`learn-cancel-${tuteeSession.id}`)}
@@ -1976,6 +2007,26 @@ const Dashboard = () => {
                       }}
                     >
                       💬 Message
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/complaints', { state: { preselectedSessionId: sid } })}
+                      onMouseEnter={() => setHovered(`tutor-report-card-${cardHoverId}`)}
+                      onMouseLeave={() => setHovered(null)}
+                      style={{
+                        marginTop: '8px',
+                        padding: '10px 16px',
+                        background: hovered === `tutor-report-card-${cardHoverId}` ? '#fef2f2' : '#fff',
+                        color: '#ef4444',
+                        border: `1px solid ${hovered === `tutor-report-card-${cardHoverId}` ? '#ef4444' : '#fecaca'}`,
+                        borderRadius: '8px',
+                        fontWeight: '500',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      🚨 Report Issue
                     </button>
                   </div>
                 </div>
