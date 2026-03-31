@@ -195,6 +195,8 @@ const FeedbackForm = () => {
                 style={{
                   background: 'transparent',
                   border: 'none',
+                  padding: '0 2px',
+                  lineHeight: '1',
                   fontSize: '40px',
                   cursor: alreadyRated ? 'default' : 'pointer',
                   transition: 'transform 0.1s',
