@@ -28,7 +28,9 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:5173"
 
     # External APIs
-    ONEMAP_API_KEY: str = ""
+    ONEMAP_API_KEY: str = ""          # JWT access token (3-day expiry) — auto-refreshed if credentials set
+    ONEMAP_EMAIL: str = ""            # OneMap account email — used to auto-refresh expired token
+    ONEMAP_PASSWORD: str = ""         # OneMap account password — used to auto-refresh expired token
     GOOGLE_MAPS_API_KEY: str = ""
 
     # Fee schedule (SGD per hour per academic level)

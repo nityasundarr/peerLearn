@@ -13,6 +13,7 @@ Hard Rule 10: coordinates remain inside this module only.
 """
 
 import logging
+import time
 
 import httpx
 
@@ -26,6 +27,78 @@ from app.services.location_service import (
 )
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# OneMap token management — auto-refresh when expired
+# ---------------------------------------------------------------------------
+
+_ONEMAP_TOKEN_URL = "https://www.onemap.gov.sg/api/auth/post/getToken"
+
+# Module-level token cache: {"token": str, "expires_at": float (unix timestamp)}
+_token_cache: dict = {"token": "", "expires_at": 0.0}
+
+
+async def _get_onemap_token() -> str:
+    """Return a valid OneMap Bearer token, refreshing automatically if expired.
+
+    Priority:
+      1. Cached token that is still valid (>5 min buffer)
+      2. settings.ONEMAP_API_KEY if not empty and not expired
+      3. Auto-refresh via ONEMAP_EMAIL + ONEMAP_PASSWORD credentials
+      4. Empty string (OneMap calls will be skipped)
+    """
+    now = time.time()
+    buffer = 300  # 5-minute safety buffer
+
+    # Use cached token if still valid
+    if _token_cache["token"] and _token_cache["expires_at"] > now + buffer:
+        return _token_cache["token"]
+
+    # Seed cache from settings on first call (parse expiry from JWT payload)
+    if settings.ONEMAP_API_KEY and not _token_cache["token"]:
+        try:
+            import base64, json as _json
+            parts = settings.ONEMAP_API_KEY.split(".")
+            if len(parts) == 3:
+                # Decode JWT payload (add padding if needed)
+                payload_b64 = parts[1] + "=="
+                payload = _json.loads(base64.urlsafe_b64decode(payload_b64))
+                exp = float(payload.get("exp", 0))
+                _token_cache["token"] = settings.ONEMAP_API_KEY
+                _token_cache["expires_at"] = exp
+                if exp > now + buffer:
+                    return _token_cache["token"]
+        except Exception as exc:
+            logger.debug("Could not parse ONEMAP_API_KEY JWT expiry: %s", exc)
+            # Treat as non-expiring for now
+            _token_cache["token"] = settings.ONEMAP_API_KEY
+            _token_cache["expires_at"] = now + 86400
+            return _token_cache["token"]
+
+    # Token expired or not set — try to refresh via credentials
+    if settings.ONEMAP_EMAIL and settings.ONEMAP_PASSWORD:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    _ONEMAP_TOKEN_URL,
+                    json={"email": settings.ONEMAP_EMAIL, "password": settings.ONEMAP_PASSWORD},
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    new_token = data.get("access_token", "")
+                    exp_ts = float(data.get("expiry_timestamp", now + 259200))
+                    _token_cache["token"] = new_token
+                    _token_cache["expires_at"] = exp_ts
+                    logger.info("OneMap token refreshed; expires at %s", exp_ts)
+                    return new_token
+                else:
+                    logger.warning("OneMap token refresh failed: %s %s", resp.status_code, resp.text)
+        except httpx.RequestError as exc:
+            logger.warning("OneMap token refresh request failed: %s", exc)
+
+    # Return whatever token we have, even if expired (will likely get 401)
+    return _token_cache.get("token", "") or settings.ONEMAP_API_KEY
+
 
 # Venue type suitability scores (SRS 2.8: only public academic venues)
 _TYPE_SCORES: dict[str, float] = {
@@ -116,12 +189,43 @@ async def _fetch_onemap_venues(area: str) -> list[dict]:
 
     Returns raw venue dicts with lat/lng — caller must strip before any response.
     Falls back to empty list on any error.
+    Automatically retries once with a refreshed token on 401.
     """
-    token = settings.ONEMAP_API_KEY
+    token = await _get_onemap_token()
     if not token:
+        logger.info(
+            "OneMap API key not configured; skipping live venue fetch. "
+            "Set ONEMAP_API_KEY or ONEMAP_EMAIL+ONEMAP_PASSWORD in .env."
+        )
         return []
 
+    def _parse_results(raw_results: list, term: str) -> list[dict]:
+        out = []
+        for r in raw_results:
+            try:
+                lat = float(r.get("LATITUDE") or 0)
+                lng = float(r.get("LONGITUDE") or r.get("LONGTITUDE") or 0)  # handle OneMap typo
+                if lat == 0 or lng == 0:
+                    continue
+                out.append({
+                    "name": r.get("SEARCHVAL", r.get("BUILDING", "")),
+                    "address": r.get("ADDRESS", ""),
+                    "planning_area": area,
+                    "lat": lat,    # Internal only — never in response
+                    "lng": lng,    # Internal only — never in response
+                    "venue_type": _ONEMAP_VENUE_TYPES.get(term.lower(), "study_area"),
+                    "accessibility_features": [],
+                    "opening_hours": None,
+                    "source": "onemap",
+                    "id": f"onemap-{r.get('POSTAL', '')}",
+                })
+            except (ValueError, KeyError):
+                continue
+        return out
+
     venues: list[dict] = []
+    refreshed = False
+
     async with httpx.AsyncClient(timeout=10.0) as client:
         for term in _VENUE_SEARCH_TERMS:
             try:
@@ -135,33 +239,34 @@ async def _fetch_onemap_venues(area: str) -> list[dict]:
                     },
                     headers={"Authorization": f"Bearer {token}"},
                 )
+
+                # Token expired — refresh once and retry
+                if resp.status_code == 401 and not refreshed and settings.ONEMAP_EMAIL:
+                    logger.info("OneMap token expired; attempting refresh")
+                    _token_cache["expires_at"] = 0.0  # force refresh
+                    token = await _get_onemap_token()
+                    refreshed = True
+                    resp = await client.get(
+                        _ONEMAP_SEARCH_URL,
+                        params={
+                            "searchVal": f"{term} {area}",
+                            "returnGeom": "Y",
+                            "getAddrDetails": "Y",
+                            "pageNum": 1,
+                        },
+                        headers={"Authorization": f"Bearer {token}"},
+                    )
+
                 if resp.status_code != 200:
+                    logger.debug("OneMap search returned %s for '%s %s'", resp.status_code, term, area)
                     continue
+
                 data = resp.json()
-                for r in data.get("results", []):
-                    try:
-                        lat = float(r.get("LATITUDE") or 0)
-                        lng = float(r.get("LONGITUDE") or 0)
-                        if lat == 0 or lng == 0:
-                            continue
-                        venues.append(
-                            {
-                                "name": r.get("SEARCHVAL", ""),
-                                "address": r.get("ADDRESS", ""),
-                                "planning_area": area,
-                                "lat": lat,    # Internal only — never in response
-                                "lng": lng,    # Internal only — never in response
-                                "venue_type": _ONEMAP_VENUE_TYPES.get(term.lower(), "study_area"),
-                                "accessibility_features": [],
-                                "opening_hours": None,
-                                "source": "onemap",
-                                "id": f"onemap-{r.get('POSTAL', '')}",
-                            }
-                        )
-                    except (ValueError, KeyError):
-                        continue
+                venues.extend(_parse_results(data.get("results", []), term))
+
             except httpx.RequestError as exc:
                 logger.warning("OneMap API call failed for '%s %s': %s", term, area, exc)
+
     return venues
 
 
