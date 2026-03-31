@@ -62,7 +62,7 @@ const ProfileSettings = () => {
   const [tutorModeActive, setTutorModeActive] = useState(true);
 
   const [profile, setProfile] = useState({ full_name: '', email: '', preferred_language: 'en', planning_area: '', planning_area_other: '', school: '', school_other: '' });
-  const [tutorProfile, setTutorProfile] = useState({ subjects: [], tutor_topics: [], max_weekly_hours: 5, planning_areas: [], accessibility_notes: '' });
+  const [tutorProfile, setTutorProfile] = useState({ academic_levels: [], subjects: [], tutor_topics: [], max_weekly_hours: 5, planning_areas: [], accessibility_capabilities: [], accessibility_notes: '' });
   const [privacy, setPrivacy] = useState({ show_full_name: true, show_school: true, show_rating: true, allow_message_before_booking: true });
   const [notifications, setNotifications] = useState({ session_requests: true, reminders: true, feedback: false, push: true });
 
@@ -97,12 +97,14 @@ const ProfileSettings = () => {
   useEffect(() => {
     api.get('/tutor-profile')
       .then(({ data }) => {
-        setTutorModeActive(data.is_active_mode ?? true);
+        setTutorModeActive(data.is_active_mode ?? false);
         setTutorProfile({
+          academic_levels: data.academic_levels ?? [],
           subjects: data.subjects ?? [],
-          tutor_topics: data.tutor_topics ?? [],
+          tutor_topics: data.topics ?? [],
           max_weekly_hours: data.max_weekly_hours ?? 5,
           planning_areas: data.planning_areas ?? [],
+          accessibility_capabilities: data.accessibility_capabilities ?? [],
           accessibility_notes: data.accessibility_notes ?? '',
         });
       })
@@ -147,7 +149,13 @@ const ProfileSettings = () => {
     setLoading(true);
     try {
       await api.put('/tutor-profile', {
-        ...tutorProfile,
+        academic_levels: tutorProfile.academic_levels,
+        subjects: tutorProfile.subjects,
+        tutor_topics: tutorProfile.tutor_topics,
+        planning_areas: tutorProfile.planning_areas,
+        accessibility_capabilities: tutorProfile.accessibility_capabilities,
+        accessibility_notes: tutorProfile.accessibility_notes || null,
+        max_weekly_hours: tutorProfile.max_weekly_hours,
         is_active_mode: tutorModeActive,
       });
     } catch (err) {
@@ -324,9 +332,17 @@ const ProfileSettings = () => {
           <button onMouseEnter={() => setHovered('edit-topics')} onMouseLeave={() => setHovered(null)} style={{ padding: '8px 16px', background: hovered === 'edit-topics' ? '#f0faf5' : '#fff', border: `1px solid ${hovered === 'edit-topics' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', fontSize: '13px', cursor: 'pointer', color: '#1a5f4a', fontWeight: '500', transition: 'all 0.2s ease' }}>+ Edit Topics</button>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-          {['Mathematics', 'Calculus', 'Integration', 'Differentiation', 'Linear Algebra'].map(topic => (
-            <span key={topic} style={{ background: '#f5f5f4', padding: '8px 14px', borderRadius: '8px', fontSize: '14px', color: '#57534e' }}>{topic}</span>
-          ))}
+          {tutorProfile.tutor_topics.length > 0
+            ? tutorProfile.tutor_topics.map((t, i) => (
+                <span key={i} style={{ background: '#f5f5f4', padding: '8px 14px', borderRadius: '8px', fontSize: '14px', color: '#57534e' }}>{t.subject}: {t.topic}</span>
+              ))
+            : tutorProfile.subjects.map((s) => (
+                <span key={s} style={{ background: '#f5f5f4', padding: '8px 14px', borderRadius: '8px', fontSize: '14px', color: '#57534e' }}>{s}</span>
+              ))
+          }
+          {tutorProfile.tutor_topics.length === 0 && tutorProfile.subjects.length === 0 && (
+            <span style={{ fontSize: '14px', color: '#a8a29e' }}>No topics added yet</span>
+          )}
         </div>
       </div>
 
@@ -334,9 +350,12 @@ const ProfileSettings = () => {
       <div style={{ marginBottom: '32px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>Maximum hours per week</label>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          {['2 hrs', '3 hrs', '5 hrs', '8 hrs', '10 hrs', '15 hrs', '20 hrs'].map((hrs, i) => (
-            <button key={hrs} onMouseEnter={() => setHovered(`hrs-${i}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 20px', background: i === 2 ? (hovered === `hrs-${i}` ? '#145040' : '#1a5f4a') : (hovered === `hrs-${i}` ? '#f0faf5' : '#fff'), color: i === 2 ? '#fff' : '#57534e', border: `2px solid ${i === 2 ? '#1a5f4a' : (hovered === `hrs-${i}` ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>{hrs}</button>
-          ))}
+          {[2, 3, 5, 8, 10].map((hrs) => {
+            const selected = tutorProfile.max_weekly_hours === hrs;
+            return (
+              <button key={hrs} onClick={() => setTutorProfile((p) => ({ ...p, max_weekly_hours: hrs }))} onMouseEnter={() => setHovered(`hrs-${hrs}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 20px', background: selected ? (hovered === `hrs-${hrs}` ? '#145040' : '#1a5f4a') : (hovered === `hrs-${hrs}` ? '#f0faf5' : '#fff'), color: selected ? '#fff' : '#57534e', border: `2px solid ${selected ? '#1a5f4a' : (hovered === `hrs-${hrs}` ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '10px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>{hrs} hrs</button>
+            );
+          })}
         </div>
       </div>
 
@@ -344,9 +363,12 @@ const ProfileSettings = () => {
       <div style={{ marginBottom: '32px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>Preferred tutoring areas</label>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-          {['Clementi', 'Jurong East', 'Jurong West', 'Bukit Batok', 'Queenstown', 'Other'].map((area, i) => (
-            <button key={area} style={{ padding: '10px 16px', background: i < 2 ? '#1a5f4a' : '#fff', color: i < 2 ? '#fff' : '#57534e', border: `1px solid ${i < 2 ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>{i < 2 && '✓ '}{area}</button>
-          ))}
+          {PLANNING_AREAS.map((area) => {
+            const selected = tutorProfile.planning_areas.includes(area);
+            return (
+              <button key={area} onClick={() => setTutorProfile((p) => ({ ...p, planning_areas: selected ? p.planning_areas.filter((a) => a !== area) : [...p.planning_areas, area] }))} style={{ padding: '10px 16px', background: selected ? '#1a5f4a' : '#fff', color: selected ? '#fff' : '#57534e', border: `1px solid ${selected ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '8px', cursor: 'pointer', fontWeight: '500' }}>{selected && '✓ '}{area}</button>
+            );
+          })}
         </div>
       </div>
 
@@ -358,15 +380,18 @@ const ProfileSettings = () => {
         </label>
         <p style={{ fontSize: '13px', color: '#a8a29e', marginBottom: '12px' }}>Indicate if you can cater to tutees with accessibility needs.</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '12px' }}>
-          {['I can accommodate wheelchair users', 'I can use hearing assistance devices', 'I am flexible with venue accessibility requirements'].map((opt, i) => (
-            <label key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-              <input type="checkbox" defaultChecked={i === 2} style={{ width: '20px', height: '20px', accentColor: '#1a5f4a' }} />
-              <span style={{ fontSize: '14px', color: '#57534e' }}>{opt}</span>
-            </label>
-          ))}
+          {['I can accommodate wheelchair users', 'I can use hearing assistance devices', 'I am flexible with venue accessibility requirements'].map((opt) => {
+            const checked = tutorProfile.accessibility_capabilities.includes(opt);
+            return (
+              <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
+                <input type="checkbox" checked={checked} onChange={() => setTutorProfile((p) => ({ ...p, accessibility_capabilities: checked ? p.accessibility_capabilities.filter((c) => c !== opt) : [...p.accessibility_capabilities, opt] }))} style={{ width: '20px', height: '20px', accentColor: '#1a5f4a' }} />
+                <span style={{ fontSize: '14px', color: '#57534e' }}>{opt}</span>
+              </label>
+            );
+          })}
         </div>
-        <textarea rows={2} maxLength={100} placeholder="Additional notes (1-100 characters)" style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }} />
-        <div style={{ textAlign: 'right', fontSize: '12px', color: '#a8a29e', marginTop: '4px' }}>0 / 100</div>
+        <textarea rows={2} maxLength={100} value={tutorProfile.accessibility_notes} onChange={(e) => setTutorProfile((p) => ({ ...p, accessibility_notes: e.target.value }))} placeholder="Additional notes (1-100 characters)" style={{ width: '100%', padding: '14px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '15px', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }} />
+        <div style={{ textAlign: 'right', fontSize: '12px', color: '#a8a29e', marginTop: '4px' }}>{(tutorProfile.accessibility_notes || '').length} / 100</div>
       </div>
 
       <div style={{ display: 'flex', gap: '12px' }}>
