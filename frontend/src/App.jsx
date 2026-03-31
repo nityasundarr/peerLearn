@@ -10,6 +10,7 @@ import OfferToTutor from './pages/OfferToTutor';
 import ProfileSettings from './pages/ProfileSettings';
 import SessionMessaging from './pages/SessionMessaging';
 import FeedbackForm from './pages/FeedbackForm';
+import SessionDetail from './pages/SessionDetail';
 
 // Pages - new ones you'll create (placeholder for now)
 // import SignUp from './pages/SignUp';
@@ -134,7 +135,6 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      {/*
       <Route
         path="/session/:sessionId"
         element={
@@ -143,7 +143,6 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      */}
 
       {/* Catch-all: redirect unknown routes to landing */}
       <Route path="*" element={<Navigate to="/" replace />} />
