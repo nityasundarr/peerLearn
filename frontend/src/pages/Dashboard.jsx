@@ -615,6 +615,7 @@ const Dashboard = () => {
   const rolesLower = (Array.isArray(user?.roles) ? user.roles : []).map((r) => String(r).toLowerCase());
   const hasTutorRole = rolesLower.includes('tutor');
   const hasTuteeRole = rolesLower.length === 0 || rolesLower.includes('tutee') || rolesLower.includes('student');
+  const isAdmin = rolesLower.includes('admin');
 
   const tutoringPendingSelectionCount = mergedTutorIncoming.filter((s) => {
     const st = normalizeSessionStatus(s);
@@ -1329,6 +1330,7 @@ const Dashboard = () => {
           <div style={{ display: 'flex', gap: '12px' }}>
             <button onClick={() => navigate('/request-help')} onMouseEnter={() => setHovered('req-help')} onMouseLeave={() => setHovered(null)} style={{ background: hovered === 'req-help' ? '#fbbf24' : '#f59e0b', border: 'none', padding: '12px 24px', borderRadius: '10px', color: '#fff', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s ease' }}>🎓 Request Help</button>
             <button onClick={() => navigate('/offer-tutor')} onMouseEnter={() => setHovered('offer')} onMouseLeave={() => setHovered(null)} style={{ background: hovered === 'offer' ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)', padding: '12px 24px', borderRadius: '10px', color: '#fff', fontWeight: '600', cursor: 'pointer', transition: 'all 0.15s ease' }}>💡 Offer to Tutor</button>
+            {isAdmin && <button onClick={() => navigate('/admin/overview')} onMouseEnter={() => setHovered('admin')} onMouseLeave={() => setHovered(null)} style={{ background: hovered === 'admin' ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.5)', padding: '12px 24px', borderRadius: '10px', color: '#fff', fontWeight: '600', cursor: 'pointer', transition: 'all 0.15s ease' }}>🛠️ Admin Console</button>}
           </div>
         </div>
 
