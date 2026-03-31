@@ -42,12 +42,14 @@ def _profile_data(body: TutorProfileRequest) -> dict:
 
 
 def _fetch_full(tutor_id: str) -> TutorProfileResponse:
-    """Fetch profile + topics and return a combined response."""
+    """Fetch profile + topics + reliability metrics + workload and return a combined response."""
     profile = tutor_profile_db.get_profile(tutor_id)
     if not profile:
         raise NotFoundError("Tutor profile not found.")
     topics = tutor_profile_db.get_topics(tutor_id)
-    return TutorProfileResponse.from_db(profile, topics)
+    metrics = tutor_profile_db.get_reliability_metrics(tutor_id)
+    confirmed_hours = tutor_profile_db.get_confirmed_hours_this_week(tutor_id)
+    return TutorProfileResponse.from_db(profile, topics, metrics, confirmed_hours)
 
 
 # ---------------------------------------------------------------------------

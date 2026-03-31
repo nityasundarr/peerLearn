@@ -240,3 +240,37 @@ def init_reliability_metrics(tutor_id: str) -> None:
         ).execute()
     except Exception as exc:
         raise _db_error("init_reliability_metrics", exc) from exc
+
+
+def get_reliability_metrics(tutor_id: str) -> dict:
+    """Return the reliability metrics row for a tutor, or defaults if not found."""
+    try:
+        res = (
+            supabase.table("tutor_reliability_metrics")
+            .select("total_sessions, no_shows, avg_rating, score")
+            .eq("tutor_id", tutor_id)
+            .maybe_single()
+            .execute()
+        )
+        return res.data or {"total_sessions": 0, "no_shows": 0, "avg_rating": 0.0, "score": 100}
+    except Exception as exc:
+        raise _db_error("get_reliability_metrics", exc) from exc
+
+
+def get_confirmed_hours_this_week(tutor_id: str) -> float:
+    """Return the tutor's confirmed hours for the current ISO week from workload table."""
+    from datetime import date
+    iso_week = date.today().isocalendar()
+    week_str = f"{iso_week.year}-W{iso_week.week:02d}"
+    try:
+        res = (
+            supabase.table("workload")
+            .select("confirmed_hours")
+            .eq("tutor_id", tutor_id)
+            .eq("week", week_str)
+            .maybe_single()
+            .execute()
+        )
+        return float((res.data or {}).get("confirmed_hours", 0))
+    except Exception:
+        return 0.0

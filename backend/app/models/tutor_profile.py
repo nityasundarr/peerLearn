@@ -175,13 +175,21 @@ class TutorProfileResponse(BaseModel):
     is_active_mode: bool
     created_at: str
     updated_at: str
+    # Stats from tutor_reliability_metrics + workload
+    avg_rating: float = 0.0
+    total_sessions: int = 0
+    reliability_score: int = 100
+    confirmed_hours_this_week: float = 0.0
 
     @classmethod
     def from_db(
         cls,
         profile_row: dict,
         topic_rows: list[dict],
+        metrics: dict | None = None,
+        confirmed_hours: float = 0.0,
     ) -> "TutorProfileResponse":
+        m = metrics or {}
         return cls(
             user_id=profile_row["user_id"],
             academic_levels=profile_row.get("academic_levels") or [],
@@ -197,6 +205,10 @@ class TutorProfileResponse(BaseModel):
             is_active_mode=profile_row.get("is_active_mode", False),
             created_at=str(profile_row.get("created_at", "")),
             updated_at=str(profile_row.get("updated_at", "")),
+            avg_rating=float(m.get("avg_rating") or 0.0),
+            total_sessions=int(m.get("total_sessions") or 0),
+            reliability_score=int(m.get("score") or 100),
+            confirmed_hours_this_week=confirmed_hours,
         )
 
 

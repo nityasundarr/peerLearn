@@ -575,6 +575,7 @@ const Dashboard = () => {
   const [selectedChatSessionId, setSelectedChatSessionId] = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatPollingRef, setChatPollingRef] = useState(null);
+  const [tutorStats, setTutorStats] = useState(null);
 
   const stableSetChatSessionId = useCallback(
     (id) => setSelectedChatSessionId(id),
@@ -747,6 +748,15 @@ const Dashboard = () => {
     }
   };
 
+  const fetchTutorStats = async () => {
+    try {
+      const { data } = await api.get('/tutor-profile');
+      setTutorStats(data);
+    } catch {
+      setTutorStats(null);
+    }
+  };
+
   const fetchNotifications = async () => {
     try {
       const { data } = await api.get('/notifications');
@@ -779,6 +789,7 @@ const Dashboard = () => {
         fetchTutoringSessions(),
         fetchTutorIncomingRequests(),
         fetchNotifications(),
+        fetchTutorStats(),
       ]);
       if (!cancelled) setLoading(false);
     };
@@ -1790,7 +1801,12 @@ const Dashboard = () => {
     <div>
       {/* Tutor Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
-        {[{ label: 'Rating', value: '⭐ 4.8' }, { label: 'Weekly Hours', value: '2/5' }, { label: 'Reliability', value: '98%' }, { label: 'Total Sessions', value: '24' }].map((s, i) => (
+        {[
+          { label: 'Rating', value: tutorStats ? (tutorStats.avg_rating > 0 ? `⭐ ${tutorStats.avg_rating.toFixed(1)}` : '⭐ —') : '…' },
+          { label: 'Weekly Hours', value: tutorStats ? `${tutorStats.confirmed_hours_this_week}/${tutorStats.max_weekly_hours}` : '…' },
+          { label: 'Reliability', value: tutorStats ? `${tutorStats.reliability_score}%` : '…' },
+          { label: 'Total Sessions', value: tutorStats ? String(tutorStats.total_sessions) : '…' },
+        ].map((s, i) => (
           <div key={i} style={{ background: '#fff', borderRadius: '12px', padding: '20px', border: '1px solid #e7e5e4', textAlign: 'center' }}>
             <div style={{ fontSize: '24px', fontWeight: '700', color: '#1a5f4a' }}>{s.value}</div>
             <div style={{ fontSize: '13px', color: '#57534e' }}>{s.label}</div>
