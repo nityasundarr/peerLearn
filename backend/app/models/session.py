@@ -115,6 +115,9 @@ class SessionResponse(BaseModel):
     cancel_reason: str | None
     created_at: str
     updated_at: str
+    # Venue details resolved from venues table (venue_id sessions only)
+    venue_name: str | None = None
+    venue_address: str | None = None
     # Optional fields from joined tutoring_requests and users (list_sessions)
     tutee_name: str | None = None
     subjects: list[str] | None = None
@@ -143,6 +146,8 @@ class SessionResponse(BaseModel):
             cancel_reason=row.get("cancel_reason"),
             created_at=str(row.get("created_at", "")),
             updated_at=str(row.get("updated_at", "")),
+            venue_name=row.get("venue_name"),
+            venue_address=row.get("venue_address"),
             tutee_name=row.get("tutee_name"),
             subjects=row.get("subjects"),
             topics=row.get("topics"),

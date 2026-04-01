@@ -20,7 +20,7 @@ propose-slots: no state change (tutor stores proposed slots; tutee then confirms
 import logging
 
 from app.core.errors import ForbiddenError, NotFoundError, UnprocessableError
-from app.db import messaging_db, notifications_db, requests_db, sessions_db
+from app.db import messaging_db, notifications_db, requests_db, sessions_db, venues_db
 from app.models.session import (
     CancelSessionBody,
     ConfirmSlotBody,
@@ -308,6 +308,19 @@ def list_sessions(
     return [SessionResponse.from_db(r) for r in rows]
 
 
+def _enrich_venue(row: dict) -> dict:
+    """Inject venue_name and venue_address into a session row if venue_id is set."""
+    venue_id = row.get("venue_id")
+    if venue_id:
+        try:
+            venue = venues_db.get_venue_by_id(venue_id)
+            if venue:
+                row = {**row, "venue_name": venue.get("name"), "venue_address": venue.get("address")}
+        except Exception:
+            pass
+    return row
+
+
 def get_session(session_id: str, user_id: str) -> SessionResponse:
     row = _get_session_or_404(session_id, user_id)
-    return SessionResponse.from_db(row)
+    return SessionResponse.from_db(_enrich_venue(row))
