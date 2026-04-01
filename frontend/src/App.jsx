@@ -13,6 +13,7 @@ import FeedbackForm from './pages/FeedbackForm';
 import Complaints from './pages/Complaints';
 import PenaltyAppeal from './pages/PenaltyAppeal';
 import SessionDetail from './pages/SessionDetail';
+import SessionCoordination from './pages/SessionCoordination';
 import AdminOverview from './pages/Admin/Overview';
 import DemandAnalytics from './pages/Admin/DemandAnalytics';
 import SupplyAnalytics from './pages/Admin/SupplyAnalytics';
@@ -149,6 +150,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <PenaltyAppeal />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/session/:sessionId/coordinate"
+        element={
+          <ProtectedRoute>
+            <SessionCoordination />
           </ProtectedRoute>
         }
       />

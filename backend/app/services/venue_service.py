@@ -112,6 +112,16 @@ _W_DISTANCE = 0.50
 _W_TYPE = 0.30
 _W_ACCESSIBILITY = 0.20
 
+# Map tutee accessibility_needs strings → venue feature keys required to satisfy them.
+# If a tutee has a need and the venue lacks the required feature, the venue is heavily
+# penalised so it sinks to the bottom of the recommendation list.
+_NEED_TO_FEATURE: dict[str, str] = {
+    "wheelchair accessible venue required": "wheelchair_accessible",
+    "ground floor / lift access required": "lift_access",
+    "hearing assistance / quiet environment needed": "hearing_loop",
+    "visual aids / good lighting required": "good_lighting",
+}
+
 
 # ---------------------------------------------------------------------------
 # Scoring helpers
@@ -121,45 +131,105 @@ def _score_venue(
     venue: dict,
     tutee_areas: list[str],
     tutor_areas: list[str],
+    tutee_needs: list[str] | None = None,
 ) -> tuple[float, str]:
     """Return (suitability_score 0-100, distance_bucket) for a venue.
 
     Uses venue.lat / venue.lng for precise distance if available.
     Falls back to planning_area centroid distance if not.
     Hard Rule 10: these coordinates never leave this function.
+
+    tutee_needs: list of accessibility need strings from the tutoring request.
+      Each need is mapped to a required venue feature via _NEED_TO_FEATURE.
+      A venue missing any required feature has its accessibility score set to 0,
+      causing it to rank below venues that satisfy all needs.
     """
     vtype = venue.get("venue_type", "")
     type_score = _TYPE_SCORES.get(vtype, 40.0)
 
-    # Distance: minimum of (tutee→venue, tutor→venue)
-    best_km: float | None = None
+    # Distance scoring: compute distance from each party's centroid to venue,
+    # then use the AVERAGE (not minimum) so venues equidistant to both parties
+    # score better than venues only close to one party.
+    # Bonus: if the venue is in a planning area both parties chose, add 10 pts.
     venue_lat = venue.get("lat")
     venue_lng = venue.get("lng")
+    venue_planning_area = (venue.get("planning_area") or "").lower()
 
-    for area in tutee_areas + tutor_areas:
+    tutee_kms: list[float] = []
+    tutor_kms: list[float] = []
+
+    def _dist_from_area(area: str) -> float | None:
         centroid = _get_centroid(area)
-        if centroid:
-            if venue_lat and venue_lng:
-                km = _haversine_km(centroid[0], centroid[1], float(venue_lat), float(venue_lng))
-            else:
-                # Fallback: distance between planning area centroids
-                vcent = _get_centroid(venue.get("planning_area", ""))
-                if not vcent:
-                    continue
-                km = _haversine_km(centroid[0], centroid[1], vcent[0], vcent[1])
-            if best_km is None or km < best_km:
-                best_km = km
+        if not centroid:
+            return None
+        if venue_lat and venue_lng:
+            return _haversine_km(centroid[0], centroid[1], float(venue_lat), float(venue_lng))
+        vcent = _get_centroid(venue.get("planning_area", ""))
+        if not vcent:
+            return None
+        return _haversine_km(centroid[0], centroid[1], vcent[0], vcent[1])
 
-    if best_km is None:
+    for area in tutee_areas:
+        d = _dist_from_area(area)
+        if d is not None:
+            tutee_kms.append(d)
+    for area in tutor_areas:
+        d = _dist_from_area(area)
+        if d is not None:
+            tutor_kms.append(d)
+
+    # Best distance from each party (closest area they chose)
+    tutee_best = min(tutee_kms) if tutee_kms else None
+    tutor_best = min(tutor_kms) if tutor_kms else None
+
+    if tutee_best is not None and tutor_best is not None:
+        avg_km = (tutee_best + tutor_best) / 2
+    elif tutee_best is not None:
+        avg_km = tutee_best
+    elif tutor_best is not None:
+        avg_km = tutor_best
+    else:
+        avg_km = None
+
+    if avg_km is None:
         bucket = "Medium"
         distance_score = 60.0
     else:
-        bucket = _km_to_bucket(best_km)
+        bucket = _km_to_bucket(avg_km)
         distance_score = {"Near": 100.0, "Medium": 60.0, "Far": 20.0}.get(bucket, 40.0)
 
-    # Accessibility score: simple check — does the venue have any features listed?
-    access_feats = venue.get("accessibility_features") or []
-    access_score = 100.0 if access_feats else 50.0
+    # Bonus for venues in areas both parties explicitly chose (common ground)
+    tutee_area_set = {a.lower() for a in tutee_areas}
+    tutor_area_set = {a.lower() for a in tutor_areas}
+    if venue_planning_area and venue_planning_area in tutee_area_set & tutor_area_set:
+        distance_score = min(distance_score + 10.0, 100.0)
+
+    # Accessibility score: match tutee needs against venue features.
+    access_feats = {f.lower() for f in (venue.get("accessibility_features") or [])}
+
+    if tutee_needs:
+        # Build the set of feature keys this tutee requires
+        required_features = set()
+        for need in tutee_needs:
+            feat = _NEED_TO_FEATURE.get(need.lower())
+            if feat:
+                required_features.add(feat)
+
+        if required_features:
+            missing = required_features - access_feats
+            if missing:
+                # Venue cannot satisfy at least one hard accessibility requirement
+                access_score = 0.0
+            else:
+                # All requirements met — full score
+                access_score = 100.0
+        else:
+            # Needs were specified but none mapped to a known feature (e.g. free-text notes)
+            # Fall back to presence check
+            access_score = 100.0 if access_feats else 50.0
+    else:
+        # No accessibility needs — reward venues that have features anyway
+        access_score = 100.0 if access_feats else 50.0
 
     composite = (
         _W_DISTANCE * distance_score
@@ -182,6 +252,20 @@ _ONEMAP_VENUE_TYPES = {
     "community center": "community_centre",
     "study area": "study_area",
 }
+
+# Keywords that indicate a venue is NOT a suitable study location.
+# OneMap's elastic search returns broad matches (e.g. "community centre TAMPINES"
+# returns PCF Sparkletots preschools because they share addresses with CCs).
+_BLOCKLIST_KEYWORDS = [
+    "sparkletots", "sparkle tots",
+    "preschool", "pre-school",
+    "kindergarten",
+    "childcare", "child care",
+    "pcf ", "pcf@",
+    "nurserycreche",
+    "infant care",
+    "playgroup",
+]
 
 
 async def _fetch_onemap_venues(area: str) -> list[dict]:
@@ -207,9 +291,15 @@ async def _fetch_onemap_venues(area: str) -> list[dict]:
                 lng = float(r.get("LONGITUDE") or r.get("LONGTITUDE") or 0)  # handle OneMap typo
                 if lat == 0 or lng == 0:
                     continue
+                name = r.get("SEARCHVAL", r.get("BUILDING", ""))
+                address = r.get("ADDRESS", "")
+                # Skip venues that are clearly not suitable study locations
+                combined = (name + " " + address).lower()
+                if any(kw in combined for kw in _BLOCKLIST_KEYWORDS):
+                    continue
                 out.append({
-                    "name": r.get("SEARCHVAL", r.get("BUILDING", "")),
-                    "address": r.get("ADDRESS", ""),
+                    "name": name,
+                    "address": address,
                     "planning_area": area,
                     "lat": lat,    # Internal only — never in response
                     "lng": lng,    # Internal only — never in response
@@ -289,12 +379,14 @@ async def recommend_venues(
     """
     tutee_areas: list[str] = []
     tutor_areas: list[str] = []
+    tutee_needs: list[str] = []
 
     if request_id:
         from app.db.requests_db import get_request_by_id
         req = get_request_by_id(request_id)
         if req:
             tutee_areas = req.get("planning_areas") or []
+            tutee_needs = req.get("accessibility_needs") or []
 
     if tutor_id:
         from app.db.tutor_profile_db import get_profile
@@ -346,7 +438,7 @@ async def recommend_venues(
     # Score and sort — lat/lng used internally here, then dropped
     scored: list[tuple[float, str, dict]] = []
     for venue in all_venues:
-        score, bucket = _score_venue(venue, tutee_areas, tutor_areas)
+        score, bucket = _score_venue(venue, tutee_areas, tutor_areas, tutee_needs)
         scored.append((score, bucket, venue))
 
     scored.sort(key=lambda x: x[0], reverse=True)

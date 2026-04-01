@@ -220,7 +220,7 @@ def login_user(
     roles: list[str] = user.get("roles") or []
     access_token = create_access_token(
         subject=user_id,
-        extra_claims={"roles": roles, "email": email},
+        extra_claims={"roles": roles, "email": email, "full_name": user["full_name"]},
     )
     refresh_token = create_refresh_token(subject=user_id)
 

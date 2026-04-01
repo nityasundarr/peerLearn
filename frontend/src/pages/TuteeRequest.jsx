@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import CalendarSlotPicker from '../components/CalendarSlotPicker';
 
 // ============================================================
 // SECTION 3: REQUEST HELP FLOW (UPDATED)
@@ -80,8 +81,8 @@ const RequestHelpFlow = () => {
 
   const [academicLevel, setAcademicLevel] = useState('uni');
   const [urgency, setUrgency] = useState('exam');
-  const [selectedDates, setSelectedDates] = useState([]);
-  const [selectedTimeSlots, setSelectedTimeSlots] = useState([]);
+  const [selectedDates, setSelectedDates] = useState(new Set());
+  const [selectedHours, setSelectedHours] = useState(new Set());
   const [durationHours, setDurationHours] = useState(1);
   const [selectedAreas, setSelectedAreas] = useState([]);
   const [otherArea, setOtherArea] = useState('');
@@ -146,17 +147,6 @@ const RequestHelpFlow = () => {
     explanation: v.explanation ?? '',
   });
 
-  const getNextDateForWeekday = (dayName) => {
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const targetDow = days.indexOf(dayName);
-    const today = new Date();
-    const currentDow = today.getDay();
-    let diff = targetDow - currentDow;
-    if (diff <= 0) diff += 7;
-    const next = new Date(today);
-    next.setDate(today.getDate() + diff);
-    return next.toISOString().slice(0, 10);
-  };
 
   const getAllTopics = () => Object.values(topicsBySubject).flat();
   const hasAnyTopics = () => getAllTopics().length > 0;
@@ -208,6 +198,7 @@ const RequestHelpFlow = () => {
       [targetKey]: [...(prev[targetKey] || []), trimmed],
     }));
     setCustomTopicInput('');
+    setCustomTopicTargetSubject(null);
   };
 
   const handleSubjectToggle = (subjectName) => {
@@ -248,30 +239,28 @@ const RequestHelpFlow = () => {
     });
   };
 
-  const toggleDate = (day, date) => {
+  const handleToggleDate = (iso) => {
     setSelectedDates((prev) => {
-      const has = prev.some((s) => s.day === day && s.date === date);
-      if (has) return prev.filter((s) => !(s.day === day && s.date === date));
-      return [...prev, { day, date }];
+      const next = new Set();
+      if (!prev.has(iso)) next.add(iso); // clicking selected date deselects; clicking new date replaces
+      return next;
     });
   };
 
-  const toggleTimeSlot = (slotIndex) => {
-    setSelectedTimeSlots((prev) => {
-      const current = Array.isArray(prev) ? [...prev] : [];
-      const idx = current.indexOf(slotIndex);
-      if (idx === -1) return [...current, slotIndex].sort((a, b) => a - b);
-      return current.filter((x) => x !== slotIndex);
+  const handleToggleHour = (h) => {
+    setSelectedHours((prev) => {
+      const next = new Set(prev);
+      if (next.has(h)) next.delete(h); else next.add(h);
+      return next;
     });
   };
 
   const buildRequestPayload = () => {
     const subjects = [...selectedSubjects, ...(showOtherSubject && otherSubject ? [otherSubject] : [])].filter(Boolean);
     const areas = showOtherArea ? (otherArea ? [otherArea] : selectedAreas) : selectedAreas;
-    const timeSlots = selectedDates.flatMap((d) => {
-      const isoDate = getNextDateForWeekday(d.day);
-      return selectedTimeSlots.map((h) => ({ date: isoDate, hour_slot: h + 9 }));
-    });
+    const timeSlots = [...selectedDates].flatMap((date) =>
+      [...selectedHours].map((h) => ({ date, hour_slot: h })),
+    );
     const payload = {
       academic_level: ACADEMIC_LEVEL_MAP[academicLevel] || 'University',
       subjects,
@@ -546,16 +535,16 @@ const RequestHelpFlow = () => {
             <span style={{ fontWeight: '400', color: '#a8a29e', marginLeft: '8px' }}>(select one or more)</span>
           </label>
 
-          {selectedSubjects.map(subjectName => {
+          {[...selectedSubjects, ...(showOtherSubject ? [otherSubject || 'Other'] : [])].filter(Boolean).map(subjectName => {
             const subject = allSubjects.find(s => s.name === subjectName);
-            if (!subject) return null;
             const subjectTopics = topicsBySubject[subjectName] || [];
-            const customTopics = subjectTopics.filter((t) => !subject.topics.includes(t));
+            const predefined = subject ? subject.topics : [];
+            const customTopics = subjectTopics.filter((t) => !predefined.includes(t));
             return (
               <div key={subjectName} style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px', marginBottom: '12px' }}>
                 <div style={{ fontWeight: '600', color: '#1c1917', marginBottom: '12px' }}>📚 {subjectName} Topics</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {subject.topics.map(topic => {
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: predefined.length > 0 ? '12px' : '0' }}>
+                  {predefined.map(topic => {
                     const isSelected = subjectTopics.includes(topic);
                     const h = hovered === `topic-${subjectName}-${topic}`;
                     return (
@@ -570,53 +559,34 @@ const RequestHelpFlow = () => {
                     </button>
                   ))}
                 </div>
+                {/* Inline custom topic input per subject */}
+                <div style={{ borderTop: '1px solid #e7e5e4', paddingTop: '12px', marginTop: '4px' }}>
+                  <div style={{ fontSize: '12px', color: '#78716c', marginBottom: '8px' }}>Can't find your topic? Add it here:</div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      type="text"
+                      placeholder="e.g. Fourier Transforms"
+                      maxLength={100}
+                      value={customTopicTargetSubject === subjectName ? customTopicInput : ''}
+                      onChange={(e) => { setCustomTopicTargetSubject(subjectName); setCustomTopicInput(e.target.value); setCustomTopicWarning(''); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); setCustomTopicTargetSubject(subjectName); handleAddCustomTopic(); } }}
+                      style={{ flex: 1, padding: '9px 13px', borderRadius: '8px', border: '1px solid #e7e5e4', fontSize: '13px', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setCustomTopicTargetSubject(subjectName); handleAddCustomTopic(); }}
+                      onMouseEnter={() => setHovered(`add-custom-${subjectName}`)}
+                      onMouseLeave={() => setHovered(null)}
+                      style={{ padding: '9px 16px', background: hovered === `add-custom-${subjectName}` ? '#1a5f4a' : '#fff', color: hovered === `add-custom-${subjectName}` ? '#fff' : '#1a5f4a', border: '1px solid #1a5f4a', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '13px', transition: 'all 0.15s ease', whiteSpace: 'nowrap' }}
+                    >+ Add</button>
+                  </div>
+                  {customTopicWarning && customTopicTargetSubject === subjectName && (
+                    <p style={{ fontSize: '12px', color: '#dc2626', marginTop: '6px', margin: '6px 0 0' }}>{customTopicWarning}</p>
+                  )}
+                </div>
               </div>
             );
           })}
-
-          {showOtherSubject && (
-            <div style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px', marginBottom: '12px' }}>
-              <div style={{ fontWeight: '600', color: '#1c1917', marginBottom: '12px' }}>📚 {otherSubject || 'Other'} Topics</div>
-              <p style={{ fontSize: '13px', color: '#57534e', marginBottom: '8px' }}>Add custom topics below.</p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
-                {(topicsBySubject[otherSubject || 'Other'] || []).map(topic => (
-                  <button key={topic} type="button" onClick={() => toggleTopic(otherSubject || 'Other', topic)} onMouseEnter={() => setHovered(`otopic-${topic}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === `otopic-${topic}` ? '#145040' : '#1a5f4a', color: '#fff', border: '1px solid #1a5f4a', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px', transition: 'all 0.15s ease' }}>
-                    ✓ {topic}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Custom Topic Input */}
-          <div>
-            {(() => {
-              const availableSubjects = [...selectedSubjects, ...(showOtherSubject ? [otherSubject || 'Other'] : [])].filter(Boolean);
-              const showDropdown = availableSubjects.length > 1;
-              const effectiveTarget = availableSubjects.length === 1 ? availableSubjects[0] : (availableSubjects.includes(customTopicTargetSubject) ? customTopicTargetSubject : availableSubjects[0]);
-              return (
-                <>
-                  <div style={{ fontSize: '13px', color: '#57534e', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    <span>Add custom topic to:</span>
-                    {showDropdown ? (
-                      <select value={effectiveTarget} onChange={(e) => setCustomTopicTargetSubject(e.target.value)} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #e7e5e4', fontSize: '14px', background: '#fff', cursor: 'pointer' }}>
-                        {availableSubjects.map((s) => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span style={{ fontWeight: '600', color: '#1c1917' }}>{effectiveTarget}</span>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
-                    <input type="text" placeholder="Type a topic (1-100 characters)" maxLength={100} value={customTopicInput} onChange={(e) => { setCustomTopicInput(e.target.value); setCustomTopicWarning(''); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddCustomTopic(); } }} style={{ flex: 1, padding: '12px 16px', borderRadius: '10px', border: '1px solid #e7e5e4', fontSize: '14px', boxSizing: 'border-box' }} />
-                    <button type="button" onClick={handleAddCustomTopic} onMouseEnter={() => setHovered('add-custom')} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 20px', background: hovered === 'add-custom' ? '#1a5f4a' : '#f5f5f4', color: hovered === 'add-custom' ? '#fff' : '#1a5f4a', border: '1px solid #e7e5e4', borderRadius: '10px', cursor: 'pointer', fontWeight: '500', fontSize: '14px', transition: 'all 0.2s ease' }}>+ Add</button>
-                  </div>
-                  {customTopicWarning && <p style={{ fontSize: '13px', color: '#dc2626', marginTop: '8px' }}>{customTopicWarning}</p>}
-                </>
-              );
-            })()}
-          </div>
         </div>
       )}
 
@@ -664,40 +634,18 @@ const RequestHelpFlow = () => {
       <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px', color: '#1c1917' }}>When and where works for you? 📅</h1>
       <p style={{ color: '#57534e', marginBottom: '36px' }}>Select your preferred time slots and location.</p>
 
-      {/* Date Selection */}
+      {/* Date + Time Slot Selection */}
       <div style={{ marginBottom: '28px' }}>
-        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>
-          Preferred Dates <span style={{ color: '#ef4444' }}>*</span> <span style={{ fontWeight: '400', color: '#a8a29e' }}>(select multiple)</span>
+        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '16px', color: '#1c1917' }}>
+          Preferred Date &amp; Times <span style={{ color: '#ef4444' }}>*</span>
+          <span style={{ fontWeight: '400', color: '#a8a29e', marginLeft: '8px' }}>(select one date, then time slots)</span>
         </label>
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          {[{ day: 'Mon', date: '13' }, { day: 'Tue', date: '14' }, { day: 'Wed', date: '15' }, { day: 'Thu', date: '16' }, { day: 'Fri', date: '17' }, { day: 'Sat', date: '18' }, { day: 'Sun', date: '19' }].map((d) => {
-            const dateKey = `${d.day}-${d.date}`;
-            const isSelected = selectedDates.some((s) => s.day === d.day && s.date === d.date);
-            const h = hovered === `date-${dateKey}`;
-            return (
-              <button key={dateKey} type="button" onClick={() => toggleDate(d.day, d.date)} onMouseEnter={() => setHovered(`date-${dateKey}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px 16px', background: h ? (isSelected ? '#145040' : '#f0faf5') : (isSelected ? '#1a5f4a' : '#fff'), color: isSelected ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `2px solid ${h ? '#1a5f4a' : (isSelected ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '10px', cursor: 'pointer', minWidth: '70px', textAlign: 'center', transition: 'all 0.15s ease' }}>
-                <div style={{ fontSize: '12px', opacity: 0.8 }}>{d.day}</div>
-                <div style={{ fontSize: '18px', fontWeight: '600' }}>{d.date}</div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Time Slots (1-hour intervals per SRS 2.2.3.6.2) */}
-      <div style={{ marginBottom: '28px' }}>
-        <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#1c1917' }}>
-          Preferred Time Slots <span style={{ color: '#ef4444' }}>*</span> <span style={{ fontWeight: '400', color: '#a8a29e' }}>(1-hour intervals)</span>
-        </label>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
-          {['9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM'].map((time, i) => {
-            const sel = selectedTimeSlots.includes(i);
-            const h = hovered === `time-${time}`;
-            return (
-              <button key={time} type="button" onClick={() => toggleTimeSlot(i)} onMouseEnter={() => setHovered(`time-${time}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '12px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', cursor: 'pointer', fontSize: '14px', transition: 'all 0.15s ease' }}>{time}</button>
-            );
-          })}
-        </div>
+        <CalendarSlotPicker
+          selectedDates={selectedDates}
+          selectedHours={selectedHours}
+          onToggleDate={handleToggleDate}
+          onToggleHour={handleToggleHour}
+        />
       </div>
 
       {/* Duration (SRS 2.2.3.6: exactly 1h, 2h, 4h) */}
@@ -763,7 +711,7 @@ const RequestHelpFlow = () => {
           <div><span style={{ color: '#78716c', marginRight: '8px' }}>Topics:</span><strong style={{ color: '#166534' }}>{Object.entries(topicsBySubject).filter(([, t]) => t.length > 0).map(([s, t]) => `${s}: ${t.join(', ')}`).join(' | ') || '—'}</strong></div>
           <div><span style={{ color: '#78716c', marginRight: '8px' }}>What you need help with:</span><strong style={{ color: '#166534' }}>{accessibilityNotes.trim() || 'None'}</strong></div>
           <div><span style={{ color: '#78716c', marginRight: '8px' }}>Urgency:</span><strong style={{ color: '#166534' }}>{urgency === 'exam' ? 'Exam Soon' : urgency === 'assignment' ? 'Assignment Due' : 'General Study'}</strong></div>
-          <div><span style={{ color: '#78716c', marginRight: '8px' }}>Preferred times:</span><strong style={{ color: '#166534' }}>{selectedDates.length > 0 && selectedTimeSlots.length > 0 ? (() => { const times = ['9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM']; const fmt = (t) => (t || '').replace(':00 ', '').toLowerCase(); const sel = [...selectedTimeSlots].sort((a, b) => a - b); const start = fmt(times[sel[0]]); const end = fmt(times[Math.min(sel[sel.length - 1] + 1, 11)] || times[11]); return selectedDates.map((d) => `${d.day} ${d.date} Jan ${start}-${end}`).join(', '); })() : '—'}</strong></div>
+          <div><span style={{ color: '#78716c', marginRight: '8px' }}>Preferred times:</span><strong style={{ color: '#166534' }}>{selectedDates.size > 0 && selectedHours.size > 0 ? `${selectedDates.size} date(s) × ${selectedHours.size} time slot(s)` : '—'}</strong></div>
           <div><span style={{ color: '#78716c', marginRight: '8px' }}>Preferred areas:</span><strong style={{ color: '#166534' }}>{(showOtherArea && otherArea ? [otherArea] : selectedAreas).join(', ') || '—'}</strong></div>
           <div><span style={{ color: '#78716c', marginRight: '8px' }}>Accessibility needs:</span><strong style={{ color: '#166534' }}>{accessibilityNeeds.length > 0 ? accessibilityNeeds.map((a) => ({ 'Wheelchair accessible venue required': 'Wheelchair access', 'Ground floor / lift access required': 'Ground floor / lift access', 'Hearing assistance / quiet environment needed': 'Hearing assistance', 'Visual aids / good lighting required': 'Visual aids' }[a] || a)).join(', ') : 'None specified'}</strong></div>
           <div><span style={{ color: '#78716c', marginRight: '8px' }}>Session duration:</span><strong style={{ color: '#166534' }}>{durationHours} hour{durationHours > 1 ? 's' : ''}</strong></div>
@@ -775,7 +723,7 @@ const RequestHelpFlow = () => {
       )}
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <button onClick={() => setCurrentStep(1)} onMouseEnter={() => setHovered('back2')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 24px', background: hovered === 'back2' ? '#f0faf5' : '#fff', color: '#57534e', border: `1px solid ${hovered === 'back2' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>← Back</button>
-        <button onClick={handleFindTutors} disabled={loading} onMouseEnter={() => !loading && setHovered('find')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: loading ? '#e7e5e4' : (hovered === 'find' ? '#2d7a61' : '#1a5f4a'), color: loading ? '#a8a29e' : '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer', transition: 'all 0.2s ease' }}>{loading ? 'Finding...' : 'Find Tutors →'}</button>
+        <button onClick={handleFindTutors} disabled={loading || selectedDates.size === 0 || selectedHours.size === 0} onMouseEnter={() => !loading && selectedDates.size > 0 && selectedHours.size > 0 && setHovered('find')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: (loading || selectedDates.size === 0 || selectedHours.size === 0) ? '#e7e5e4' : (hovered === 'find' ? '#2d7a61' : '#1a5f4a'), color: (loading || selectedDates.size === 0 || selectedHours.size === 0) ? '#a8a29e' : '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: (loading || selectedDates.size === 0 || selectedHours.size === 0) ? 'not-allowed' : 'pointer', transition: 'all 0.2s ease' }}>{loading ? 'Finding...' : 'Find Tutors →'}</button>
       </div> 
 
       {/* Planning Area with "Other" (SRS 2.2.3.7)

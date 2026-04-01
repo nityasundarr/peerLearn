@@ -31,6 +31,7 @@ const SessionDetail = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const messagesEndRef = useRef(null);
+  const messagesScrollRef = useRef(null);
 
   const [session, setSession] = useState(null);
   const [sessionLoading, setSessionLoading] = useState(true);
@@ -44,6 +45,7 @@ const SessionDetail = () => {
   const [hoverSend, setHoverSend] = useState(false);
   const [hoveredBubbleId, setHoveredBubbleId] = useState(null);
   const [hoverNav, setHoverNav] = useState(null);
+
 
   // ── Fetch session info ────────────────────────────────────────────────────
   const fetchSession = useCallback(async () => {
@@ -84,7 +86,10 @@ const SessionDetail = () => {
   }, [fetchMessages]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Scroll within the chat container only — never scrolls the page window
+    if (messagesScrollRef.current) {
+      messagesScrollRef.current.scrollTop = messagesScrollRef.current.scrollHeight;
+    }
   }, [messages]);
 
   // ── Send message ──────────────────────────────────────────────────────────
@@ -139,7 +144,12 @@ const SessionDetail = () => {
     return isTutor ? tuteeDisplayName : tutorDisplayName;
   };
 
-  const canLeaveFeedback = session?.status === 'completed';
+  const canLeaveFeedback = ['completed', 'completed_attended', 'completed_no_show'].includes(session?.status);
+
+  // Show venue picker when session is active but no venue set yet
+  const venueSettableStates = new Set(['tutor_accepted', 'pending_confirmation']);
+  const hasVenue = !!(session?.venue_id || session?.venue_manual);
+  const needsVenue = venueSettableStates.has(session?.status) && !hasVenue;
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -247,6 +257,25 @@ const SessionDetail = () => {
                 </div>
               )}
 
+              {/* ── Continue Setup Banner ── */}
+              {needsVenue && (
+                <div style={{ marginTop: '24px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '14px', padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontWeight: '700', fontSize: '15px', color: '#14532d' }}>📍 Session setup in progress</div>
+                    <div style={{ fontSize: '13px', color: '#166534', marginTop: '4px' }}>Choose a venue and complete payment to confirm your session.</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/session/${sessionId}/coordinate`)}
+                    onMouseEnter={() => setHoverNav('setup')}
+                    onMouseLeave={() => setHoverNav(null)}
+                    style={{ background: hoverNav === 'setup' ? '#145040' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', padding: '10px 20px', fontSize: '14px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  >
+                    Continue Setup →
+                  </button>
+                </div>
+              )}
+
               {/* Action buttons */}
               {canLeaveFeedback && (
                 <div style={{ marginTop: '20px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
@@ -293,7 +322,7 @@ const SessionDetail = () => {
               )}
 
               {/* Messages */}
-              <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', background: '#fafaf9' }}>
+              <div ref={messagesScrollRef} style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', background: '#fafaf9' }}>
                 {messages.length === 0 && (
                   <div style={{ textAlign: 'center', color: '#a8a29e', fontSize: '14px', paddingTop: '32px' }}>
                     No messages yet. Start the conversation!

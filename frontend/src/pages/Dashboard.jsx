@@ -132,11 +132,11 @@ const paymentStatusLabel = (s) => {
 const learningTuteeBucket = (s) => {
   const st = normalizeSessionStatus(s);
   if (st === 'cancelled') return 'cancelled';
-  if (st === 'pending_tutor_selection') return 'pending';
   if (st === 'completed' || st === 'completed_attended'
     || st === 'completed_no_show') return 'past';
-  // tutor_accepted, pending_confirmation, confirmed → upcoming
-  return 'upcoming';
+  if (st === 'confirmed') return 'upcoming';
+  // pending_tutor_selection, tutor_accepted, pending_confirmation → pending
+  return 'pending';
 };
 
 /** Payment / status line for tutee — distinguishes decline vs self-cancel. */
@@ -568,6 +568,16 @@ const Dashboard = () => {
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [paymentError, setPaymentError] = useState(null);
   const pendingFeeFetchedRef = useRef(new Set());
+
+  // ── Venue selection state (for DetailPanel) ───────────────────────────────
+  const [panelVenueRecs, setPanelVenueRecs] = useState(null);
+  const [panelVenueLoading, setPanelVenueLoading] = useState(false);
+  const [panelVenueError, setPanelVenueError] = useState(null);
+  const [panelSelectedVenue, setPanelSelectedVenue] = useState(null); // full venue object
+  const [panelManualVenue, setPanelManualVenue] = useState('');
+  const [panelUseManual, setPanelUseManual] = useState(false);
+  const [panelVenueSubmitting, setPanelVenueSubmitting] = useState(false);
+  const [panelVenueSubmitError, setPanelVenueSubmitError] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [hovered, setHovered] = useState(null);
@@ -1046,6 +1056,53 @@ const Dashboard = () => {
     }
   };
 
+  const fetchPanelVenueRecs = async (session) => {
+    if (!session) return;
+    setPanelVenueLoading(true);
+    setPanelVenueError(null);
+    try {
+      const params = new URLSearchParams();
+      if (session.request_id) params.set('request_id', session.request_id);
+      if (session.tutor_id) params.set('tutor_id', session.tutor_id);
+      const { data } = await api.get(`/venues/recommend?${params.toString()}`);
+      setPanelVenueRecs(data?.venues ?? []);
+    } catch (err) {
+      setPanelVenueError(err.response?.data?.detail ?? 'Could not load venue recommendations.');
+    } finally {
+      setPanelVenueLoading(false);
+    }
+  };
+
+  const isRealUuid = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+  const handlePanelConfirmVenue = async (sessionId) => {
+    if (panelVenueSubmitting) return;
+    if (!panelUseManual && !panelSelectedVenue) return;
+    if (panelUseManual && !panelManualVenue.trim()) return;
+    setPanelVenueSubmitting(true);
+    setPanelVenueSubmitError(null);
+    try {
+      let body;
+      if (panelUseManual) {
+        body = { venue_manual: panelManualVenue.trim() };
+      } else if (isRealUuid(panelSelectedVenue.venue_id)) {
+        body = { venue_id: panelSelectedVenue.venue_id };
+      } else {
+        body = { venue_manual: `${panelSelectedVenue.name}, ${panelSelectedVenue.address}` };
+      }
+      await api.post(`/sessions/${sessionId}/venue`, body);
+      // Refresh sessions list so venue shows up
+      await fetchLearningSessions?.();
+      await fetchTutoringSessions?.();
+      setShowDetailPanel(false);
+      setSelectedSession(null);
+    } catch (err) {
+      setPanelVenueSubmitError(err.response?.data?.detail ?? 'Failed to confirm venue.');
+    } finally {
+      setPanelVenueSubmitting(false);
+    }
+  };
+
   const handleConfirmTuteeSlot = async (sessionId, slot) => {
     if (!slot?.date || slot.hour_slot == null) return;
     try {
@@ -1075,16 +1132,38 @@ const Dashboard = () => {
     }
   };
 
+  const handleCancelSession = async (sessionId, sessionLabel) => {
+    const reason = window.prompt(`Cancel "${sessionLabel}"?\n\nEnter a reason (optional):`);
+    if (reason === null) return; // user pressed Cancel on the prompt
+    try {
+      await api.post(`/sessions/${sessionId}/cancel`, { reason: reason.trim() || 'Cancelled by student.' });
+      await fetchLearningSessions();
+      await fetchTutoringSessions();
+      // Move to cancelled tab so the user can see it moved
+      if (activeTab === 'learning') setLearningFilterTab('cancelled');
+    } catch (err) {
+      alert(err.response?.data?.detail ?? 'Could not cancel session.');
+    }
+  };
+
   const handleMarkOutcome = async (sessionId, outcome) => {
     try {
-      await api.patch(`/sessions/${sessionId}/outcome`, { outcome });
+      const { data } = await api.patch(`/sessions/${sessionId}/outcome`, { outcome });
       await fetchSummary();
       await fetchBadges();
-      if (activeTab === 'learning') fetchLearningSessions();
-      if (activeTab === 'tutoring') fetchTutoringSessions();
+      await fetchLearningSessions();
+      await fetchTutoringSessions();
       setShowDetailPanel(false);
-    } catch {
-      // error handled by api interceptor or UI
+      // Check if session is now completed (both parties confirmed) or still waiting
+      const finalStatus = data?.status || data?.session?.status || '';
+      if (finalStatus.startsWith('completed')) {
+        setLearningFilterTab('past');
+        alert('Session marked as completed! You can now leave a rating.');
+      } else {
+        alert('Your outcome recorded. Waiting for the other party to confirm before the session moves to Past.');
+      }
+    } catch (err) {
+      alert(err.response?.data?.detail ?? 'Could not record outcome.');
     }
   };
 
@@ -1195,17 +1274,13 @@ const Dashboard = () => {
 
   // HOME TAB
   const HomeTab = () => {
-    const stats = summary?.stats || {};
-    console.log('[HomeTab] openRequests:', openTuteeRequests);
-    console.log('[HomeTab] learningSessions:', learningSessions.map((s) => s.status));
     const pendingCount = openTuteeRequests.length
-      + learningSessions.filter((s) => s.status === 'pending_tutor_selection').length;
-    const tuteeUpcoming = learningSessions.filter((s) =>
-      ['confirmed', 'tutor_accepted', 'pending_confirmation'].includes(s.status),
-    );
-    const tutorUpcoming = tutoringSessions.filter((s) =>
-      s.status === 'confirmed',
-    );
+      + learningSessions.filter((s) => {
+        const st = normalizeSessionStatus(s);
+        return ['pending_tutor_selection', 'tutor_accepted', 'pending_confirmation'].includes(st);
+      }).length;
+    const tuteeUpcoming = learningSessions.filter((s) => normalizeSessionStatus(s) === 'confirmed');
+    const tutorUpcoming = tutoringSessions.filter((s) => normalizeSessionStatus(s) === 'confirmed');
     const seenUpcomingIds = new Set();
     const upcomingSessionsMerged = [...tuteeUpcoming, ...tutorUpcoming].filter((s) => {
       const id = s.id || s.session_id;
@@ -1214,11 +1289,18 @@ const Dashboard = () => {
       return true;
     });
     const upcomingSessions = upcomingSessionsMerged.slice(0, 3);
+    const completedStatuses = new Set(['completed_attended', 'completed', 'completed_no_show']);
+    const hoursLearned = learningSessions
+      .filter((s) => completedStatuses.has(normalizeSessionStatus(s)))
+      .reduce((sum, s) => sum + (Number(s.duration_hours) || 0), 0);
+    const hoursTaught = tutoringSessions
+      .filter((s) => completedStatuses.has(normalizeSessionStatus(s)))
+      .reduce((sum, s) => sum + (Number(s.duration_hours) || 0), 0);
     const statItems = [
       { label: 'Upcoming', value: String(upcomingSessionsMerged.length), icon: '📅' },
       { label: 'Pending', value: String(pendingCount), icon: '⏳' },
-      { label: 'Hours Learned', value: String(stats.hours_learned ?? 0), icon: '📚' },
-      { label: 'Hours Taught', value: String(stats.hours_taught ?? 0), icon: '🎓' },
+      { label: 'Hours Learned', value: String(hoursLearned), icon: '📚' },
+      { label: 'Hours Taught', value: String(hoursTaught), icon: '🎓' },
     ];
 
     const tuteeNeedsSlotConfirm = hasTuteeRole && learningSessions.some((s) => {
@@ -1296,7 +1378,7 @@ const Dashboard = () => {
             <div style={{ fontSize: '15px', fontWeight: '600', color: '#92400e' }}>📅 Your tutor proposed time slots</div>
             <div style={{ fontSize: '13px', color: '#a16207', marginTop: '4px' }}>Confirm a time slot to proceed to payment</div>
           </div>
-          <button type="button" onClick={() => setActiveTab('learning')} onMouseEnter={() => setHovered('home-pa-confirm')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === 'home-pa-confirm' ? '#f59e0b' : '#fbbf24', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '14px', whiteSpace: 'nowrap' }}>Confirm Now →</button>
+          <button type="button" onClick={() => { setActiveTab('learning'); setLearningFilterTab('pending'); }} onMouseEnter={() => setHovered('home-pa-confirm')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === 'home-pa-confirm' ? '#f59e0b' : '#fbbf24', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '14px', whiteSpace: 'nowrap' }}>Confirm Now →</button>
         </div>,
       );
     }
@@ -1307,7 +1389,7 @@ const Dashboard = () => {
             <div style={{ fontSize: '15px', fontWeight: '600', color: '#92400e' }}>💳 Payment required</div>
             <div style={{ fontSize: '13px', color: '#a16207', marginTop: '4px' }}>Complete payment to confirm your session</div>
           </div>
-          <button type="button" onClick={() => setActiveTab('learning')} onMouseEnter={() => setHovered('home-pa-paybtn')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === 'home-pa-paybtn' ? '#f59e0b' : '#fbbf24', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '14px', whiteSpace: 'nowrap' }}>Pay Now →</button>
+          <button type="button" onClick={() => { setActiveTab('learning'); setLearningFilterTab('pending'); }} onMouseEnter={() => setHovered('home-pa-paybtn')} onMouseLeave={() => setHovered(null)} style={{ padding: '10px 16px', background: hovered === 'home-pa-paybtn' ? '#f59e0b' : '#fbbf24', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '14px', whiteSpace: 'nowrap' }}>Pay Now →</button>
         </div>,
       );
     }
@@ -1407,7 +1489,7 @@ const Dashboard = () => {
               );
             }
             return (
-            <div key={s.id || index} onClick={() => { setSelectedSession(s); setShowDetailPanel(true); }} onMouseEnter={() => setHovered(`session-${s.id || index}`)} onMouseLeave={() => setHovered(null)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: '#f5f5f4', borderRadius: '12px', marginBottom: '12px', cursor: 'pointer', boxShadow: hovered === `session-${s.id || index}` ? '0 4px 16px rgba(0,0,0,0.12)' : '0 2px 8px rgba(0,0,0,0.08)', transform: hovered === `session-${s.id || index}` ? 'translateY(-2px)' : 'none', transition: 'all 0.2s ease' }}>
+            <div key={s.id || index} onClick={() => { setSelectedSession(s); setShowDetailPanel(true); setPanelVenueRecs(null); setPanelSelectedVenue(null); setPanelManualVenue(''); setPanelUseManual(false); setPanelVenueSubmitError(null); }} onMouseEnter={() => setHovered(`session-${s.id || index}`)} onMouseLeave={() => setHovered(null)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: '#f5f5f4', borderRadius: '12px', marginBottom: '12px', cursor: 'pointer', boxShadow: hovered === `session-${s.id || index}` ? '0 4px 16px rgba(0,0,0,0.12)' : '0 2px 8px rgba(0,0,0,0.08)', transform: hovered === `session-${s.id || index}` ? 'translateY(-2px)' : 'none', transition: 'all 0.2s ease' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                 <div style={{ width: '48px', height: '48px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold' }}>{sessionInitials}</div>
                 <div>
@@ -1461,8 +1543,8 @@ const Dashboard = () => {
   // MY LEARNING TAB
   const LearningTab = () => {
     const learningTabKeys = [
-      { key: 'upcoming', label: 'Upcoming' },
       { key: 'pending', label: 'Pending' },
+      { key: 'upcoming', label: 'Upcoming' },
       { key: 'past', label: 'Past' },
       { key: 'cancelled', label: 'Cancelled' },
     ];
@@ -1470,12 +1552,11 @@ const Dashboard = () => {
     const pendingTabCount = learningSessions.filter((s) =>
       learningTuteeBucket(s) === 'pending',
     ).length;
-    const upcomingActionCount = learningSessions.filter((s) => {
+    // Sessions in pending that need action (slot to confirm or payment to make)
+    const pendingActionCount = learningSessions.filter((s) => {
       const st = normalizeSessionStatus(s);
       return (
-        (st === 'tutor_accepted'
-          && Array.isArray(s.proposed_slots)
-          && s.proposed_slots.length > 0)
+        (st === 'tutor_accepted' && Array.isArray(s.proposed_slots) && s.proposed_slots.length > 0)
         || st === 'pending_confirmation'
       );
     }).length;
@@ -1498,17 +1579,6 @@ const Dashboard = () => {
                   fontWeight: '600',
                   marginLeft: '6px',
                 }}>{pendingTabCount}</span>
-              )}
-              {key === 'upcoming' && upcomingActionCount > 0 && (
-                <span style={{
-                  background: '#ef4444',
-                  color: '#fff',
-                  padding: '2px 8px',
-                  borderRadius: '10px',
-                  fontSize: '12px',
-                  fontWeight: '600',
-                  marginLeft: '6px',
-                }}>{upcomingActionCount}</span>
               )}
             </button>
           );
@@ -1564,9 +1634,8 @@ const Dashboard = () => {
                 </div>
               </div>
             </div>
-            <div style={{ textAlign: 'right' }}>
+            <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '12px' }}>
               <StatusBadge state={tuteeSession.state} />
-              <div style={{ fontSize: '13px', fontWeight: '600', color: '#57534e', marginTop: '8px' }}>{learningTuteeStatusLabel(tuteeSession)}</div>
             </div>
           </div>
           {showProposeUi && (
@@ -1619,16 +1688,10 @@ const Dashboard = () => {
           )}
           {st === 'pending_confirmation' && (
             <div style={{ marginTop: '16px', padding: '16px', background: '#ecfdf5', borderRadius: '12px', border: '1px solid #6ee7b7' }}>
-              <p style={{ fontSize: '14px', color: '#166534', fontWeight: '600', marginBottom: '8px' }}>✓ Slot confirmed! Complete payment to confirm your session.</p>
-              <p style={{ fontSize: '14px', color: '#1c1917', marginBottom: '12px' }}>
-                Session Fee:{' '}
-                {sessionFees[tuteeSession.id] != null
-                  ? `$${Number(sessionFees[tuteeSession.id]).toFixed(2)}`
-                  : (tuteeSession.fee && tuteeSession.fee !== '—' ? tuteeSession.fee : '—')}
-              </p>
+              <p style={{ fontSize: '14px', color: '#166534', fontWeight: '600', marginBottom: '8px' }}>✓ Slot confirmed! Select a venue and complete payment to confirm your session.</p>
               <button
                 type="button"
-                onClick={() => openPaymentModal(tuteeSession)}
+                onClick={() => navigate(`/session/${tuteeSession.id}/coordinate`)}
                 onMouseEnter={() => setHovered(`learn-pay-${tuteeSession.id}`)}
                 onMouseLeave={() => setHovered(null)}
                 style={{
@@ -1643,7 +1706,7 @@ const Dashboard = () => {
                   transition: 'all 0.2s ease',
                 }}
               >
-                💳 Pay Now
+                Continue Setup →
               </button>
             </div>
           )}
@@ -1668,7 +1731,14 @@ const Dashboard = () => {
             <div style={{ display: 'flex', gap: '12px', paddingTop: tuteeSession.state === 'CONFIRMED' ? '12px' : '20px', flexWrap: 'wrap', alignItems: 'center' }}>
             <button
               type="button"
-              onClick={() => { setSelectedSession(tuteeSession); setShowDetailPanel(true); }}
+              onClick={() => {
+                const coordinationStates = ['tutor_accepted', 'pending_confirmation'];
+                if (coordinationStates.includes(tuteeSession.status)) {
+                  navigate(`/session/${tuteeSession.id}/coordinate`);
+                } else {
+                  navigate(`/session/${tuteeSession.id}`);
+                }
+              }}
               onMouseEnter={() => setHovered(`learn-view-${tuteeSession.id}`)}
               onMouseLeave={() => setHovered(null)}
               style={{
@@ -1682,7 +1752,7 @@ const Dashboard = () => {
                 transition: 'all 0.2s ease',
               }}
             >
-              View Details
+              {['tutor_accepted', 'pending_confirmation'].includes(tuteeSession.status) ? 'Continue Setup →' : 'View Details'}
             </button>
             <button
               type="button"
@@ -1742,8 +1812,10 @@ const Dashboard = () => {
                 🚨 Report Issue
               </button>
             )}
+            {['pending_tutor_selection', 'tutor_accepted', 'pending_confirmation', 'confirmed'].includes(tuteeSession.status) && (
             <button
               type="button"
+              onClick={() => handleCancelSession(tuteeSession.id, tuteeSession.subject || 'session')}
               onMouseEnter={() => setHovered(`learn-cancel-${tuteeSession.id}`)}
               onMouseLeave={() => setHovered(null)}
               style={{
@@ -1758,8 +1830,9 @@ const Dashboard = () => {
                 transition: 'all 0.2s ease',
               }}
             >
-              Cancel
+              Cancel Session
             </button>
+            )}
             </div>
           </div>
         </div>
@@ -2233,11 +2306,116 @@ const Dashboard = () => {
           {sched.time ? <div style={{ color: '#57534e' }}>🕐 {sched.time}</div> : null}
         </div>
 
-        <div style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px', marginBottom: '20px' }}>
-          <div style={{ fontSize: '12px', color: '#a8a29e', textTransform: 'uppercase', fontWeight: '600', marginBottom: '8px' }}>Venue</div>
-          <div style={{ fontWeight: '600', color: '#1c1917' }}>📍 {venueLine}</div>
-          <div style={{ background: '#e7e5e4', height: '120px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a8a29e', marginTop: '12px' }}>🗺️ OneMap</div>
-        </div>
+        {/* Venue section */}
+        {(() => {
+          const venueSettable = ['tutor_accepted', 'pending_confirmation'].includes(s.status);
+          const hasVenue = !!(s.venue_id || s.venue_manual);
+          const needsVenue = venueSettable && !hasVenue;
+          if (!needsVenue) {
+            return (
+              <div style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px', marginBottom: '20px' }}>
+                <div style={{ fontSize: '12px', color: '#a8a29e', textTransform: 'uppercase', fontWeight: '600', marginBottom: '8px' }}>Venue</div>
+                <div style={{ fontWeight: '600', color: '#1c1917' }}>📍 {venueLine}</div>
+              </div>
+            );
+          }
+          return (
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '16px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <div style={{ fontWeight: '700', fontSize: '14px', color: '#14532d' }}>📍 Select a Venue</div>
+                {panelVenueRecs === null && !panelVenueLoading && (
+                  <button
+                    type="button"
+                    onClick={() => fetchPanelVenueRecs(s)}
+                    style={{ background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                  >
+                    Load
+                  </button>
+                )}
+              </div>
+              <div style={{ fontSize: '12px', color: '#166534', marginBottom: '10px' }}>Choose a venue before proceeding to payment.</div>
+
+              {panelVenueLoading && <div style={{ fontSize: '13px', color: '#166534' }}>Loading recommendations…</div>}
+              {panelVenueError && <div style={{ fontSize: '13px', color: '#dc2626' }}>{panelVenueError}</div>}
+
+              {panelVenueRecs !== null && !panelUseManual && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '220px', overflowY: 'auto', marginBottom: '10px' }}>
+                  {panelVenueRecs.length === 0 && (
+                    <div style={{ fontSize: '13px', color: '#6b7280', padding: '8px 0' }}>No venues found near these planning areas.</div>
+                  )}
+                  {panelVenueRecs.map((v) => {
+                    const isSelected = panelSelectedVenue?.venue_id === v.venue_id;
+                    const bucketColor = v.distance_bucket === 'Near' ? '#166534' : v.distance_bucket === 'Medium' ? '#854d0e' : '#991b1b';
+                    const bucketBg = v.distance_bucket === 'Near' ? '#dcfce7' : v.distance_bucket === 'Medium' ? '#fef9c3' : '#fee2e2';
+                    return (
+                      <button
+                        key={v.venue_id}
+                        type="button"
+                        onClick={() => setPanelSelectedVenue(v)}
+                        style={{
+                          display: 'block', width: '100%', textAlign: 'left',
+                          background: isSelected ? '#dcfce7' : '#fff',
+                          border: isSelected ? '2px solid #16a34a' : '1px solid #d1fae5',
+                          borderRadius: '8px', padding: '10px 12px', cursor: 'pointer',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div>
+                            <div style={{ fontWeight: '600', fontSize: '13px', color: '#1c1917' }}>{v.name}</div>
+                            <div style={{ fontSize: '12px', color: '#78716c', marginTop: '2px' }}>{v.address}</div>
+                            <div style={{ fontSize: '11px', color: '#a8a29e', marginTop: '2px' }}>{v.venue_type} · {v.planning_area}</div>
+                          </div>
+                          <span style={{ background: bucketBg, color: bucketColor, fontSize: '11px', fontWeight: '600', padding: '2px 6px', borderRadius: '4px', flexShrink: 0, marginLeft: '8px' }}>
+                            {v.distance_bucket}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {panelVenueRecs !== null && (
+                <button
+                  type="button"
+                  onClick={() => { setPanelUseManual((p) => !p); setPanelSelectedVenue(null); }}
+                  style={{ fontSize: '12px', color: '#1a5f4a', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline', marginBottom: '8px', display: 'block' }}
+                >
+                  {panelUseManual ? '← Back to recommendations' : 'Enter venue manually'}
+                </button>
+              )}
+
+              {panelUseManual && (
+                <div style={{ marginBottom: '8px' }}>
+                  <div style={{ fontSize: '11px', color: '#92400e', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '6px', padding: '6px 10px', marginBottom: '6px' }}>
+                    ⚠️ Must be a public place — not a home address.
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="e.g. Bishan Public Library"
+                    value={panelManualVenue}
+                    onChange={(e) => setPanelManualVenue(e.target.value)}
+                    maxLength={200}
+                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '13px', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                  />
+                </div>
+              )}
+
+              {panelVenueSubmitError && <div style={{ fontSize: '12px', color: '#dc2626', marginBottom: '6px' }}>{panelVenueSubmitError}</div>}
+
+              {(panelSelectedVenue || (panelUseManual && panelManualVenue.trim())) && (
+                <button
+                  type="button"
+                  onClick={() => handlePanelConfirmVenue(s.id)}
+                  disabled={panelVenueSubmitting}
+                  style={{ width: '100%', padding: '10px', background: panelVenueSubmitting ? '#86efac' : '#16a34a', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '600', cursor: panelVenueSubmitting ? 'default' : 'pointer', marginTop: '4px' }}
+                >
+                  {panelVenueSubmitting ? 'Confirming…' : 'Confirm Venue'}
+                </button>
+              )}
+            </div>
+          );
+        })()}
 
         {showTuteeProposeUi && (
           <div style={{ marginBottom: '20px', padding: '16px', background: '#f0fdf4', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
@@ -2298,14 +2476,44 @@ const Dashboard = () => {
 
         {/* Action Buttons with Messaging (SRS 2.9) */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <button
+            onClick={() => {
+              setShowDetailPanel(false);
+              const isPendingSetup = ['tutor_accepted', 'pending_confirmation'].includes(normalizeSessionStatus(s));
+              navigate(isPendingSetup ? `/session/${s.id}/coordinate` : `/session/${s.id}`);
+            }}
+            onMouseEnter={() => setHovered('detail-fullview')}
+            onMouseLeave={() => setHovered(null)}
+            style={{ width: '100%', padding: '14px', background: hovered === 'detail-fullview' ? '#f0faf5' : '#fff', color: '#1a5f4a', border: '1px solid #1a5f4a', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}
+          >
+            🔍 View Full Session Details
+          </button>
           <button onClick={() => setShowMessaging(true)} onMouseEnter={() => setHovered('detail-msg')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-msg' ? '#2563eb' : '#3b82f6', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>💬 Message Tutor</button>
           {activeTab === 'learning' && s.state === 'PENDING_CONFIRM' && <button onClick={() => openPaymentModal(s)} onMouseEnter={() => setHovered('detail-pay')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-pay' ? '#16a34a' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>💳 Pay Now</button>}
           {(s.state === 'CONFIRMED' || s.state === 'COMPLETED') && <button onClick={() => handleMarkOutcome(s.id, 'attended')} onMouseEnter={() => setHovered('detail-done')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-done' ? '#16a34a' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>✓ Mark as Completed</button>}
           {(activeTab !== 'learning' || s.state !== 'CONFIRMED' || (s.scheduled_at && new Date() > new Date(s.scheduled_at))) && (
           <button onClick={() => s.id && navigate(`/feedback/${s.id}`)} onMouseEnter={() => setHovered('detail-fb')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-fb' ? '#d97706' : '#f59e0b', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>⭐ Leave Feedback</button>
           )}
-          <button onMouseEnter={() => setHovered('detail-res')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-res' ? '#f0faf5' : '#fff', color: '#1c1917', border: `1px solid ${hovered === 'detail-res' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>📅 Reschedule</button>
-          <button onMouseEnter={() => setHovered('detail-cancel')} onMouseLeave={() => setHovered(null)} style={{ width: '100%', padding: '14px', background: hovered === 'detail-cancel' ? '#fef2f2' : '#fff', color: '#ef4444', border: `1px solid ${hovered === 'detail-cancel' ? '#ef4444' : '#fecaca'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>Cancel Session</button>
+          {['tutor_accepted', 'pending_confirmation'].includes(s.status) && (
+            <button
+              onClick={() => { setShowDetailPanel(false); navigate(`/session/${s.id}/coordinate`); }}
+              onMouseEnter={() => setHovered('detail-res')}
+              onMouseLeave={() => setHovered(null)}
+              style={{ width: '100%', padding: '14px', background: hovered === 'detail-res' ? '#f0faf5' : '#fff', color: '#1a5f4a', border: `1px solid ${hovered === 'detail-res' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}
+            >
+              📅 Change Slot / Venue
+            </button>
+          )}
+          {['pending_tutor_selection', 'tutor_accepted', 'pending_confirmation', 'confirmed'].includes(s.status) && (
+            <button
+              onClick={() => { setShowDetailPanel(false); handleCancelSession(s.id, s.subject || 'session'); }}
+              onMouseEnter={() => setHovered('detail-cancel')}
+              onMouseLeave={() => setHovered(null)}
+              style={{ width: '100%', padding: '14px', background: hovered === 'detail-cancel' ? '#fef2f2' : '#fff', color: '#ef4444', border: `1px solid ${hovered === 'detail-cancel' ? '#ef4444' : '#fecaca'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}
+            >
+              Cancel Session
+            </button>
+          )}
         </div>
       </div>
     </div>

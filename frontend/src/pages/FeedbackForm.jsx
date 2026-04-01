@@ -81,7 +81,7 @@ const FeedbackForm = () => {
     setLoading(true);
     try {
       await api.post(`/sessions/${sessionId}/rating`, {
-        score: rating,
+        stars: rating,
         standout_traits: traits,
         review_text: reviewText || undefined,
       });

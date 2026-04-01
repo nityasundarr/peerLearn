@@ -206,7 +206,7 @@ const LandingPage = () => {
               cursor: 'pointer',
               transition: 'all 0.2s ease',
             }}
-          >Sign Up Free</button>
+          >Sign Up</button>
         </div>
       </nav>
 
@@ -242,7 +242,7 @@ const LandingPage = () => {
         </p>
         
         <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
-          <button onMouseEnter={() => setHovered('hero-find')} onMouseLeave={() => setHovered(null)} style={{
+          <button onClick={() => setShowModal('signup')} onMouseEnter={() => setHovered('hero-find')} onMouseLeave={() => setHovered(null)} style={{
             background: hovered === 'hero-find' ? '#fbbf24' : '#f59e0b',
             border: 'none',
             color: '#fff',
@@ -256,7 +256,7 @@ const LandingPage = () => {
             gap: '8px',
             transition: 'all 0.2s ease',
           }}>🎓 Find a Tutor</button>
-          <button onMouseEnter={() => setHovered('hero-tutor')} onMouseLeave={() => setHovered(null)} style={{
+          <button onClick={() => setShowModal('signup')} onMouseEnter={() => setHovered('hero-tutor')} onMouseLeave={() => setHovered(null)} style={{
             background: hovered === 'hero-tutor' ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.15)',
             border: '2px solid rgba(255,255,255,0.4)',
             color: '#fff',

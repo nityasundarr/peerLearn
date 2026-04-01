@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import CalendarSlotPicker from '../components/CalendarSlotPicker';
 
 // ============================================================
 // SECTION 4: OFFER TO TUTOR FLOW (UPDATED)
@@ -64,7 +65,8 @@ const OfferToTutorFlow = () => {
   const [showOtherSubject, setShowOtherSubject] = useState(false);
   const [showOtherArea, setShowOtherArea] = useState(false);
   const [tutorModeActive, setTutorModeActive] = useState(true);
-  const [selectedSlots, setSelectedSlots] = useState(['Tue-3 PM', 'Tue-4 PM', 'Thu-3 PM', 'Thu-4 PM', 'Sat-10 AM']);
+  const [selectedDates, setSelectedDates] = useState(new Set());
+  const [selectedHours, setSelectedHours] = useState(new Set());
 
   const [maxWeeklyHours, setMaxWeeklyHours] = useState(5);
   const [selectedAreas, setSelectedAreas] = useState([]);
@@ -91,16 +93,30 @@ const OfferToTutorFlow = () => {
     { name: 'English', topics: ['Essay Writing', 'Literature', 'Grammar'] },
   ];
 
+  // slotsFromAvailability: when loading an existing profile, pre-select dates
+  // for the upcoming occurrence of each day_of_week × hour_slot pair.
   const slotsFromAvailability = (slots) => {
-    if (!Array.isArray(slots)) return [];
-    return slots
-      .map(({ day_of_week, hour_slot }) => {
-        const day = DOW_TO_DAY[day_of_week];
-        const time = HOUR_TO_TIME[hour_slot];
-        if (!day || !time) return null;
-        return `${day}-${time}`;
-      })
-      .filter(Boolean);
+    if (!Array.isArray(slots)) return { dates: new Set(), hours: new Set() };
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dates = new Set();
+    const hours = new Set();
+    const seenDows = new Set();
+    for (const { day_of_week, hour_slot } of slots) {
+      hours.add(hour_slot);
+      if (!seenDows.has(day_of_week)) {
+        seenDows.add(day_of_week);
+        // Find next occurrence of this day_of_week (0=Sun)
+        const d = new Date(today);
+        const dow = today.getDay(); // 0=Sun
+        let diff = (day_of_week - dow + 7) % 7;
+        if (diff === 0) diff = 7; // next week if today
+        d.setDate(today.getDate() + diff);
+        const iso = d.toISOString().slice(0, 10);
+        dates.add(iso);
+      }
+    }
+    return { dates, hours };
   };
 
   const applyProfileFromApi = (profile) => {
@@ -169,8 +185,9 @@ const OfferToTutorFlow = () => {
         try {
           const { data: avail } = await api.get('/tutor-profile/availability');
           if (cancelled) return;
-          const sl = slotsFromAvailability(avail.slots);
-          if (sl.length) setSelectedSlots(sl);
+          const { dates, hours } = slotsFromAvailability(avail.slots);
+          if (dates.size) setSelectedDates(dates);
+          if (hours.size) setSelectedHours(hours);
         } catch {
           // ignore availability load errors
         }
@@ -292,36 +309,24 @@ const OfferToTutorFlow = () => {
       .join(' | ');
 
   const formatAvailabilitySummary = () => {
-    const timesOrder = ['9 AM', '10 AM', '11 AM', '12 PM', '1 PM', '2 PM', '3 PM', '4 PM', '5 PM', '6 PM', '7 PM', '8 PM'];
-    const byDay = {};
-    for (const slotId of selectedSlots) {
-      const [day, time] = slotId.split('-');
-      if (!byDay[day]) byDay[day] = [];
-      byDay[day].push(time);
-    }
-    const dayOrder = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const fmt = (t) => {
-      const h = TIME_TO_HOUR[t] ?? 9;
-      if (h === 12) return '12pm';
-      if (h > 12) return `${h - 12}pm`;
-      return `${h}am`;
-    };
-    return dayOrder
-      .filter((d) => byDay[d])
-      .map((day) => {
-        const times = byDay[day].sort((a, b) => timesOrder.indexOf(a) - timesOrder.indexOf(b));
-        const first = times[0];
-        const last = times[times.length - 1];
-        return `${day} ${fmt(first)}-${fmt(last)}`;
-      })
-      .join(', ');
+    if (selectedDates.size === 0 || selectedHours.size === 0) return '—';
+    return `${selectedDates.size} date(s) × ${selectedHours.size} time slot(s)`;
   };
 
+  // Convert selected specific dates → deduplicated {day_of_week, hour_slot} pairs for the API
   const slotsToAvailability = () => {
-    return selectedSlots.map((slotId) => {
-      const [day, time] = slotId.split('-');
-      return { day_of_week: DAY_TO_DOW[day] ?? 0, hour_slot: TIME_TO_HOUR[time] ?? 9 };
-    });
+    const seenDows = new Set();
+    const result = [];
+    for (const iso of selectedDates) {
+      const dow = new Date(iso).getDay(); // 0=Sun
+      if (!seenDows.has(dow)) {
+        seenDows.add(dow);
+        for (const h of selectedHours) {
+          result.push({ day_of_week: dow, hour_slot: h });
+        }
+      }
+    }
+    return result;
   };
 
   const handleTutorModeToggle = () => {
@@ -526,58 +531,40 @@ const OfferToTutorFlow = () => {
 
   // STEP 2: Availability (SRS 2.2.2.4: 1-hour intervals)
   const renderStep2 = () => {
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const times = ['9 AM', '10 AM', '11 AM', '12 PM', '1 PM', '2 PM', '3 PM', '4 PM', '5 PM', '6 PM', '7 PM', '8 PM'];
+    const canContinue = selectedDates.size > 0 && selectedHours.size > 0;
 
-    const toggleSlot = (day, time) => {
-      const slotId = `${day}-${time}`;
-      if (selectedSlots.includes(slotId)) {
-        setSelectedSlots(selectedSlots.filter(s => s !== slotId));
-      } else {
-        setSelectedSlots([...selectedSlots, slotId]);
-      }
+    const handleToggleDate = (iso) => {
+      setSelectedDates((prev) => {
+        const next = new Set(prev);
+        if (next.has(iso)) next.delete(iso); else next.add(iso);
+        return next;
+      });
+    };
+    const handleToggleHour = (h) => {
+      setSelectedHours((prev) => {
+        const next = new Set(prev);
+        if (next.has(h)) next.delete(h); else next.add(h);
+        return next;
+      });
     };
 
     return (
-      <div style={{ maxWidth: '900px', margin: '0 auto', padding: '48px 24px' }}>
+      <div style={{ maxWidth: '800px', margin: '0 auto', padding: '48px 24px' }}>
         <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px', color: '#1c1917' }}>When are you available? 📅</h1>
-        <p style={{ color: '#57534e', marginBottom: '36px' }}>Click time slots when you're free. (1-hour intervals)</p>
+        <p style={{ color: '#57534e', marginBottom: '32px' }}>
+          Select the dates you can tutor and the hours you are free on those days.
+        </p>
 
-        {/* Weekly Grid */}
-        <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e7e5e4', overflow: 'hidden', marginBottom: '24px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '70px repeat(7, 1fr)', background: '#f5f5f4', borderBottom: '1px solid #e7e5e4' }}>
-            <div style={{ padding: '14px' }}></div>
-            {days.map(day => <div key={day} style={{ padding: '14px', textAlign: 'center', fontWeight: '600', color: '#1c1917', fontSize: '13px' }}>{day}</div>)}
-          </div>
-          {times.map(time => (
-            <div key={time} style={{ display: 'grid', gridTemplateColumns: '70px repeat(7, 1fr)', borderBottom: '1px solid #f5f5f4' }}>
-              <div style={{ padding: '10px', fontSize: '12px', color: '#57534e', fontWeight: '500', display: 'flex', alignItems: 'center' }}>{time}</div>
-              {days.map(day => {
-                const slotId = `${day}-${time}`;
-                const isSelected = selectedSlots.includes(slotId);
-                return (
-                  <div key={slotId} onClick={() => toggleSlot(day, time)} onMouseEnter={() => setHovered(`slot-${slotId}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                    <div style={{ width: '100%', height: '28px', background: hovered === `slot-${slotId}` ? (isSelected ? '#2d7a61' : '#e8f5e9') : (isSelected ? '#1a5f4a' : '#f5f5f4'), borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isSelected ? '#fff' : 'transparent', fontSize: '11px', transition: 'all 0.2s ease' }}>
-                      {isSelected && '✓'}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
+        <CalendarSlotPicker
+          selectedDates={selectedDates}
+          selectedHours={selectedHours}
+          onToggleDate={handleToggleDate}
+          onToggleHour={handleToggleHour}
+        />
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
-          <div style={{ display: 'flex', gap: '16px', fontSize: '13px', color: '#57534e' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '16px', height: '16px', background: '#1a5f4a', borderRadius: '3px', display: 'inline-block' }}></span> Available</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '16px', height: '16px', background: '#f5f5f4', borderRadius: '3px', display: 'inline-block' }}></span> Not available</span>
-          </div>
-          <div style={{ background: '#f0fdf4', padding: '8px 16px', borderRadius: '8px', fontSize: '14px', color: '#166534', fontWeight: '500' }}>✓ {selectedSlots.length} slots</div>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '32px' }}>
           <button onClick={() => setCurrentStep(1)} onMouseEnter={() => setHovered('back2')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 24px', background: hovered === 'back2' ? '#f0faf5' : '#fff', color: '#57534e', border: `1px solid ${hovered === 'back2' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>← Back</button>
-          <button onClick={() => setCurrentStep(3)} disabled={selectedSlots.length === 0} onMouseEnter={() => selectedSlots.length > 0 && setHovered('cont2')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: selectedSlots.length > 0 ? (hovered === 'cont2' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: selectedSlots.length > 0 ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedSlots.length > 0 ? 'pointer' : 'not-allowed', transition: 'all 0.2s ease' }}>Continue →</button>
+          <button onClick={() => setCurrentStep(3)} disabled={!canContinue} onMouseEnter={() => canContinue && setHovered('cont2')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: canContinue ? (hovered === 'cont2' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: canContinue ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: canContinue ? 'pointer' : 'not-allowed', transition: 'all 0.2s ease' }}>Continue →</button>
         </div>
       </div>
     );
