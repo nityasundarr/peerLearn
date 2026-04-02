@@ -170,12 +170,12 @@ const SessionDetail = () => {
                   {venueAddress && (
                     <p style={{ margin: '0 0 8px', fontSize: '13px', color: '#78716c' }}>{venueAddress}</p>
                   )}
-                  <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e7e5e4', height: '280px' }}>
+                  <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e7e5e4', height: 'calc(100vh - 480px)', minHeight: '360px' }}>
                     <iframe
                       title="Venue Map"
                       src={oneMapEmbedUrl}
                       width="100%"
-                      height="280"
+                      height="100%"
                       style={{ border: 'none', display: 'block' }}
                       allowFullScreen
                       loading="lazy"

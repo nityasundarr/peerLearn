@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../services/AuthContext';
+
 import api from '../../services/api';
 
 const getInitials = (name) =>
@@ -17,9 +18,14 @@ const NAV_ITEMS = [
 const AdminLayout = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const [hoverItem, setHoverItem] = useState(null);
   const [hoverDash, setHoverDash] = useState(false);
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/login');
+  };
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -113,6 +119,15 @@ const AdminLayout = ({ children }) => {
             <div style={{ width: '28px', height: '28px', background: '#f59e0b', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '12px' }}>{getInitials(user?.full_name)}</div>
             <span style={{ color: '#fff', fontSize: '13px' }}>{user?.full_name || 'Admin'}</span>
           </div>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            onMouseEnter={() => setHoverDash(true)}
+            onMouseLeave={() => setHoverDash(false)}
+            style={{ background: hoverDash ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.1)', border: 'none', padding: '8px 14px', borderRadius: '8px', color: '#fff', fontSize: '13px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.15s' }}
+          >
+            Sign out
+          </button>
         </div>
       </header>
 
