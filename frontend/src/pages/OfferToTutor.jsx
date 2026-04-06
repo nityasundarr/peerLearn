@@ -59,9 +59,9 @@ const OfferStepIndicator = ({ currentStep }) => (
 const OfferToTutorFlow = () => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
-  const [selectedAcademicLevels, setSelectedAcademicLevels] = useState(['Secondary', 'Junior College']);
-  const [selectedSubjects, setSelectedSubjects] = useState(['Mathematics']);
-  const [topicsBySubject, setTopicsBySubject] = useState({ Mathematics: ['Calculus', 'Integration'] });
+  const [selectedAcademicLevels, setSelectedAcademicLevels] = useState([]);
+  const [selectedSubjects, setSelectedSubjects] = useState([]);
+  const [topicsBySubject, setTopicsBySubject] = useState({});
   const [showOtherSubject, setShowOtherSubject] = useState(false);
   const [showOtherArea, setShowOtherArea] = useState(false);
   const [tutorModeActive, setTutorModeActive] = useState(true);
@@ -75,7 +75,7 @@ const OfferToTutorFlow = () => {
   const [customTopicWarning, setCustomTopicWarning] = useState('');
   const [customTopicTargetSubject, setCustomTopicTargetSubject] = useState(null);
   const [accessibilityNotes, setAccessibilityNotes] = useState('');
-  const [accessibilityAccommodations, setAccessibilityAccommodations] = useState(['I am flexible with venue accessibility requirements']);
+  const [accessibilityAccommodations, setAccessibilityAccommodations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [hovered, setHovered] = useState(null);

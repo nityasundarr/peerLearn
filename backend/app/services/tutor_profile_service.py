@@ -14,7 +14,8 @@ SRS 2.2.2 — Tutor mode deactivation:
 """
 
 from app.core.errors import ConflictError, NotFoundError
-from app.db import tutor_profile_db
+from app.db import notifications_db, tutor_profile_db
+from app.db import requests_db as req_db
 from app.models.tutor_profile import (
     AvailabilityRequest,
     AvailabilityResponse,
@@ -22,6 +23,58 @@ from app.models.tutor_profile import (
     TutorProfileRequest,
     TutorProfileResponse,
 )
+
+
+def _notify_matching_tutees(tutor_id: str, slots: list[dict]) -> None:
+    """After availability is set, notify tutees with open requests that now have a match.
+
+    Runs simplified hard-filter matching: academic_level, subject, topic, time slot.
+    Never raises — failure is silently swallowed so it never blocks the caller.
+    """
+    import logging
+    from datetime import date as DateType
+    _log = logging.getLogger(__name__)
+    try:
+        profile = tutor_profile_db.get_profile(tutor_id)
+        if not profile or not profile.get("is_active_mode"):
+            return
+
+        topics_rows = tutor_profile_db.get_topics(tutor_id)
+        tutor_flat_topics = {t["topic"].lower() for t in topics_rows}
+        tutor_subjects = {s.lower() for s in (profile.get("subjects") or [])}
+        tutor_levels = set(profile.get("academic_levels") or [])
+        tutor_slot_set = {(int(s["day_of_week"]), int(s["hour_slot"])) for s in slots}
+
+        for req in req_db.get_open_requests():
+            if req.get("academic_level") not in tutor_levels:
+                continue
+            if not {s.lower() for s in (req.get("subjects") or [])} & tutor_subjects:
+                continue
+            req_topics = req.get("topics") or []
+            if not any(t.lower() in tutor_flat_topics for t in req_topics):
+                continue
+            tutee_slots: set[tuple[int, int]] = set()
+            for slot in (req.get("time_slots") or []):
+                try:
+                    d = DateType.fromisoformat(slot["date"])
+                    tutee_slots.add(((d.weekday() + 1) % 7, int(slot["hour_slot"])))
+                except (KeyError, ValueError):
+                    pass
+            if not (tutee_slots & tutor_slot_set):
+                continue
+            rid = req.get("id", "")
+            notifications_db.create_notification(
+                user_id=req["tutee_id"],
+                notification_type="new_tutor_match",
+                title="New tutor match found!",
+                content=(
+                    "A new tutor matching your request is now available. "
+                    f"View the updated recommendations. [request:{rid}]"
+                ),
+                is_mandatory=False,
+            )
+    except Exception as exc:
+        _log.warning("_notify_matching_tutees failed silently: %s", exc)
 
 
 def _topics_as_dicts(body: TutorProfileRequest) -> list[dict]:
@@ -173,6 +226,8 @@ def update_availability(user_id: str, body: AvailabilityRequest) -> Availability
             unique_slots.append({"day_of_week": slot.day_of_week, "hour_slot": slot.hour_slot})
 
     tutor_profile_db.replace_availability(user_id, unique_slots)
+
+    _notify_matching_tutees(user_id, unique_slots)
 
     rows = tutor_profile_db.get_availability(user_id)
     return AvailabilityResponse.from_db(rows)

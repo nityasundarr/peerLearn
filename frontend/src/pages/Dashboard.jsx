@@ -202,6 +202,7 @@ const NOTIF_TYPE_META = {
   admin_alert:     { icon: '🔔',  accent: '#f59e0b', accentBg: '#fefce8', borderColor: '#fde68a' },
   admin_appeal:    { icon: '📋',  accent: '#6366f1', accentBg: '#eef2ff', borderColor: '#c7d2fe' },
   admin_complaint: { icon: '🚨',  accent: '#dc2626', accentBg: '#fef2f2', borderColor: '#fca5a5' },
+  new_tutor_match: { icon: '🎉',  accent: '#059669', accentBg: '#ecfdf5', borderColor: '#6ee7b7' },
   session_update:  { icon: '📅',  accent: '#1a5f4a', accentBg: '#f0fdf4', borderColor: '#bbf7d0' },
   new_request:     { icon: '🎓',  accent: '#1a5f4a', accentBg: '#f0fdf4', borderColor: '#bbf7d0' },
   request_matched: { icon: '🎉',  accent: '#1a5f4a', accentBg: '#f0fdf4', borderColor: '#bbf7d0' },
@@ -212,7 +213,7 @@ const NOTIF_TYPE_META = {
 const MODAL_NOTIF_TYPES = new Set(['penalty_issued', 'appeal_decided']);
 
 const stripTokens = (text) =>
-  (text || '').replace(/\[(record|complaint):[^\]]+\]/g, '').trim();
+  (text || '').replace(/\[(record|complaint|request):[^\]]+\]/g, '').trim();
 
 const mapNotificationToUi = (n) => {
   const type = String(n.notification_type || n.type || '').toLowerCase();
@@ -693,7 +694,7 @@ const Dashboard = () => {
       else if (roleHint === 'tutee' || roleHint === 'student') tuteeUnreadNotifCount += 1;
       else {
         const blob = `${n.type || ''} ${n.title || ''} ${n.message || n.content || ''}`.toLowerCase();
-        if (blob.includes('incoming') || blob.includes('new request') || blob.includes('respond to')) tutorUnreadNotifCount += 1;
+        if (blob.includes('incoming') || blob.includes('new request') || blob.includes('respond to') || (n.type || '').toLowerCase() === 'new_request') tutorUnreadNotifCount += 1;
         else tuteeUnreadNotifCount += 1;
       }
     });
@@ -1302,7 +1303,7 @@ const Dashboard = () => {
     } else if (type === 'payment_received' || type.includes('payment')) {
       setActiveTab('learning');
       setLearningFilterTab('upcoming');
-    } else if (type === 'request_matched' || type.includes('incoming')) {
+    } else if (type === 'new_request' || type === 'request_matched' || type.includes('incoming')) {
       setActiveTab('tutoring');
     } else if (type === 'penalty_issued') {
       const raw = notif?.rawContent || notif?.content || notif?.message || '';
@@ -1311,6 +1312,9 @@ const Dashboard = () => {
       if (recordId) {
         navigate(`/appeal/${recordId}`);
       }
+    } else if (type === 'new_tutor_match') {
+      setActiveTab('learning');
+      setLearningFilterTab('pending');
     } else if (type === 'appeal_decided') {
       // Stay on notifications — details are visible in the notification body
       setActiveTab('notifications');
@@ -1666,11 +1670,20 @@ const Dashboard = () => {
             </span>
           </div>
           <div style={{ marginTop: '12px', fontSize: '13px', color: '#78716c' }}>
-            Your request is open and we're looking for a matching tutor. You'll be notified once a tutor is found.
+            Your request is open. You'll be notified when a new tutor is available, or choose from current matches now.
           </div>
           <div style={{ marginTop: '8px', fontSize: '12px', color: '#a8a29e' }}>
             Submitted {req.created_at ? formatDate(req.created_at) : ''}
             {req.urgency_category && ` · ${getUrgency(req)}`}
+          </div>
+          <div style={{ marginTop: '14px' }}>
+            <button
+              type="button"
+              onClick={() => navigate(`/recommendations/${req.id ?? req.request_id}`)}
+              style={{ padding: '10px 20px', background: '#1a5f4a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}
+            >
+              Choose Tutor →
+            </button>
           </div>
         </div>
       ))}
@@ -2368,58 +2381,31 @@ const Dashboard = () => {
   };
 
   // MESSAGING CHANNEL UI (SRS 2.9)
-  const MessagingPanel = () => (
+  const MessagingPanel = () => {
+    const s = selectedSession;
+    const isTutor = s && String(s.tutor_id) === String(user?.id);
+    const otherName = s ? (isTutor ? (s.tutee || 'Student') : (s.tutor || 'Tutor')) : '—';
+    const otherInitials = otherName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '??';
+    const sessionLabel = [s?.subject, s?.date].filter(Boolean).join(' • ') || 'Session';
+    return (
     <div style={{ position: 'fixed', top: 0, right: 0, width: '400px', height: '100vh', background: '#fff', boxShadow: '-10px 0 40px rgba(0,0,0,0.1)', zIndex: 1001, display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
       <div style={{ padding: '20px 24px', borderBottom: '1px solid #e7e5e4', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#1a5f4a' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold' }}>ST</div>
+          <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold' }}>{otherInitials}</div>
           <div>
-            <div style={{ fontWeight: '600', color: '#fff' }}>Sarah Tan</div>
-            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)' }}>Calculus Session • Tue 3 PM</div>
+            <div style={{ fontWeight: '600', color: '#fff' }}>{otherName}</div>
+            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)' }}>{sessionLabel}</div>
           </div>
         </div>
         <button onClick={() => setShowMessaging(false)} onMouseEnter={() => setHovered('msg-close')} onMouseLeave={() => setHovered(null)} style={{ background: hovered === 'msg-close' ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.2)', border: 'none', width: '32px', height: '32px', borderRadius: '8px', cursor: 'pointer', color: '#fff', fontSize: '16px', transition: 'all 0.15s ease' }}>✕</button>
       </div>
 
       {/* Messages Area */}
-      <div style={{ flex: 1, padding: '20px', overflowY: 'auto', background: '#f5f5f4' }}>
-        {/* System Message */}
-        <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-          <span style={{ background: '#e7e5e4', padding: '6px 12px', borderRadius: '12px', fontSize: '12px', color: '#57534e' }}>Session confirmed • Jan 14, 2025</span>
-        </div>
-
-        {/* Received Message */}
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
-          <div style={{ width: '32px', height: '32px', background: '#f59e0b', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '12px', flexShrink: 0 }}>ST</div>
-          <div>
-            <div style={{ background: '#fff', padding: '12px 16px', borderRadius: '12px 12px 12px 4px', maxWidth: '260px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-              <p style={{ fontSize: '14px', color: '#1c1917', margin: 0 }}>Hi! Looking forward to our session. Should we meet at the library entrance?</p>
-            </div>
-            <span style={{ fontSize: '11px', color: '#a8a29e', marginTop: '4px', display: 'block' }}>10:30 AM</span>
-          </div>
-        </div>
-
-        {/* Sent Message */}
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexDirection: 'row-reverse' }}>
-          <div style={{ width: '32px', height: '32px', background: '#1a5f4a', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '12px', flexShrink: 0 }}>JD</div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ background: '#1a5f4a', padding: '12px 16px', borderRadius: '12px 12px 4px 12px', maxWidth: '260px', display: 'inline-block' }}>
-              <p style={{ fontSize: '14px', color: '#fff', margin: 0 }}>Sounds good! I'll be there 5 mins early. See you then!</p>
-            </div>
-            <span style={{ fontSize: '11px', color: '#a8a29e', marginTop: '4px', display: 'block' }}>10:35 AM ✓</span>
-          </div>
-        </div>
-
-        {/* Received Message */}
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
-          <div style={{ width: '32px', height: '32px', background: '#f59e0b', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '12px', flexShrink: 0 }}>ST</div>
-          <div>
-            <div style={{ background: '#fff', padding: '12px 16px', borderRadius: '12px 12px 12px 4px', maxWidth: '260px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-              <p style={{ fontSize: '14px', color: '#1c1917', margin: 0 }}>Perfect! Also, please bring your lecture notes if you have them 📚</p>
-            </div>
-            <span style={{ fontSize: '11px', color: '#a8a29e', marginTop: '4px', display: 'block' }}>10:36 AM</span>
-          </div>
+      <div style={{ flex: 1, padding: '20px', overflowY: 'auto', background: '#f5f5f4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center', color: '#a8a29e' }}>
+          <div style={{ fontSize: '32px', marginBottom: '12px' }}>💬</div>
+          <p style={{ fontSize: '14px', margin: 0 }}>No messages yet. Start the conversation!</p>
         </div>
       </div>
 
@@ -2434,7 +2420,8 @@ const Dashboard = () => {
         <p style={{ fontSize: '11px', color: '#a8a29e', marginTop: '8px', textAlign: 'center' }}>Messages are for session coordination only</p>
       </div>
     </div>
-  );
+    );
+  };
 
   // SESSION DETAIL PANEL (SRS 2.9: Messaging Channel)
   const DetailPanel = () => {

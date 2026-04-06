@@ -38,6 +38,8 @@ class TutorRecommendation(BaseModel):
     accessibility_capabilities: list[str]
     match_score: float                  # 0–100 weighted composite
     score_components: ScoreComponents   # breakdown for frontend display
+    subjects: list[str]                 # subjects the tutor teaches
+    topics: list[str]                   # topics the tutor covers
 
 
 class MatchingResponse(BaseModel):

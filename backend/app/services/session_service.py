@@ -102,6 +102,18 @@ def create_session(tutee_id: str, body: CreateSessionBody) -> SessionResponse:
         academic_level=request.get("academic_level", ""),
         duration_hours=request.get("duration_hours", 1),
     )
+
+    # Notify the tutor that a tutee has selected them
+    subjects = request.get("subjects") or []
+    subject_str = ", ".join(subjects) if subjects else "a subject"
+    _notify(
+        body.tutor_id,
+        "new_request",
+        "A student wants your help!",
+        f"A student has requested your tutoring services for {subject_str}. "
+        f"Please accept or decline the request.",
+    )
+
     return SessionResponse.from_db(row)
 
 

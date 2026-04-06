@@ -257,6 +257,20 @@ def get_incoming_sessions_for_tutor(tutor_id: str) -> list[dict]:
         raise _db_error("get_incoming_sessions_for_tutor", exc) from exc
 
 
+def get_open_requests() -> list[dict]:
+    """Return all open tutoring requests (status='open') for new-tutor match notification."""
+    try:
+        result = (
+            supabase.table("tutoring_requests")
+            .select("id, tutee_id, academic_level, subjects, topics, time_slots")
+            .eq("status", "open")
+            .execute()
+        )
+        return result.data or []
+    except Exception as exc:
+        raise _db_error("get_open_requests", exc) from exc
+
+
 def get_requests_by_ids(request_ids: list[str]) -> list[dict]:
     """Batch-fetch requests by a list of IDs (used to enrich incoming sessions)."""
     if not request_ids:

@@ -74,13 +74,13 @@ const RequestHelpFlow = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedTutor, setSelectedTutor] = useState(null);
   const [selectedVenue, setSelectedVenue] = useState(null);
-  const [selectedSubjects, setSelectedSubjects] = useState(['Mathematics']);
+  const [selectedSubjects, setSelectedSubjects] = useState([]);
   const [showOtherSubject, setShowOtherSubject] = useState(false);
   const [showOtherArea, setShowOtherArea] = useState(false);
-  const [topicsBySubject, setTopicsBySubject] = useState({ Mathematics: ['Integration'] });
+  const [topicsBySubject, setTopicsBySubject] = useState({});
 
-  const [academicLevel, setAcademicLevel] = useState('uni');
-  const [urgency, setUrgency] = useState('exam');
+  const [academicLevel, setAcademicLevel] = useState('');
+  const [urgency, setUrgency] = useState('');
   const [selectedDates, setSelectedDates] = useState(new Set());
   const [selectedHours, setSelectedHours] = useState(new Set());
   const [durationHours, setDurationHours] = useState(1);
@@ -106,6 +106,7 @@ const RequestHelpFlow = () => {
   const [hovered, setHovered] = useState(null);
   const [noTutorsHover, setNoTutorsHover] = useState(null);
   const [awaitingScreenHover, setAwaitingScreenHover] = useState(null);
+  const [tutorSortBy, setTutorSortBy] = useState('Best Match');
 
   // Predefined subjects and topics (matching Tutor flow)
   const allSubjects = [
@@ -123,14 +124,15 @@ const RequestHelpFlow = () => {
     name: t.full_name ?? t.name ?? 'Tutor',
     initials: getInitials(t.full_name ?? t.name),
     rating: t.avg_rating ?? t.rating ?? 0,
-    sessions: t.total_sessions ?? t.sessions ?? 0,
+    sessions: t.completed_sessions ?? t.total_sessions ?? t.sessions ?? 0,
+    subjects: t.subjects ?? [],
     topics: t.topics ?? t.tutor_topics ?? [],
-    availability: t.availability ?? 'Medium',
-    distance: t.distance_bucket ?? t.distance ?? 'Medium',
-    workload: t.workload ?? 'Medium',
-    matchScore: t.score ?? t.match_score ?? 0,
-    reliabilityScore: t.reliability_score ?? t.score ?? 0,
-    explanation: t.explanation ?? t.reason ?? '',
+    distance: t.distance_bucket ?? t.distance ?? 'Unknown',
+    areas: t.planning_areas ?? [],
+    availableSlots: t.available_slot_count ?? 0,
+    matchScore: t.match_score ?? t.score ?? 0,
+    reliabilityScore: t.reliability_score ?? 0,
+    scoreComponents: t.score_components ?? null,
   });
 
   const mapVenueToUi = (v) => ({
@@ -278,19 +280,12 @@ const RequestHelpFlow = () => {
   const handleFindTutors = async () => {
     setError(null);
     setLoading(true);
-    setRecommendedTutors([]);
-    setShowWaitlistSuccess(false);
-    setSelectedTutor(null);
     try {
       const payload = buildRequestPayload();
-      console.log('[TuteeRequest] POST /requests payload:', JSON.stringify(payload, null, 2));
       const { data: reqData } = await api.post('/requests', payload);
       const rid = reqData.id ?? reqData.request_id;
       setRequestId(rid);
-
-      const { data: matchData } = await api.get('/matching/recommendations', { params: { request_id: rid } });
-      const list = Array.isArray(matchData) ? matchData : (matchData.recommendations ?? matchData.tutors ?? []);
-      setRecommendedTutors(list.map(mapTutorToUi));
+      setShowWaitlistSuccess(true);
       setCurrentStep(3);
     } catch (err) {
       setError(err.response?.data?.detail ?? err.message ?? 'Request failed');
@@ -309,8 +304,8 @@ const RequestHelpFlow = () => {
   };
 
   const handleGoToDashboardAfterWaitlist = async () => {
-    await new Promise((resolve) => setTimeout(resolve,1500));
-    navigate('/dashboard', { state: { refresh: true } });
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    navigate('/dashboard', { state: { tab: 'learning', filterTab: 'pending' } });
   };
 
   const handleFlowHeaderCancel = async () => {
@@ -623,7 +618,7 @@ const RequestHelpFlow = () => {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button onClick={() => setCurrentStep(2)} disabled={!hasAnyTopics()} onMouseEnter={() => hasAnyTopics() && setHovered('cont1')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: hasAnyTopics() ? (hovered === 'cont1' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: hasAnyTopics() ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: hasAnyTopics() ? 'pointer' : 'not-allowed', fontSize: '15px', transition: 'all 0.2s ease' }}>Continue →</button>
+        <button onClick={() => setCurrentStep(2)} disabled={!hasAnyTopics() || !academicLevel || !urgency} onMouseEnter={() => (hasAnyTopics() && academicLevel && urgency) && setHovered('cont1')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: (hasAnyTopics() && academicLevel && urgency) ? (hovered === 'cont1' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: (hasAnyTopics() && academicLevel && urgency) ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: (hasAnyTopics() && academicLevel && urgency) ? 'pointer' : 'not-allowed', fontSize: '15px', transition: 'all 0.2s ease' }}>Continue →</button>
       </div>
     </div>
   );
@@ -961,68 +956,113 @@ const RequestHelpFlow = () => {
 
       {/* Request Summary */}
       <div style={{ background: '#f5f5f4', borderRadius: '12px', padding: '16px 20px', marginBottom: '24px', display: 'flex', gap: '24px', fontSize: '14px', flexWrap: 'wrap' }}>
-        <span><strong>Level:</strong> University</span>
-        <span><strong>Subject:</strong> Mathematics</span>
-        <span><strong>Topics:</strong> {getAllTopics().join(', ')}</span>
-        <span><strong>Time:</strong> Tue/Thu, 3-4 PM</span>
+        <span><strong>Level:</strong> {ACADEMIC_LEVEL_MAP[academicLevel] ?? academicLevel ?? '—'}</span>
+        <span><strong>Subject:</strong> {[...selectedSubjects, ...(showOtherSubject && otherSubject ? [otherSubject] : [])].filter(Boolean).join(', ') || '—'}</span>
+        <span><strong>Topics:</strong> {getAllTopics().join(', ') || '—'}</span>
+        <span><strong>Slots:</strong> {selectedDates.size > 0 && selectedHours.size > 0 ? `${selectedDates.size} date(s) × ${selectedHours.size} time slot(s)` : '—'}</span>
       </div>
 
       {/* Sort Options */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
-        {['Best Match', 'Highest Rated', 'Nearest', 'Most Reliable'].map((opt, i) => {
-          const sel = i === 0;
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
+        {['Best Match', 'Highest Rated', 'Nearest', 'Most Reliable'].map((opt) => {
+          const sel = tutorSortBy === opt;
           const h = hovered === `sort-${opt}`;
           return (
-            <button key={opt} onMouseEnter={() => setHovered(`sort-${opt}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '8px 16px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '13px', transition: 'all 0.15s ease' }}>{opt}</button>
+            <button key={opt} onClick={() => setTutorSortBy(opt)} onMouseEnter={() => setHovered(`sort-${opt}`)} onMouseLeave={() => setHovered(null)} style={{ padding: '8px 16px', background: h ? (sel ? '#145040' : '#f0faf5') : (sel ? '#1a5f4a' : '#fff'), color: sel ? '#fff' : (h ? '#1a5f4a' : '#57534e'), border: `1px solid ${h ? '#1a5f4a' : (sel ? '#1a5f4a' : '#e7e5e4')}`, borderRadius: '8px', fontWeight: '500', cursor: 'pointer', fontSize: '13px', transition: 'all 0.15s ease' }}>{opt}</button>
           );
         })}
       </div>
 
       {/* Tutor Cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '32px' }}>
-        {recommendedTutors.map((tutor, index) => (
-          <div key={tutor.id} onClick={() => setSelectedTutor(tutor.id)} onMouseEnter={() => setHovered(`tutor-${tutor.id}`)} onMouseLeave={() => setHovered(null)} style={{ background: '#fff', borderRadius: '16px', border: selectedTutor === tutor.id ? '3px solid #1a5f4a' : '1px solid #e7e5e4', padding: '24px', cursor: 'pointer', position: 'relative', boxShadow: hovered === `tutor-${tutor.id}` ? '0 4px 16px rgba(0,0,0,0.12)' : '0 2px 8px rgba(0,0,0,0.08)', transform: hovered === `tutor-${tutor.id}` ? 'translateY(-2px)' : 'none', transition: 'all 0.2s ease' }}>
-            {index === 0 && <div style={{ position: 'absolute', top: '-12px', right: '20px', background: '#f59e0b', color: '#fff', padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>⭐ Best Match</div>}
-            <div style={{ display: 'flex', gap: '20px' }}>
-              <div style={{ width: '64px', height: '64px', background: '#f59e0b', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px', flexShrink: 0 }}>{tutor.initials}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                  <div>
-                    <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1c1917', marginBottom: '4px' }}>{tutor.name}</h3>
-                    <div style={{ display: 'flex', gap: '12px', fontSize: '14px', color: '#57534e' }}>
-                      <span>⭐ {tutor.rating}</span>
-                      <span>📚 {tutor.sessions} sessions</span>
-                      <span>✓ {tutor.reliabilityScore}% reliable</span>
+        {[...recommendedTutors].sort((a, b) => {
+          if (tutorSortBy === 'Highest Rated') return b.rating - a.rating;
+          if (tutorSortBy === 'Nearest') {
+            const rank = { Near: 0, Medium: 1, Far: 2, Unknown: 3 };
+            return (rank[a.distance] ?? 3) - (rank[b.distance] ?? 3);
+          }
+          if (tutorSortBy === 'Most Reliable') return b.reliabilityScore - a.reliabilityScore;
+          return b.matchScore - a.matchScore; // Best Match default
+        }).map((tutor, index) => {
+          const sc = tutor.scoreComponents;
+          const whyParts = [];
+          if (sc) {
+            if (sc.topic_overlap >= 80) whyParts.push('covers your topics well');
+            else if (sc.topic_overlap >= 50) whyParts.push('covers some of your topics');
+            if (sc.rating >= 80) whyParts.push('highly rated');
+            if (sc.reliability >= 80) whyParts.push('very reliable');
+            if (sc.distance >= 80) whyParts.push('near your area');
+            else if (sc.distance >= 50) whyParts.push('moderate distance');
+            if (sc.workload_fairness >= 80) whyParts.push('has good availability');
+          }
+          const whyText = whyParts.length > 0
+            ? whyParts.join(', ').replace(/,([^,]*)$/, ' and$1')
+            : 'matches your request criteria';
+          const distColor = tutor.distance === 'Near' ? '#16a34a' : tutor.distance === 'Medium' ? '#d97706' : '#dc2626';
+          const isBestMatch = tutor.matchScore === Math.max(...recommendedTutors.map((t) => t.matchScore));
+          const sortLabel = tutorSortBy === 'Highest Rated' ? '⭐ Highest Rated'
+            : tutorSortBy === 'Nearest' ? '📍 Nearest'
+            : tutorSortBy === 'Most Reliable' ? '✅ Most Reliable'
+            : '⭐ Best Match';
+          return (
+            <div key={tutor.id} onClick={() => setSelectedTutor(tutor.id)} onMouseEnter={() => setHovered(`tutor-${tutor.id}`)} onMouseLeave={() => setHovered(null)} style={{ background: '#fff', borderRadius: '16px', border: selectedTutor === tutor.id ? '3px solid #1a5f4a' : '1px solid #e7e5e4', padding: '24px', cursor: 'pointer', position: 'relative', boxShadow: hovered === `tutor-${tutor.id}` ? '0 4px 16px rgba(0,0,0,0.12)' : '0 2px 8px rgba(0,0,0,0.08)', transform: hovered === `tutor-${tutor.id}` ? 'translateY(-2px)' : 'none', transition: 'all 0.2s ease' }}>
+              {index === 0 && <div style={{ position: 'absolute', top: '-12px', right: '20px', background: isBestMatch && tutorSortBy === 'Best Match' ? '#f59e0b' : '#1a5f4a', color: '#fff', padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>{sortLabel}</div>}
+              <div style={{ display: 'flex', gap: '20px' }}>
+                <div style={{ width: '64px', height: '64px', background: '#f59e0b', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px', flexShrink: 0 }}>{tutor.initials}</div>
+                <div style={{ flex: 1 }}>
+                  {/* Name + match score */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                    <div>
+                      <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1c1917', margin: '0 0 4px' }}>{tutor.name}</h3>
+                      <div style={{ display: 'flex', gap: '12px', fontSize: '13px', color: '#57534e' }}>
+                        <span>⭐ {Number(tutor.rating).toFixed(1)}</span>
+                        <span>🎓 {tutor.sessions} sessions</span>
+                        <span>✅ {Number(tutor.reliabilityScore).toFixed(0)}% reliable</span>
+                        <span style={{ color: distColor }}>📍 {tutor.distance}{tutor.areas.length > 0 ? ` · ${tutor.areas.slice(0, 2).join(', ')}` : ''}</span>
+                      </div>
                     </div>
+                    <div style={{ background: '#dcfce7', color: '#166534', padding: '6px 14px', borderRadius: '20px', fontSize: '14px', fontWeight: '700', whiteSpace: 'nowrap' }}>{Number(tutor.matchScore).toFixed(0)}% Match</div>
                   </div>
-                  <div style={{ background: '#dcfce7', color: '#166534', padding: '6px 14px', borderRadius: '20px', fontSize: '14px', fontWeight: '600' }}>{tutor.matchScore}% Match</div>
+
+                  {/* Subjects */}
+                  {tutor.subjects.length > 0 && (
+                    <div style={{ marginBottom: '8px', fontSize: '13px', color: '#57534e' }}>
+                      <span style={{ fontWeight: '600', color: '#1c1917' }}>Teaches: </span>
+                      {tutor.subjects.join(', ')}
+                    </div>
+                  )}
+
+                  {/* Topics chips */}
+                  {tutor.topics.length > 0 && (
+                    <div style={{ display: 'flex', gap: '6px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                      {tutor.topics.map((topic) => (
+                        <span key={topic} style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', padding: '3px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: '500' }}>{topic}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Why box */}
+                  <div style={{ background: '#fefce8', border: '1px solid #fde68a', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', color: '#78350f' }}>
+                    💡 <strong>Why this tutor:</strong> {whyText.charAt(0).toUpperCase() + whyText.slice(1)}, with {tutor.availableSlots} overlapping time slot{tutor.availableSlots !== 1 ? 's' : ''}.
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
-                  {tutor.topics.map(topic => <span key={topic} style={{ background: '#f5f5f4', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', color: '#57534e' }}>{topic}</span>)}
+                <div style={{ width: '28px', height: '28px', borderRadius: '50%', border: selectedTutor === tutor.id ? 'none' : '2px solid #e7e5e4', background: selectedTutor === tutor.id ? '#1a5f4a' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '14px', flexShrink: 0, alignSelf: 'center' }}>
+                  {selectedTutor === tutor.id && '✓'}
                 </div>
-                <div style={{ display: 'flex', gap: '20px', marginBottom: '12px', fontSize: '13px' }}>
-                  <span style={{ color: tutor.availability === 'High' ? '#22c55e' : '#f59e0b' }}>📅 {tutor.availability}</span>
-                  <span style={{ color: tutor.distance === 'Near' ? '#22c55e' : '#f59e0b' }}>📍 {tutor.distance}</span>
-                  <span style={{ color: tutor.workload === 'Low' ? '#22c55e' : '#f59e0b' }}>⚖️ {tutor.workload}</span>
-                </div>
-                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '12px', fontSize: '13px', color: '#166534' }}>
-                  💡 <strong>Why:</strong> {tutor.explanation}
-                </div>
-              </div>
-              <div style={{ width: '28px', height: '28px', borderRadius: '50%', border: selectedTutor === tutor.id ? 'none' : '2px solid #e7e5e4', background: selectedTutor === tutor.id ? '#1a5f4a' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '14px', flexShrink: 0, alignSelf: 'center' }}>
-                {selectedTutor === tutor.id && '✓'}
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {error && (
         <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '12px', marginBottom: '20px', fontSize: '14px', color: '#b91c1c' }}>{error}</div>
       )}
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
         <button onClick={() => setCurrentStep(2)} onMouseEnter={() => setHovered('back3')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 24px', background: hovered === 'back3' ? '#f0faf5' : '#fff', color: '#57534e', border: `1px solid ${hovered === 'back3' ? '#1a5f4a' : '#e7e5e4'}`, borderRadius: '10px', fontWeight: '500', cursor: 'pointer', transition: 'all 0.2s ease' }}>← Back</button>
-        <button onClick={handleSelectTutorAndProceed} disabled={!selectedTutor || loading} onMouseEnter={() => selectedTutor && !loading && setHovered('venue')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: selectedTutor && !loading ? (hovered === 'venue' ? '#2d7a61' : '#1a5f4a') : '#e7e5e4', color: selectedTutor && !loading ? '#fff' : '#a8a29e', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: selectedTutor && !loading ? 'pointer' : 'not-allowed', transition: 'all 0.2s ease' }}>{loading ? 'Creating...' : 'Choose Venue →'}</button>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <button onClick={handleSubmitRequestAndWait} onMouseEnter={() => setHovered('wait3')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: hovered === 'wait3' ? '#2d7a61' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '14px', transition: 'all 0.2s ease' }}>📬 Submit Request</button>
+        </div>
       </div>
     </div>
     );

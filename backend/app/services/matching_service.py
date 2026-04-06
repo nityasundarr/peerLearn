@@ -245,6 +245,7 @@ def get_recommendations(request_id: str, tutee_id: str) -> MatchingResponse:
 
         final_score = _apply_fairness_cap(raw_score, confirmed_hours, max_hours)
 
+        tutor_topics_list = c["topics"]
         recommendation = TutorRecommendation(
             tutor_id=tid,
             full_name=names_by_tutor.get(tid, "Unknown"),
@@ -257,6 +258,8 @@ def get_recommendations(request_id: str, tutee_id: str) -> MatchingResponse:
             accessibility_capabilities=profile.get("accessibility_capabilities") or [],
             match_score=round(min(final_score, 100.0), 2),
             score_components=components,
+            subjects=list(profile.get("subjects") or []),
+            topics=list({t["topic"] for t in tutor_topics_list}),
         )
         scored.append((final_score, recommendation))
 
