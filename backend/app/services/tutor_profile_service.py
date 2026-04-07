@@ -51,7 +51,7 @@ def _notify_matching_tutees(tutor_id: str, slots: list[dict]) -> None:
             if not {s.lower() for s in (req.get("subjects") or [])} & tutor_subjects:
                 continue
             req_topics = req.get("topics") or []
-            if not any(t.lower() in tutor_flat_topics for t in req_topics):
+            if req_topics and not any(t.lower() in tutor_flat_topics for t in req_topics):
                 continue
             tutee_slots: set[tuple[int, int]] = set()
             for slot in (req.get("time_slots") or []):
@@ -60,7 +60,7 @@ def _notify_matching_tutees(tutor_id: str, slots: list[dict]) -> None:
                     tutee_slots.add(((d.weekday() + 1) % 7, int(slot["hour_slot"])))
                 except (KeyError, ValueError):
                     pass
-            if not (tutee_slots & tutor_slot_set):
+            if tutee_slots and not (tutee_slots & tutor_slot_set):
                 continue
             rid = req.get("id", "")
             notifications_db.create_notification(

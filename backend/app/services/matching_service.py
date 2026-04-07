@@ -189,27 +189,32 @@ def get_recommendations(request_id: str, tutee_id: str) -> MatchingResponse:
         if not requested_subjects & tutor_subjects:
             continue
 
-        # Filter: topic overlap (≥1 topic)
-        tutor_flat_topics = {t["topic"].lower() for t in topics}
-        if not any(t.lower() in tutor_flat_topics for t in requested_topics):
-            continue
+        # Filter: topic overlap (≥1 topic, skipped if tutee specified no topics)
+        if requested_topics:
+            tutor_flat_topics = {t["topic"].lower() for t in topics}
+            if not any(t.lower() in tutor_flat_topics for t in requested_topics):
+                continue
 
         # Filter: weekly load not exceeded
         if confirmed_hours >= max_hours:
             continue
 
-        # Filter: time slot overlap (≥1 slot)
-        tutor_slots = _tutor_slot_set(availability)
-        overlapping_slots = tutee_slots & tutor_slots
-        if not overlapping_slots:
-            continue
+        # Filter: time slot overlap (≥1 slot, skipped if tutee specified no slots)
+        if tutee_slots:
+            tutor_slots = _tutor_slot_set(availability)
+            overlapping_slots = tutee_slots & tutor_slots
+            if not overlapping_slots:
+                continue
+            overlapping_slot_count = len(overlapping_slots)
+        else:
+            overlapping_slot_count = 0
 
         candidates.append({
             "profile": profile,
             "topics": topics,
             "availability": availability,
             "confirmed_hours": confirmed_hours,
-            "overlapping_slot_count": len(overlapping_slots),
+            "overlapping_slot_count": overlapping_slot_count,
         })
 
     total_candidates = len(candidates)
