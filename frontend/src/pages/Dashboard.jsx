@@ -1401,14 +1401,24 @@ const Dashboard = () => {
     const hasPendingTutorSelectionSession = hasTuteeRole && learningSessions.some(
       (s) => normalizeSessionStatus(s) === 'pending_tutor_selection',
     );
+    const pendingTutorSession = learningSessions.find((s) =>
+      normalizeSessionStatus(s) === 'pending_tutor_selection',
+    );
+    const pendingTutorName = pendingTutorSession?.tutor
+      || pendingTutorSession?.tutor_name
+      || pendingTutorSession?.tutor_full_name
+      || 'your selected tutor';
 
     if (hasTuteeRole && openTuteeRequests.length > 0) {
       const homeOpenTitle = hasPendingTutorSelectionSession
-        ? `📬 ${openTuteeRequests.length} request(s) in progress`
+        ? `⏳ Waiting for ${pendingTutorName} to accept`
         : `📬 ${openTuteeRequests.length} request(s) submitted`;
       const homeOpenSubtext = hasPendingTutorSelectionSession
-        ? 'You\'ve selected a tutor — we\'re waiting for them to accept. Check My Learning → Pending for status.'
+        ? 'Your request has been sent. You\'ll be notified when they accept and propose time slots.'
         : 'We\'ll notify you when matching tutors are available. You can also check back to browse tutors.';
+      const homeOpenButtonLabel = hasPendingTutorSelectionSession
+        ? 'View in My Learning →'
+        : 'Check for Tutors →';
       homePendingBlocks.push(
         <div
           key="home-pa-open-tutee"
@@ -1452,7 +1462,7 @@ const Dashboard = () => {
               whiteSpace: 'nowrap',
             }}
           >
-            Check for Tutors →
+            {homeOpenButtonLabel}
           </button>
         </div>,
       );
@@ -1760,6 +1770,16 @@ const Dashboard = () => {
               const rid = req.id ?? req.request_id;
               const chooseHoverKey = `pending-choose-${req.id ?? rid}`;
               const cancelHoverKey = `pending-cancel-${req.id ?? rid}`;
+              const matchingSession = learningSessions.find((s) =>
+                normalizeSessionStatus(s) === 'pending_tutor_selection'
+                && (
+                  s.request_id === req.id
+                  || s.request_id === req.request_id
+                  || String(s.request_id) === String(req.id)
+                  || String(s.request_id) === String(req.request_id)
+                  || String(s.request_id) === String(rid)
+                ),
+              );
               const isExpanded = expandedRequestId === rid;
               const recList = pendingRecommendations[rid];
               const loadingRec = pendingRecommendationsLoading[rid];
@@ -1786,8 +1806,35 @@ const Dashboard = () => {
                       Open
                     </span>
                   </div>
+                  {matchingSession && (
+                    <div style={{
+                      background: '#f0fdf4',
+                      border: '1px solid #86efac',
+                      borderRadius: '10px',
+                      padding: '12px 16px',
+                      marginTop: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                    }}
+                    >
+                      <span style={{ fontSize: '18px' }}>⏳</span>
+                      <div>
+                        <div style={{ fontSize: '14px', fontWeight: '600', color: '#166534' }}>
+                          Request sent to {matchingSession.tutor
+                            || matchingSession.tutor_name
+                            || matchingSession.tutor_full_name
+                            || 'your tutor'}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#15803d', marginTop: '2px' }}>
+                          Waiting for them to accept and propose time slots
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div style={{ marginTop: '16px', paddingTop: '16px',
                     borderTop: '1px solid #e7e5e4', display: 'flex', gap: '12px' }}>
+                    {!matchingSession && (
                     <button
                       type="button"
                       onClick={async () => {
@@ -1829,6 +1876,7 @@ const Dashboard = () => {
                     >
                       {isExpanded ? 'Hide Tutors ↑' : 'View Available Tutors →'}
                     </button>
+                    )}
                     <button
                       type="button"
                       onClick={async () => {
@@ -1858,7 +1906,7 @@ const Dashboard = () => {
                       Cancel Request
                     </button>
                   </div>
-                  {expandedRequestId === rid && (
+                  {expandedRequestId === rid && !matchingSession && (
                     <div style={{
                       marginTop: '16px',
                       paddingTop: '16px',
