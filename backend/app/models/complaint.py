@@ -74,8 +74,8 @@ class DecideAppealBody(BaseModel):
 
 class ComplaintResponse(BaseModel):
     complaint_id: str
-    reporter_id: str
-    session_id: str
+    reporter_id: str | None
+    session_id: str | None
     category: str
     description: str
     status: str
