@@ -1334,6 +1334,8 @@ const Dashboard = () => {
         navigate(`/appeal/${recordId}`);
       }
     } else if (type === 'new_tutor_match') {
+      setPendingRecommendations({});
+      setExpandedRequestId(null);
       setActiveTab('learning');
       setLearningFilterTab('pending');
     } else if (type === 'appeal_decided') {
@@ -1843,9 +1845,6 @@ const Dashboard = () => {
                           return;
                         }
                         setExpandedRequestId(rid);
-                        if (pendingRecommendations[rid] !== undefined) {
-                          return;
-                        }
                         setPendingRecommendationsLoading((prev) => ({ ...prev, [rid]: true }));
                         try {
                           const { data } = await api.get('/matching/recommendations', {
