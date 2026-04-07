@@ -57,7 +57,12 @@ class SubmitAppealBody(BaseModel):
     @field_validator("appeal_text")
     @classmethod
     def _appeal_text(cls, v: str) -> str:
-        return validate_free_text(v.strip(), max_len=500)
+        v = v.strip()
+        if not v:
+            raise ValueError("Appeal text cannot be empty.")
+        if len(v) > 500:
+            raise ValueError("Appeal text must be 500 characters or fewer.")
+        return v
 
 
 class DecideAppealBody(BaseModel):
