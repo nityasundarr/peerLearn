@@ -289,7 +289,14 @@ const RequestHelpFlow = () => {
       const { data: reqData } = await api.post('/requests', payload);
       const rid = reqData.id ?? reqData.request_id;
       setRequestId(rid);
-      setShowWaitlistSuccess(true);
+      const { data: matchData } = await api.get(
+        '/matching/recommendations',
+        { params: { request_id: rid } }
+      );
+      const list = Array.isArray(matchData)
+        ? matchData
+        : (matchData.recommendations ?? matchData.tutors ?? []);
+      setRecommendedTutors(list.map(mapTutorToUi));
       setCurrentStep(3);
     } catch (err) {
       setError(err.response?.data?.detail ?? err.message ?? 'Request failed');

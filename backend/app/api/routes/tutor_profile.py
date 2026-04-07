@@ -18,7 +18,6 @@ from app.models.tutor_profile import (
     TutorProfileResponse,
 )
 from app.services import tutor_profile_service
-from app.services.matching import match_open_requests_for_tutor
 
 router = APIRouter(prefix="/tutor-profile", tags=["tutor-profile"])
 
@@ -41,7 +40,6 @@ async def create_tutor_profile(
     user_id: Annotated[str, Depends(get_current_user)],
 ) -> TutorProfileResponse:
     response = tutor_profile_service.create_profile(user_id, body)
-    match_open_requests_for_tutor(user_id)
     return response
 
 
@@ -74,7 +72,6 @@ async def update_tutor_profile(
     user_id: Annotated[str, Depends(get_current_user)],
 ) -> TutorProfileResponse:
     response = tutor_profile_service.update_profile(user_id, body)
-    match_open_requests_for_tutor(user_id)
     return response
 
 
