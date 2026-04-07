@@ -645,6 +645,9 @@ const Dashboard = () => {
   const [chatMessages, setChatMessages] = useState([]);
   const [chatPollingRef, setChatPollingRef] = useState(null);
   const [tutorStats, setTutorStats] = useState(null);
+  const [expandedRequestId, setExpandedRequestId] = useState(null);
+  const [pendingRecommendations, setPendingRecommendations] = useState({});
+  const [pendingRecommendationsLoading, setPendingRecommendationsLoading] = useState({});
 
   const stableSetChatSessionId = useCallback(
     (id) => setSelectedChatSessionId(id),
@@ -1636,41 +1639,6 @@ const Dashboard = () => {
 
   // MY LEARNING TAB
   const LearningTab = () => {
-    const pendingRecommendationsRef = useRef(null);
-    const [recsByRequest, setRecsByRequest] = useState({});
-
-    useEffect(() => {
-      if (learningFilterTab !== 'pending' || openTuteeRequests.length === 0) {
-        return undefined;
-      }
-      let cancelled = false;
-      (async () => {
-        setRecsByRequest({});
-        const results = await Promise.all(
-          openTuteeRequests.map(async (req) => {
-            const rid = req.id ?? req.request_id;
-            try {
-              const { data } = await api.get('/matching/recommendations', {
-                params: { request_id: rid },
-              });
-              const raw = Array.isArray(data) ? data : (data.recommendations ?? data.tutors ?? []);
-              const list = raw.map(mapPendingRecTutor);
-              return { rid, list, error: null };
-            } catch (err) {
-              return { rid, list: [], error: err };
-            }
-          }),
-        );
-        if (cancelled) return;
-        const next = {};
-        results.forEach(({ rid, list, error }) => {
-          next[rid] = { loading: false, list, error };
-        });
-        setRecsByRequest(next);
-      })();
-      return () => { cancelled = true; };
-    }, [learningFilterTab, openTuteeRequests]);
-
     const sendRequestToTutor = async (requestId, tutorId) => {
       try {
         await api.post('/sessions', { request_id: requestId, tutor_id: tutorId });
@@ -1741,6 +1709,9 @@ const Dashboard = () => {
               const rid = req.id ?? req.request_id;
               const chooseHoverKey = `pending-choose-${req.id ?? rid}`;
               const cancelHoverKey = `pending-cancel-${req.id ?? rid}`;
+              const isExpanded = expandedRequestId === rid;
+              const recList = pendingRecommendations[rid];
+              const loadingRec = pendingRecommendationsLoading[rid];
               return (
                 <div key={rid} style={{ background: '#fff', borderRadius: '16px',
                   border: '1px solid #e7e5e4', padding: '24px', marginBottom: '16px' }}>
@@ -1768,11 +1739,28 @@ const Dashboard = () => {
                     borderTop: '1px solid #e7e5e4', display: 'flex', gap: '12px' }}>
                     <button
                       type="button"
-                      onClick={() => {
-                        pendingRecommendationsRef.current?.scrollIntoView({
-                          behavior: 'smooth',
-                          block: 'start',
-                        });
+                      onClick={async () => {
+                        if (expandedRequestId === rid) {
+                          setExpandedRequestId(null);
+                          return;
+                        }
+                        setExpandedRequestId(rid);
+                        if (pendingRecommendations[rid] !== undefined) {
+                          return;
+                        }
+                        setPendingRecommendationsLoading((prev) => ({ ...prev, [rid]: true }));
+                        try {
+                          const { data } = await api.get('/matching/recommendations', {
+                            params: { request_id: rid },
+                          });
+                          const raw = Array.isArray(data) ? data : (data.recommendations ?? data.tutors ?? []);
+                          const list = raw.map(mapPendingRecTutor);
+                          setPendingRecommendations((prev) => ({ ...prev, [rid]: list }));
+                        } catch {
+                          setPendingRecommendations((prev) => ({ ...prev, [rid]: [] }));
+                        } finally {
+                          setPendingRecommendationsLoading((prev) => ({ ...prev, [rid]: false }));
+                        }
                       }}
                       onMouseEnter={() => setHovered(chooseHoverKey)}
                       onMouseLeave={() => setHovered(null)}
@@ -1788,13 +1776,14 @@ const Dashboard = () => {
                         transition: 'all 0.2s ease',
                       }}
                     >
-                      View Available Tutors →
+                      {isExpanded ? 'Hide Tutors ↑' : 'View Available Tutors →'}
                     </button>
                     <button
                       type="button"
                       onClick={async () => {
                         try {
                           await api.delete(`/requests/${rid}`);
+                          if (expandedRequestId === rid) setExpandedRequestId(null);
                           fetchOpenTuteeRequests();
                           fetchNotifications();
                         } catch {
@@ -1818,162 +1807,145 @@ const Dashboard = () => {
                       Cancel Request
                     </button>
                   </div>
+                  {expandedRequestId === rid && (
+                    <div style={{
+                      marginTop: '16px',
+                      paddingTop: '16px',
+                      borderTop: '1px solid #e7e5e4',
+                    }}
+                    >
+                      {loadingRec ? (
+                        <div style={{ textAlign: 'center', color: '#a8a29e', padding: '24px' }}>
+                          Loading tutors...
+                        </div>
+                      ) : !recList || recList.length === 0 ? (
+                        <div style={{ textAlign: 'center', color: '#a8a29e', padding: '24px' }}>
+                          🔍 No tutors found matching your request yet.
+                        </div>
+                      ) : (
+                        <div>
+                          <h4 style={{
+                            fontSize: '15px',
+                            fontWeight: '600',
+                            color: '#1c1917',
+                            marginBottom: '12px',
+                          }}
+                          >
+                            Available Tutors
+                          </h4>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            {recList.map((tutor, idx) => (
+                              <div
+                                key={tutor.id}
+                                style={{
+                                  background: '#fff',
+                                  borderRadius: '12px',
+                                  border: '1px solid #e7e5e4',
+                                  padding: '16px',
+                                  position: 'relative',
+                                }}
+                              >
+                                {idx === 0 && (
+                                  <div style={{
+                                    position: 'absolute',
+                                    top: '-10px',
+                                    right: '16px',
+                                    background: '#f59e0b',
+                                    color: '#fff',
+                                    padding: '4px 10px',
+                                    borderRadius: '20px',
+                                    fontSize: '11px',
+                                    fontWeight: '600',
+                                  }}
+                                  >
+                                    ⭐ Best Match
+                                  </div>
+                                )}
+                                <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
+                                  <div style={{
+                                    width: '48px',
+                                    height: '48px',
+                                    background: '#f59e0b',
+                                    borderRadius: '12px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: '#fff',
+                                    fontWeight: 'bold',
+                                    fontSize: '16px',
+                                    flexShrink: 0,
+                                  }}
+                                  >
+                                    {tutor.initials}
+                                  </div>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontWeight: '700', fontSize: '16px', color: '#1c1917' }}>
+                                      {tutor.name}
+                                    </div>
+                                    <div style={{ fontSize: '12px', color: '#78716c', marginTop: '4px' }}>
+                                      {(tutor.areas || []).join(', ') || '—'} · {tutor.distance}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#57534e', marginTop: '8px', flexWrap: 'wrap' }}>
+                                      <span>⭐ {tutor.rating.toFixed(1)}</span>
+                                      <span>🎓 {tutor.sessions} sessions</span>
+                                      <span>✅ {tutor.reliability.toFixed(0)}% rel.</span>
+                                      <span>📅 {tutor.availableSlots} slots</span>
+                                      <span style={{ fontWeight: '700', color: '#1a5f4a' }}>Score {tutor.matchScore.toFixed(0)}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'flex-end' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => sendRequestToTutor(rid, tutor.id)}
+                                    onMouseEnter={() => setHovered(`send-req-${tutor.id}`)}
+                                    onMouseLeave={() => setHovered(null)}
+                                    style={{
+                                      padding: '10px 20px',
+                                      background: hovered === `send-req-${tutor.id}` ? '#145040' : '#1a5f4a',
+                                      color: '#fff',
+                                      border: 'none',
+                                      borderRadius: '8px',
+                                      fontWeight: '600',
+                                      cursor: 'pointer',
+                                      fontSize: '14px',
+                                      transition: 'all 0.2s ease',
+                                    }}
+                                  >
+                                    Send Request to Tutor →
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+                            <button
+                              type="button"
+                              onClick={() => setActiveTab('home')}
+                              onMouseEnter={() => setHovered('pending-decide-later')}
+                              onMouseLeave={() => setHovered(null)}
+                              style={{
+                                padding: '12px 22px',
+                                background: hovered === 'pending-decide-later' ? '#f0faf5' : '#fff',
+                                border: hovered === 'pending-decide-later' ? '1px solid #1a5f4a' : '1px solid #e7e5e4',
+                                color: '#57534e',
+                                borderRadius: '10px',
+                                fontWeight: '500',
+                                cursor: 'pointer',
+                                fontSize: '15px',
+                                transition: 'all 0.2s ease',
+                              }}
+                            >
+                              Decide Later
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
-            <div
-              id="pending-tutor-recommendations"
-              ref={pendingRecommendationsRef}
-              style={{
-                marginTop: '8px',
-                marginBottom: '16px',
-                padding: '24px',
-                background: '#fafaf9',
-                borderRadius: '16px',
-                border: '1px solid #e7e5e4',
-              }}
-            >
-              <h3 style={{ fontSize: '18px', fontWeight: '700', color: '#1c1917', marginBottom: '20px' }}>
-                Tutor recommendations
-              </h3>
-              {openTuteeRequests.map((req) => {
-                const rid = req.id ?? req.request_id;
-                const subj = req.subjects?.[0] || req.subject || '—';
-                const topic = req.topics?.[0] || req.topic || '—';
-                const rec = recsByRequest[rid];
-                const loadingRec = !rec;
-                return (
-                  <div key={`rec-block-${rid}`} style={{ marginBottom: '28px' }}>
-                    <h4 style={{ fontSize: '15px', fontWeight: '600', color: '#44403c', marginBottom: '12px' }}>
-                      {subj}: {topic}
-                    </h4>
-                    {loadingRec && (
-                      <div style={{ fontSize: '14px', color: '#78716c', padding: '12px 0' }}>
-                        Loading recommendations…
-                      </div>
-                    )}
-                    {!loadingRec && rec.list.length === 0 && !rec.error && (
-                      <div style={{ fontSize: '14px', color: '#78716c', padding: '12px 0' }}>
-                        No matching tutors yet
-                      </div>
-                    )}
-                    {!loadingRec && rec.error && (
-                      <div style={{ fontSize: '14px', color: '#b91c1c', padding: '8px 0' }}>
-                        Could not load recommendations.
-                      </div>
-                    )}
-                    {!loadingRec && rec.list.length > 0 && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        {rec.list.map((tutor, idx) => (
-                          <div
-                            key={tutor.id}
-                            style={{
-                              background: '#fff',
-                              borderRadius: '12px',
-                              border: '1px solid #e7e5e4',
-                              padding: '16px',
-                              position: 'relative',
-                            }}
-                          >
-                            {idx === 0 && (
-                              <div style={{
-                                position: 'absolute',
-                                top: '-10px',
-                                right: '16px',
-                                background: '#f59e0b',
-                                color: '#fff',
-                                padding: '4px 10px',
-                                borderRadius: '20px',
-                                fontSize: '11px',
-                                fontWeight: '600',
-                              }}
-                              >
-                                ⭐ Best Match
-                              </div>
-                            )}
-                            <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
-                              <div style={{
-                                width: '48px',
-                                height: '48px',
-                                background: '#f59e0b',
-                                borderRadius: '12px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#fff',
-                                fontWeight: 'bold',
-                                fontSize: '16px',
-                                flexShrink: 0,
-                              }}
-                              >
-                                {tutor.initials}
-                              </div>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontWeight: '700', fontSize: '16px', color: '#1c1917' }}>
-                                  {tutor.name}
-                                </div>
-                                <div style={{ fontSize: '12px', color: '#78716c', marginTop: '4px' }}>
-                                  {(tutor.areas || []).join(', ') || '—'} · {tutor.distance}
-                                </div>
-                                <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#57534e', marginTop: '8px', flexWrap: 'wrap' }}>
-                                  <span>⭐ {tutor.rating.toFixed(1)}</span>
-                                  <span>🎓 {tutor.sessions} sessions</span>
-                                  <span>✅ {tutor.reliability.toFixed(0)}% rel.</span>
-                                  <span>📅 {tutor.availableSlots} slots</span>
-                                  <span style={{ fontWeight: '700', color: '#1a5f4a' }}>Score {tutor.matchScore.toFixed(0)}</span>
-                                </div>
-                              </div>
-                            </div>
-                            <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'flex-end' }}>
-                              <button
-                                type="button"
-                                onClick={() => sendRequestToTutor(rid, tutor.id)}
-                                onMouseEnter={() => setHovered(`send-req-${tutor.id}`)}
-                                onMouseLeave={() => setHovered(null)}
-                                style={{
-                                  padding: '10px 20px',
-                                  background: hovered === `send-req-${tutor.id}` ? '#145040' : '#1a5f4a',
-                                  color: '#fff',
-                                  border: 'none',
-                                  borderRadius: '8px',
-                                  fontWeight: '600',
-                                  cursor: 'pointer',
-                                  fontSize: '14px',
-                                  transition: 'all 0.2s ease',
-                                }}
-                              >
-                                Send Request to Tutor →
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('home')}
-                  onMouseEnter={() => setHovered('pending-decide-later')}
-                  onMouseLeave={() => setHovered(null)}
-                  style={{
-                    padding: '12px 22px',
-                    background: hovered === 'pending-decide-later' ? '#f0faf5' : '#fff',
-                    border: hovered === 'pending-decide-later' ? '1px solid #1a5f4a' : '1px solid #e7e5e4',
-                    color: '#57534e',
-                    borderRadius: '10px',
-                    fontWeight: '500',
-                    cursor: 'pointer',
-                    fontSize: '15px',
-                    transition: 'all 0.2s ease',
-                  }}
-                >
-                  Decide Later
-                </button>
-              </div>
-            </div>
           </>
         )
       ) : (
