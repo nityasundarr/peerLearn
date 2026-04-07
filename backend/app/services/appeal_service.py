@@ -17,7 +17,8 @@ from datetime import datetime, timezone
 from app.core.config import settings
 from app.core.errors import ConflictError, ForbiddenError, NotFoundError, UnprocessableError
 from app.db import appeals_db, notifications_db
-from app.db.complaints_db import get_admin_user_ids, update_complaint_status
+from app.db.complaints_db import get_admin_user_ids, get_complaint_by_id, update_complaint_status
+from app.db.sessions_db import get_session
 from app.models.complaint import (
     AppealDetailResponse,
     AppealResponse,
@@ -99,6 +100,30 @@ def submit_appeal(user_id: str, body: SubmitAppealBody) -> AppealResponse:
             ),
             is_mandatory=True,
         )
+
+    # Notify the other party in the session (tutor or tutee)
+    try:
+        if complaint_id:
+            complaint = get_complaint_by_id(complaint_id)
+            if complaint and complaint.get("session_id"):
+                session = get_session(complaint["session_id"])
+                if session:
+                    tutor_id = session.get("tutor_id")
+                    tutee_id = session.get("tutee_id")
+                    other_id = tutor_id if user_id == tutee_id else tutee_id
+                    if other_id and other_id != user_id:
+                        notifications_db.create_notification(
+                            user_id=other_id,
+                            notification_type="session_update",
+                            title="An appeal has been filed",
+                            content=(
+                                "The other party in one of your sessions has filed an appeal "
+                                "against a disciplinary action. An admin will review the case."
+                            ),
+                            is_mandatory=False,
+                        )
+    except Exception:
+        pass
 
     return AppealResponse.from_db(row)
 
