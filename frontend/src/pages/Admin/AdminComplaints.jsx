@@ -163,9 +163,13 @@ const ComplaintDetail = () => {
     try {
       const { data } = await api.get(`/complaints/${complaintId}`);
       setDetail(data);
-      // Pre-fill affected_user_id with the reporter
-      if (data?.complaint?.reporter_id) {
-        setActionForm((f) => ({ ...f, affected_user_id: f.affected_user_id || data.complaint.reporter_id }));
+      // Pre-fill affected_user_id with the accused (the non-reporter party in the session)
+      const reporterId = data?.complaint?.reporter_id;
+      const tutorId = data?.session_info?.tutor_id;
+      const tuteeId = data?.session_info?.tutee_id;
+      const accusedId = reporterId === tuteeId ? tutorId : tuteeId;
+      if (accusedId) {
+        setActionForm((f) => ({ ...f, affected_user_id: f.affected_user_id || accusedId }));
       }
     } catch (err) {
       if (err.response?.status === 403) navigate('/admin/overview');
@@ -186,7 +190,11 @@ const ComplaintDetail = () => {
     try {
       const { data } = await api.post(`/complaints/${complaintId}/action`, actionForm);
       setDetail(data);
-      setActionForm({ action: '', notes: '', affected_user_id: detail?.complaint?.reporter_id || '', penalty_type: 'warning', update_status: 'under_review' });
+      const rId = data?.complaint?.reporter_id;
+      const tId = data?.session_info?.tutor_id;
+      const ttId = data?.session_info?.tutee_id;
+      const accused = rId === ttId ? tId : ttId;
+      setActionForm({ action: '', notes: '', affected_user_id: accused || '', penalty_type: 'warning', update_status: 'under_review' });
     } catch (err) {
       setError(err.response?.data?.detail ?? 'Failed to record action.');
     } finally {
