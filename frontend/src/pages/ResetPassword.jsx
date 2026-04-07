@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import PeerLearnLogo from '../assets/PeerLearnLogo.svg';
 
 const ResetPassword = () => {
   const [searchParams] = useSearchParams();
@@ -97,8 +98,11 @@ const ResetPassword = () => {
   const Navbar = () => (
     <nav style={{ height: '72px', background: '#1a5f4a', padding: '0 48px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
       <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '12px', textDecoration: 'none' }}>
-        <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
-        <span style={{ color: '#fff', fontSize: '24px', fontWeight: '700', letterSpacing: '-0.5px' }}>PeerLearn</span>
+        <img
+          src={PeerLearnLogo}
+          alt="PeerLearn"
+          style={{ height: '36px', objectFit: 'contain' }}
+        />
       </Link>
     </nav>
   );

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../services/AuthContext';
+import PeerLearnLogo from '../assets/PeerLearnLogo.svg';
 
 const getInitials = (name) =>
   (name || '').split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || '??';
@@ -81,8 +82,11 @@ const TutorRecommendations = () => {
     return (
       <div style={{ minHeight: '100vh', background: '#fafaf9', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
         <header style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #0d3d2e 100%)', padding: '0 32px', height: '72px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
-          <span style={{ color: '#fff', fontSize: '22px', fontWeight: '700' }}>PeerLearn</span>
+          <img
+            src={PeerLearnLogo}
+            alt="PeerLearn"
+            style={{ height: '36px', objectFit: 'contain' }}
+          />
         </header>
         <div style={{ maxWidth: '560px', margin: '0 auto', padding: '48px 24px', textAlign: 'center' }}>
           <div style={{ fontSize: '56px', marginBottom: '20px' }}>✓</div>
@@ -115,8 +119,11 @@ const TutorRecommendations = () => {
           tabIndex={0}
           onKeyDown={(e) => e.key === 'Enter' && navigate('/dashboard')}
         >
-          <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
-          <span style={{ color: '#fff', fontSize: '22px', fontWeight: '700' }}>PeerLearn</span>
+          <img
+            src={PeerLearnLogo}
+            alt="PeerLearn"
+            style={{ height: '36px', objectFit: 'contain' }}
+          />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.2)', padding: '6px 14px 6px 6px', borderRadius: '10px' }}>
           <div style={{ width: '34px', height: '34px', background: '#f59e0b', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '14px' }}>

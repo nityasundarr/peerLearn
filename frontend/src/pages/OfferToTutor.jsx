@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import PeerLearnLogo from '../assets/PeerLearnLogo.svg';
 import CalendarSlotPicker from '../components/CalendarSlotPicker';
 
 // ============================================================
@@ -28,8 +29,11 @@ const OfferFlowHeader = ({ onCancel }) => {
   return (
     <header style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #0d3d2e 100%)', padding: '0 32px', height: '72px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
-        <span style={{ color: '#fff', fontSize: '22px', fontWeight: '700' }}>PeerLearn</span>
+        <img
+          src={PeerLearnLogo}
+          alt="PeerLearn"
+          style={{ height: '36px', objectFit: 'contain' }}
+        />
       </div>
       <button onClick={onCancel} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} style={{ background: h ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', transition: 'all 0.15s ease' }}>✕ Cancel</button>
     </header>

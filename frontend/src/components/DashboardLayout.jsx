@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../services/AuthContext';
+import PeerLearnLogo from '../assets/PeerLearnLogo.svg';
 
 const TABS = [
   { id: 'home', label: '🏠 Home' },
@@ -46,12 +47,11 @@ const DashboardLayout = ({ activeTab, onTabChange, badges = {}, children }) => {
           style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
           onClick={() => { onTabChange('home'); }}
         >
-          <div style={{
-            width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff', fontWeight: 'bold', fontSize: '20px',
-          }}>P</div>
-          <span style={{ color: '#fff', fontSize: '22px', fontWeight: '700' }}>PeerLearn</span>
+          <img
+            src={PeerLearnLogo}
+            alt="PeerLearn"
+            style={{ height: '36px', objectFit: 'contain' }}
+          />
         </div>
 
         {/* Centre nav buttons */}

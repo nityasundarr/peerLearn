@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../services/AuthContext';
+import PeerLearnLogo from '../assets/PeerLearnLogo.svg';
 
 const LANGUAGES = ['English', 'Chinese', 'Malay', 'Tamil'];
 
@@ -89,8 +90,11 @@ const SignUp = () => {
       <div style={{ minHeight: '100vh', background: '#fafaf9', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
         <nav style={{ height: '72px', background: '#1a5f4a', padding: '0 48px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '12px', textDecoration: 'none' }}>
-            <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
-            <span style={{ color: '#fff', fontSize: '24px', fontWeight: '700', letterSpacing: '-0.5px' }}>PeerLearn</span>
+            <img
+              src={PeerLearnLogo}
+              alt="PeerLearn"
+              style={{ height: '36px', objectFit: 'contain' }}
+            />
           </Link>
         </nav>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 24px' }}>
@@ -117,8 +121,11 @@ const SignUp = () => {
       {/* Nav */}
       <nav style={{ height: '72px', background: '#1a5f4a', padding: '0 48px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '12px', textDecoration: 'none' }}>
-          <div style={{ width: '40px', height: '40px', background: '#f59e0b', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '20px' }}>P</div>
-          <span style={{ color: '#fff', fontSize: '24px', fontWeight: '700', letterSpacing: '-0.5px' }}>PeerLearn</span>
+          <img
+            src={PeerLearnLogo}
+            alt="PeerLearn"
+            style={{ height: '36px', objectFit: 'contain' }}
+          />
         </Link>
         <Link to="/" onMouseEnter={() => setHovered('back')} onMouseLeave={() => setHovered(null)} style={{ background: hovered === 'back' ? 'rgba(255,255,255,0.1)' : 'transparent', border: '2px solid rgba(255,255,255,0.4)', color: '#fff', padding: '10px 24px', borderRadius: '8px', fontSize: '15px', fontWeight: '500', cursor: 'pointer', textDecoration: 'none', transition: 'all 0.15s ease' }}>
           Back to Home

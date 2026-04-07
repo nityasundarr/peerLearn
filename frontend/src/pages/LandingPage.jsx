@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../services/AuthContext';
 import api from '../services/api';
+import PeerLearnLogo from '../assets/PeerLearnLogo.svg';
 
 // ============================================================
 // SECTION 1: LANDING PAGE WITH LOGIN/SIGNUP MODALS
@@ -153,26 +154,11 @@ const LandingPage = () => {
         justifyContent: 'space-between',
         alignItems: 'center',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            width: '40px',
-            height: '40px',
-            background: '#f59e0b',
-            borderRadius: '10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#fff',
-            fontWeight: 'bold',
-            fontSize: '20px',
-          }}>P</div>
-          <span style={{
-            color: '#fff',
-            fontSize: '24px',
-            fontWeight: '700',
-            letterSpacing: '-0.5px',
-          }}>PeerLearn</span>
-        </div>
+        <img
+          src={PeerLearnLogo}
+          alt="PeerLearn"
+          style={{ height: '36px', objectFit: 'contain' }}
+        />
 
         <div style={{ display: 'flex', gap: '12px' }}>
           <button

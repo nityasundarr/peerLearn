@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../services/AuthContext';
 import api from '../services/api';
+import PeerLearnLogo from '../assets/PeerLearnLogo.svg';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -103,19 +104,11 @@ const Login = () => {
         alignItems: 'center',
       }}>
         <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '12px', textDecoration: 'none' }}>
-          <div style={{
-            width: '40px',
-            height: '40px',
-            background: '#f59e0b',
-            borderRadius: '10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#fff',
-            fontWeight: 'bold',
-            fontSize: '20px',
-          }}>P</div>
-          <span style={{ color: '#fff', fontSize: '24px', fontWeight: '700', letterSpacing: '-0.5px' }}>PeerLearn</span>
+          <img
+            src={PeerLearnLogo}
+            alt="PeerLearn"
+            style={{ height: '36px', objectFit: 'contain' }}
+          />
         </Link>
         <Link to="/" onMouseEnter={() => setHovered('back')} onMouseLeave={() => setHovered(null)} style={{
           background: hovered === 'back' ? 'rgba(255,255,255,0.1)' : 'transparent',

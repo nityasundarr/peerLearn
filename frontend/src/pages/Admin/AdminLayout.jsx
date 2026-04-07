@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../services/AuthContext';
 
 import api from '../../services/api';
+import PeerLearnLogo from '../../assets/PeerLearnLogo.svg';
 
 const getInitials = (name) =>
   (name || '').split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
@@ -89,8 +90,11 @@ const AdminLayout = ({ children }) => {
       {/* Top nav */}
       <header style={{ background: 'linear-gradient(135deg, #1a5f4a 0%, #0d3d2e 100%)', padding: '0 32px', height: '64px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ width: '36px', height: '36px', background: '#f59e0b', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '18px' }}>P</div>
-          <span style={{ color: '#fff', fontSize: '20px', fontWeight: '700' }}>PeerLearn</span>
+          <img
+            src={PeerLearnLogo}
+            alt="PeerLearn"
+            style={{ height: '36px', objectFit: 'contain' }}
+          />
           <span style={{ color: 'rgba(255,255,255,0.5)', margin: '0 6px' }}>|</span>
           <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: '14px', fontWeight: '500' }}>Admin Console</span>
         </div>
