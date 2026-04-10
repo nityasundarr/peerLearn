@@ -73,14 +73,24 @@ const Complaints = () => {
           {submitted ? (
             <div style={{ textAlign: 'center', padding: '24px 0' }}>
               <div style={{ fontSize: '56px', marginBottom: '16px' }}>✅</div>
-              <h2 style={{ fontSize: '22px', fontWeight: '700', color: '#1c1917', marginBottom: '8px' }}>Complaint Submitted</h2>
+              <h2 style={{ fontSize: '22px', fontWeight: '700', color: '#1c1917', marginBottom: '8px' }}>
+                {category === 'no_show' ? 'No-show Reported' : 'Complaint Submitted'}
+              </h2>
               {complaintRef && (
                 <div style={{ display: 'inline-block', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '12px 24px', marginBottom: '16px' }}>
                   <div style={{ fontSize: '12px', color: '#166534', fontWeight: '600', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Reference Number</div>
                   <div style={{ fontSize: '20px', fontWeight: '700', color: '#14532d', fontFamily: 'monospace' }}>{complaintRef}</div>
                 </div>
               )}
-              <p style={{ color: '#57534e', marginBottom: '32px' }}>Our team will review your complaint and follow up within 3 business days.</p>
+              {category === 'no_show' ? (
+                <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '10px', padding: '16px', marginBottom: '24px', textAlign: 'left' }}>
+                  <p style={{ color: '#92400e', fontSize: '14px', margin: 0, lineHeight: 1.6 }}>
+                    Both parties have been notified. A <strong>full refund is being processed</strong> pending admin review. An admin will investigate and determine further action.
+                  </p>
+                </div>
+              ) : (
+                <p style={{ color: '#57534e', marginBottom: '32px' }}>Our team will review your complaint and follow up within 3 business days.</p>
+              )}
               <button onClick={() => navigate('/dashboard')} onMouseEnter={() => setHovered('done')} onMouseLeave={() => setHovered(null)} style={{ padding: '14px 32px', background: hovered === 'done' ? '#2d7a61' : '#1a5f4a', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '600', cursor: 'pointer', fontSize: '15px', transition: 'all 0.2s ease' }}>Back to Dashboard</button>
             </div>
           ) : (

@@ -60,6 +60,40 @@ def submit_complaint(
             is_mandatory=True,
         )
 
+    # For no-show complaints: notify both session parties about the refund
+    if body.category == "no_show" and body.session_id:
+        try:
+            session = get_session(body.session_id)
+            if session:
+                tutor_id = session.get("tutor_id")
+                tutee_id = session.get("tutee_id")
+                if tutee_id:
+                    notifications_db.create_notification(
+                        user_id=tutee_id,
+                        notification_type="session_update",
+                        title="No-show reported",
+                        content=(
+                            "A no-show has been reported for your session. "
+                            "A full refund is being processed pending admin review. "
+                            f"[complaint:{complaint_id}]"
+                        ),
+                        is_mandatory=True,
+                    )
+                if tutor_id:
+                    notifications_db.create_notification(
+                        user_id=tutor_id,
+                        notification_type="session_update",
+                        title="No-show reported",
+                        content=(
+                            "A no-show complaint has been filed for your session. "
+                            "An admin will review this and determine next steps. "
+                            f"[complaint:{complaint_id}]"
+                        ),
+                        is_mandatory=True,
+                    )
+        except Exception:
+            pass  # Never block complaint submission on notification failure
+
     return ComplaintResponse.from_db(row)
 
 

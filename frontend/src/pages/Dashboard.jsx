@@ -648,6 +648,7 @@ const Dashboard = () => {
   const [expandedRequestId, setExpandedRequestId] = useState(null);
   const [pendingRecommendations, setPendingRecommendations] = useState({});
   const [pendingRecommendationsLoading, setPendingRecommendationsLoading] = useState({});
+  const [pendingRecSortBy, setPendingRecSortBy] = useState('Best Match');
   const [requestSentTutor, setRequestSentTutor] = useState(null);
   const [sendingTutorId, setSendingTutorId] = useState(null);
 
@@ -1772,16 +1773,22 @@ const Dashboard = () => {
               const rid = req.id ?? req.request_id;
               const chooseHoverKey = `pending-choose-${req.id ?? rid}`;
               const cancelHoverKey = `pending-cancel-${req.id ?? rid}`;
-              const matchingSession = learningSessions.find((s) =>
-                normalizeSessionStatus(s) === 'pending_tutor_selection'
-                && (
+              const matchingSession = learningSessions.find((s) => {
+                const sst = normalizeSessionStatus(s);
+                const idMatch = (
                   s.request_id === req.id
                   || s.request_id === req.request_id
                   || String(s.request_id) === String(req.id)
                   || String(s.request_id) === String(req.request_id)
                   || String(s.request_id) === String(rid)
-                ),
-              );
+                );
+                return idMatch && ['pending_tutor_selection', 'tutor_accepted', 'pending_confirmation', 'pending_confirm'].includes(sst);
+              });
+              // If a session already exists beyond pending_tutor_selection (tutor accepted),
+              // suppress the request card — the session card handles it
+              if (matchingSession && normalizeSessionStatus(matchingSession) !== 'pending_tutor_selection') {
+                return null;
+              }
               const isExpanded = expandedRequestId === rid;
               const recList = pendingRecommendations[rid];
               const loadingRec = pendingRecommendationsLoading[rid];
@@ -1926,13 +1933,45 @@ const Dashboard = () => {
                             fontSize: '15px',
                             fontWeight: '600',
                             color: '#1c1917',
-                            marginBottom: '12px',
+                            marginBottom: '10px',
                           }}
                           >
                             Available Tutors
                           </h4>
+                          <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                            {['Best Match', 'Highest Rated', 'Nearest', 'Most Reliable'].map((opt) => {
+                              const sel = pendingRecSortBy === opt;
+                              return (
+                                <button
+                                  key={opt}
+                                  type="button"
+                                  onClick={() => setPendingRecSortBy(opt)}
+                                  style={{
+                                    padding: '6px 14px',
+                                    background: sel ? '#1a5f4a' : '#fff',
+                                    color: sel ? '#fff' : '#57534e',
+                                    border: `1px solid ${sel ? '#1a5f4a' : '#e7e5e4'}`,
+                                    borderRadius: '8px',
+                                    fontWeight: '500',
+                                    cursor: 'pointer',
+                                    fontSize: '12px',
+                                  }}
+                                >
+                                  {opt}
+                                </button>
+                              );
+                            })}
+                          </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                            {recList.map((tutor, idx) => (
+                            {[...recList].sort((a, b) => {
+                              if (pendingRecSortBy === 'Highest Rated') return b.rating - a.rating;
+                              if (pendingRecSortBy === 'Nearest') {
+                                const rank = { Near: 0, Medium: 1, Far: 2, Unknown: 3 };
+                                return (rank[a.distance] ?? 3) - (rank[b.distance] ?? 3);
+                              }
+                              if (pendingRecSortBy === 'Most Reliable') return b.reliability - a.reliability;
+                              return b.matchScore - a.matchScore;
+                            }).map((tutor, idx) => (
                               <div
                                 key={tutor.id}
                                 style={{
