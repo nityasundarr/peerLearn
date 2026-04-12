@@ -2,6 +2,17 @@
 
 A peer tutoring platform for students across Singapore. Tutees submit tutoring requests, the system matches them with suitable tutors based on subject fit, location, availability, and reliability, and manages the full session lifecycle from booking through payment and completion.
 
+---
+
+## Demo
+
+<!-- To add a demo video, upload it to YouTube or any video host and replace the link below -->
+<!-- Example: [![Watch the demo](https://img.youtube.com/vi/YOUR_VIDEO_ID/0.jpg)](https://www.youtube.com/watch?v=YOUR_VIDEO_ID) -->
+
+*Demo video coming soon.*
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -39,7 +50,9 @@ peerLearn/
 
 - Node.js 18+
 - Python 3.13+
-- A [Supabase](https://supabase.com) project with the schema applied
+- A [Supabase](https://supabase.com) project with the database schema applied
+
+> **Supabase schema:** Apply the SQL schema found in the Supabase dashboard or provided separately to your project before running the app. The backend will fail to start correctly if the required tables do not exist.
 
 ---
 
@@ -79,7 +92,7 @@ FRONTEND_URL=http://localhost:5173
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=your_gmail_address
-SMTP_PASSWORD=your_gmail_app_password
+SMTP_PASSWORD=your_gmail_app_password  # Use a Gmail App Password, not your account password
 EMAIL_FROM=your_gmail_address
 
 # OneMap API (for venue map embeds)
@@ -98,13 +111,15 @@ FEE_UNIVERSITY=18
 APPEAL_WINDOW_DAYS=7
 ```
 
+> **Gmail App Password:** Go to your Google Account → Security → 2-Step Verification → App Passwords. Generate a password for "Mail" and use that as `SMTP_PASSWORD`. Your regular Gmail password will not work.
+
 Start the backend:
 
 ```bash
 uvicorn main:app --reload
 ```
 
-The API will be available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
+The API will be available at `http://localhost:8000`. Interactive API docs (Swagger UI) at `http://localhost:8000/docs`.
 
 ### 3. Frontend
 
@@ -131,6 +146,18 @@ The app will be available at `http://localhost:5173`.
 
 ---
 
+## Creating an Admin Account
+
+There is no self-registration flow for admins. To create an admin user:
+
+1. Register a normal account through the app.
+2. In your Supabase dashboard, go to **Table Editor → users**.
+3. Find the user's row and update the `roles` column to include `"admin"` (e.g. `["admin"]`).
+
+That user can now log in and access the admin console at `/admin`.
+
+---
+
 ## User Roles
 
 | Role | Description |
@@ -150,18 +177,7 @@ The app will be available at `http://localhost:5173`.
 - In-app notifications for all key events
 - Admin analytics dashboard with configurable matching weights
 
----
-
-## Fee Schedule (SGD/hour)
-
-| Academic Level | Fee |
-|---|---|
-| Primary | $10 |
-| Secondary | $12 |
-| ITE | $12 |
-| Junior College | $15 |
-| Polytechnic | $15 |
-| University | $18 |
+> **Note:** Payments are simulated — no real payment gateway is integrated. All payments are treated as immediately successful upon initiation.
 
 ---
 
